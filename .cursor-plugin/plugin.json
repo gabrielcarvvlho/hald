@@ -1,0 +1,5 @@
+{
+  "name": "git-oracle",
+  "description": "GraphRAG-powered knowledge graph for your git history.",
+  "version": "0.1.0"
+}
