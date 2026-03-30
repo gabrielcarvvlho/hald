@@ -437,7 +437,7 @@ function sanitizeFtsQuery(query: string): string | null {
     .filter((t) => t.length > 0)
     .filter((t) => !STOP_WORDS.has(t.toLowerCase()));
   if (tokens.length === 0) return null;
-  return tokens.map((t) => `"${t}"`).join(" ");
+  return tokens.map((t) => `"${t}"`).join(" OR ");
 }
 
 const STOP_WORDS = new Set([

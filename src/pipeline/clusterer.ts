@@ -1,4 +1,5 @@
-import { UndirectedGraph } from "graphology";
+import graphologyPkg from "graphology";
+const { UndirectedGraph } = graphologyPkg as unknown as { UndirectedGraph: typeof import("graphology").UndirectedGraph };
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import louvainModule from "graphology-communities-louvain";
 const louvain = louvainModule as unknown as (

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Command } from "commander";
 import { loadConfig } from "./shared/config.js";
 import { openDatabase } from "./store/db.js";
