@@ -64,7 +64,9 @@ export class Store {
   }
 
   searchEntities(query: string, limit = 10): Entity[] {
-    const rows = this.stmts.searchEntities.all(query, limit) as EntityRow[];
+    const safe = sanitizeFtsQuery(query);
+    if (!safe) return [];
+    const rows = this.stmts.searchEntities.all(safe, limit) as EntityRow[];
     return rows.map(toEntity);
   }
 
@@ -133,7 +135,9 @@ export class Store {
   }
 
   searchTextUnits(query: string, limit = 5): TextUnit[] {
-    const rows = this.stmts.searchTextUnits.all(query, limit) as TextUnitRow[];
+    const safe = sanitizeFtsQuery(query);
+    if (!safe) return [];
+    const rows = this.stmts.searchTextUnits.all(safe, limit) as TextUnitRow[];
     return rows.map(toTextUnit);
   }
 
@@ -166,8 +170,10 @@ export class Store {
   }
 
   searchCommunities(query: string, limit = 5): Community[] {
+    const safe = sanitizeFtsQuery(query);
+    if (!safe) return [];
     const rows = this.stmts.searchCommunities.all(
-      query,
+      safe,
       limit,
     ) as CommunityRow[];
     return rows.map(toCommunity);
@@ -241,6 +247,49 @@ export class Store {
       communities: count("communities"),
       commits: count("commits"),
     };
+  }
+
+  // ================================================================
+  // Graph traversal helpers (for query layer)
+  // ================================================================
+
+  /** Get all relations where entity is source OR target. */
+  getRelationsForEntity(entityId: EntityId): Relation[] {
+    return [
+      ...this.getRelationsBySource(entityId),
+      ...this.getRelationsByTarget(entityId),
+    ];
+  }
+
+  /** Get text units that reference this entity (via JSON array search). */
+  getTextUnitsForEntity(entityId: EntityId): TextUnit[] {
+    const rows = this.stmts.textUnitsForEntity.all(entityId) as TextUnitRow[];
+    return rows.map(toTextUnit);
+  }
+
+  /** Get communities that contain this entity (via JSON array search). */
+  getCommunitiesForEntity(entityId: EntityId): Community[] {
+    const rows = this.stmts.communitiesForEntity.all(
+      entityId,
+    ) as CommunityRow[];
+    return rows.map(toCommunity);
+  }
+
+  /** Find MODULE entities matching a path (exact + prefix for sub-modules). */
+  findModulesByPath(modulePath: string): Entity[] {
+    const rows = this.stmts.findModulesByPath.all(
+      modulePath,
+      modulePath + "/%",
+    ) as EntityRow[];
+    return rows.map(toEntity);
+  }
+
+  /** Get entity by exact name (case-insensitive). */
+  getEntityByName(name: string): Entity | null {
+    const row = this.stmts.getEntityByName.get(name) as
+      | EntityRow
+      | undefined;
+    return row ? toEntity(row) : null;
   }
 
   // ================================================================
@@ -353,7 +402,41 @@ function prepareStatements(db: Database.Database) {
       "INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)",
     ),
     getMeta: db.prepare("SELECT * FROM index_meta WHERE key = ?"),
+
+    // --- Query helpers ---
+    textUnitsForEntity: db.prepare(`
+      SELECT DISTINCT t.* FROM text_units t, json_each(t.entity_ids) je
+      WHERE je.value = ?
+    `),
+    communitiesForEntity: db.prepare(`
+      SELECT DISTINCT c.* FROM communities c, json_each(c.entity_ids) je
+      WHERE je.value = ?
+    `),
+    findModulesByPath: db.prepare(`
+      SELECT * FROM entities
+      WHERE type = 'MODULE' AND (name = ? OR name LIKE ?)
+    `),
+    getEntityByName: db.prepare(
+      "SELECT * FROM entities WHERE name = ? COLLATE NOCASE",
+    ),
   };
+}
+
+// ================================================================
+// FTS5 Query Sanitization
+// ================================================================
+
+/**
+ * Sanitize user input for FTS5 MATCH queries.
+ * Splits on non-alphanumeric chars and wraps each token in quotes
+ * to avoid FTS5 syntax errors (e.g. `-` as NOT, `:` as column selector).
+ */
+function sanitizeFtsQuery(query: string): string | null {
+  const tokens = query
+    .split(/[^a-zA-Z0-9]+/)
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0) return null;
+  return tokens.map((t) => `"${t}"`).join(" ");
 }
 
 // ================================================================
