@@ -1,4 +1,4 @@
-import type { GitOracleConfig, CommitData, Entity, Relation } from "../shared/types.js";
+import type { GitOracleConfig, CommitData, Entity, Relation, Community } from "../shared/types.js";
 import type { ExtractedRelation, ExtractorResult, ExtractedEntity } from "./extractor.js";
 import { openDatabase } from "../store/db.js";
 import { Store } from "../store/queries.js";
@@ -23,21 +23,39 @@ export interface IndexResult {
   entitiesFound: number;
   relationsFound: number;
   communitiesFound: number;
+  communitiesSummarized: number;
 }
 
 /**
  * Run the full indexing pipeline: read → chunk → extract → resolve → build → cluster → summarize.
+ * Supports incremental indexing: only processes new commits since last_indexed_commit.
+ * Smart re-summarization: only summarizes communities whose membership changed.
  */
 export async function indexRepository(
   config: GitOracleConfig,
   options: IndexOptions = {},
 ): Promise<IndexResult> {
   const end = logger.time("orchestrator: full pipeline");
+  const progress = options.onProgress ?? (() => {});
 
   // 1. Open/create database
   const db = openDatabase(config.storagePath);
   const store = new Store(db);
 
+  try {
+    return await runPipeline(config, store, options, progress);
+  } finally {
+    store.close();
+    end();
+  }
+}
+
+async function runPipeline(
+  config: GitOracleConfig,
+  store: Store,
+  options: IndexOptions,
+  progress: (stage: string, done: number, total: number) => void,
+): Promise<IndexResult> {
   // 2. Determine what to index
   let sinceCommit: string | undefined;
   if (!options.full) {
@@ -45,8 +63,7 @@ export async function indexRepository(
   }
 
   // 3. Read commits
-  const progress = options.onProgress ?? (() => {});
-  progress("reading", 0, 0);
+  progress("reading commits", 0, 0);
 
   const commits: CommitData[] = [];
   for await (const commit of readCommits({
@@ -62,18 +79,19 @@ export async function indexRepository(
   if (commits.length === 0) {
     logger.info("orchestrator: no new commits to index");
     const stats = store.getStats();
-    store.close();
     return {
       commitsProcessed: 0,
       entitiesFound: stats.entities,
       relationsFound: stats.relations,
       communitiesFound: stats.communities,
+      communitiesSummarized: 0,
     };
   }
 
   logger.info("orchestrator: commits read", { count: commits.length });
 
   // 4. Chunk
+  progress("chunking", 0, 0);
   const textUnits = chunk(commits, {
     commitsPerChunk: config.commitsPerChunk,
     maxChunkTokens: config.maxChunkTokens,
@@ -113,6 +131,7 @@ export async function indexRepository(
   });
 
   // 7. Resolve (deduplicate) entities
+  progress("resolving", 0, 0);
   const resolvedEntities = resolve(
     allExtractedEntities,
     config.entityResolutionThreshold,
@@ -128,6 +147,7 @@ export async function indexRepository(
   );
 
   // 9. Build graph
+  progress("building graph", 0, 0);
   build(store, {
     textUnits,
     entities: resolvedEntities,
@@ -136,7 +156,21 @@ export async function indexRepository(
     commits,
   });
 
-  // 10. Cluster communities
+  // 10. Snapshot old communities (membership + summaries for reuse)
+  const existingCommunities = [
+    ...store.getCommunitiesByLevel(0),
+    ...store.getCommunitiesByLevel(1),
+    ...store.getCommunitiesByLevel(2),
+  ];
+  const oldMembership = new Map(
+    existingCommunities.map((c) => [c.id, JSON.stringify([...c.entityIds].sort())]),
+  );
+  const oldSummaries = new Map(
+    existingCommunities.map((c) => [c.id, { title: c.title, summary: c.summary }]),
+  );
+
+  // 11. Cluster communities on the full graph
+  progress("clustering", 0, 0);
   const allEntities = store.getAllEntities();
   const allRelations = store.getAllRelations();
   const communities = cluster(
@@ -149,27 +183,60 @@ export async function indexRepository(
     communities: communities.length,
   });
 
-  // 11. Summarize communities
+  // 12. Smart re-summarization: reuse summaries for unchanged communities
   store.clearCommunities();
+
+  const communitiesToSummarize: Community[] = [];
+  for (const c of communities) {
+    const prevMembership = oldMembership.get(c.id);
+    const newMembership = JSON.stringify([...c.entityIds].sort());
+
+    if (prevMembership === newMembership) {
+      // Membership unchanged — reuse old summary
+      const old = oldSummaries.get(c.id);
+      if (old && old.summary) {
+        c.title = old.title;
+        c.summary = old.summary;
+      } else {
+        communitiesToSummarize.push(c);
+      }
+    } else {
+      communitiesToSummarize.push(c);
+    }
+
+    store.upsertCommunity(c);
+  }
+
+  const reusedCount = communities.length - communitiesToSummarize.length;
+  if (reusedCount > 0) {
+    logger.info("orchestrator: reusing unchanged community summaries", {
+      reused: reusedCount,
+      resummarize: communitiesToSummarize.length,
+    });
+  }
+
+  // Summarize only the changed/new communities
   let summarized = 0;
-  for await (const { communityId, result } of summarizeBatch(
-    communities,
-    allEntities,
-    allRelations,
-    client,
-    { concurrency: config.maxConcurrency },
-  )) {
-    const community = communities.find((c) => c.id === communityId);
-    if (community) {
-      community.title = result.title;
-      community.summary = result.summary;
-      store.upsertCommunity(community);
-      summarized++;
-      progress("summarizing", summarized, communities.length);
+  if (communitiesToSummarize.length > 0) {
+    for await (const { communityId, result } of summarizeBatch(
+      communitiesToSummarize,
+      allEntities,
+      allRelations,
+      client,
+      { concurrency: config.maxConcurrency },
+    )) {
+      const community = communities.find((c) => c.id === communityId);
+      if (community) {
+        community.title = result.title;
+        community.summary = result.summary;
+        store.upsertCommunity(community);
+        summarized++;
+        progress("summarizing", summarized, communitiesToSummarize.length);
+      }
     }
   }
 
-  // 12. Update metadata
+  // 13. Update metadata
   const lastCommit = commits[commits.length - 1]!;
   store.setMeta("last_indexed_commit", lastCommit.hash);
   store.setMeta("last_indexed_at", new Date().toISOString());
@@ -179,15 +246,13 @@ export async function indexRepository(
   );
 
   const finalStats = store.getStats();
-  store.close();
-
-  end();
 
   return {
     commitsProcessed: commits.length,
     entitiesFound: finalStats.entities,
     relationsFound: finalStats.relations,
     communitiesFound: finalStats.communities,
+    communitiesSummarized: summarized,
   };
 }
 
@@ -203,7 +268,6 @@ export function resolveExtractedRelations(
   extractedRelations: ExtractedRelation[],
   resolvedEntities: Entity[],
 ): Relation[] {
-  // Build name → entity lookup (includes aliases + normalized module paths)
   const entityByName = new Map<string, Entity>();
   for (const e of resolvedEntities) {
     entityByName.set(e.name.toLowerCase(), e);
@@ -224,7 +288,7 @@ export function resolveExtractedRelations(
     const source = findEntity(r.source);
     const target = findEntity(r.target);
     if (!source || !target) continue;
-    if (source.id === target.id) continue; // skip self-loops
+    if (source.id === target.id) continue;
 
     const id = generateRelationId(r.type, source.id, target.id);
     relations.push({
