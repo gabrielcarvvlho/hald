@@ -1,7 +1,7 @@
-// MCP server entry point — implemented in Phase 4 (Step 19)
-export { Store } from "./store/queries.js";
-export { openDatabase } from "./store/db.js";
-export { loadConfig } from "./shared/config.js";
-export { createClient, detectProvider } from "./llm/client.js";
-export type { LLMClient, LLMResponse } from "./llm/types.js";
-export * from "./shared/types.js";
+// MCP server entry point — starts the Git Oracle MCP server on stdio.
+import { startServer } from "./mcp/server.js";
+
+startServer().catch((err) => {
+  process.stderr.write(`MCP server error: ${err}\n`);
+  process.exit(1);
+});
