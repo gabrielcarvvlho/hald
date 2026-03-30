@@ -1,0 +1,118 @@
+// === Identifiers ===
+export type EntityId = string;
+export type RelationId = string;
+export type CommunityId = string;
+export type TextUnitId = string;
+export type CommitHash = string;
+
+// === Entity Types ===
+export enum EntityType {
+  PERSON = "PERSON",
+  MODULE = "MODULE",
+  TECHNOLOGY = "TECHNOLOGY",
+  DECISION = "DECISION",
+  PATTERN = "PATTERN",
+}
+
+export interface Entity {
+  id: EntityId;
+  type: EntityType;
+  name: string;
+  aliases: string[];
+  description: string;
+  firstSeen: string; // ISO date
+  lastSeen: string; // ISO date
+  frequency: number;
+  metadata: Record<string, unknown>;
+}
+
+// === Relation Types ===
+export enum RelationType {
+  AUTHORED = "AUTHORED",
+  MODIFIED = "MODIFIED",
+  CO_CHANGED = "CO_CHANGED",
+  USES = "USES",
+  DEPENDS_ON = "DEPENDS_ON",
+  INTRODUCED = "INTRODUCED",
+  REMOVED = "REMOVED",
+  DECIDED = "DECIDED",
+  SUPERSEDES = "SUPERSEDES",
+  EXHIBITS = "EXHIBITS",
+}
+
+export interface Relation {
+  id: RelationId;
+  type: RelationType;
+  sourceId: EntityId;
+  targetId: EntityId;
+  weight: number;
+  description: string;
+  evidence: TextUnitId[];
+  firstSeen: string;
+  lastSeen: string;
+}
+
+// === Text Units ===
+export interface TextUnit {
+  id: TextUnitId;
+  content: string;
+  commitHashes: CommitHash[];
+  dateRange: { start: string; end: string };
+  entityIds: EntityId[];
+  relationIds: RelationId[];
+}
+
+// === Communities ===
+export interface Community {
+  id: CommunityId;
+  level: number;
+  title: string;
+  summary: string;
+  entityIds: EntityId[];
+  parentId?: CommunityId;
+  childIds: CommunityId[];
+}
+
+// === Git Data ===
+export interface CommitData {
+  hash: CommitHash;
+  authorName: string;
+  authorEmail: string;
+  date: string; // ISO format
+  message: string;
+  filesChanged: FileChange[];
+  parentHashes: CommitHash[];
+}
+
+export interface FileChange {
+  path: string;
+  oldPath?: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  additions: number;
+  deletions: number;
+  diff?: string;
+}
+
+// === Config ===
+export interface GitOracleConfig {
+  repoPath: string;
+  branch: string;
+  maxCommits?: number;
+  sinceDate?: string;
+
+  commitsPerChunk: number;
+  maxChunkTokens: number;
+
+  provider: "anthropic" | "openai" | "google" | "auto";
+  model?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  maxConcurrency: number;
+  maxRetries: number;
+
+  entityResolutionThreshold: number;
+  leidenResolutions: number[];
+  minCommunitySize: number;
+
+  storagePath: string;
+}
