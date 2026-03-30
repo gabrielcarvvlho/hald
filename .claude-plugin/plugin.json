@@ -1,0 +1,8 @@
+{
+  "name": "git-oracle",
+  "description": "GraphRAG-powered knowledge graph for your git history. Ask questions about architectural decisions, find domain experts, trace code evolution, and surface hidden coupling.",
+  "version": "0.1.0",
+  "author": { "name": "Gabriel" },
+  "license": "MIT",
+  "keywords": ["graphrag", "git", "knowledge-graph", "institutional-knowledge"]
+}

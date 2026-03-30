@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "git-oracle": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
+      "env": {
+        "GIT_ORACLE_REPO": "${CLAUDE_PROJECT_ROOT}"
+      }
+    }
+  }
+}
