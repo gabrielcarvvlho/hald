@@ -38,14 +38,23 @@ export function build(store: Store, input: BuildInput): GraphStats {
   const end = logger.time("graph-builder: build");
 
   // 1. Upsert entities (with dates from text units)
-  const entityMap = new Map(input.entities.map((e) => [e.name.toLowerCase(), e]));
+  // Build lookup that handles both canonical names and normalized paths
+  const entityMap = new Map<string, Entity>();
+  for (const e of input.entities) {
+    entityMap.set(e.name.toLowerCase(), e);
+    for (const alias of e.aliases) {
+      entityMap.set(alias.toLowerCase(), e);
+    }
+  }
 
   for (const tu of input.textUnits) {
     const extraction = input.extractions.get(tu.id);
     if (!extraction) continue;
 
     for (const extracted of extraction.entities) {
-      const entity = entityMap.get(extracted.name.toLowerCase());
+      const entity =
+        entityMap.get(extracted.name.toLowerCase()) ??
+        entityMap.get(normalizeModulePath(extracted.name).toLowerCase());
       if (!entity) continue;
 
       store.upsertEntity({
@@ -57,9 +66,17 @@ export function build(store: Store, input: BuildInput): GraphStats {
     }
   }
 
-  // 2. Upsert relations
+  // 2. Upsert relations (only if both entities exist — avoids FK violations)
   for (const relation of input.relations) {
-    store.upsertRelation(relation);
+    if (store.getEntity(relation.sourceId) && store.getEntity(relation.targetId)) {
+      store.upsertRelation(relation);
+    } else {
+      logger.debug("graph-builder: skipping relation, missing entity", {
+        id: relation.id,
+        sourceId: relation.sourceId,
+        targetId: relation.targetId,
+      });
+    }
   }
 
   // 3. Insert text units

@@ -194,7 +194,7 @@ function parseNumstatLog(raw: string): Map<string, NumstatEntry[]> {
       files.push({
         additions: parts[0] === "-" ? 0 : parseInt(parts[0]!, 10),
         deletions: parts[1] === "-" ? 0 : parseInt(parts[1]!, 10),
-        path: parts[2]!,
+        path: resolveNumstatPath(parts[2]!),
       });
     }
 
@@ -202,6 +202,19 @@ function parseNumstatLog(raw: string): Map<string, NumstatEntry[]> {
   }
 
   return result;
+}
+
+/** Resolve numstat rename notation: `{old => new}/file.ts` → `new/file.ts` */
+function resolveNumstatPath(rawPath: string): string {
+  // Handle {old => new}/rest notation
+  if (rawPath.includes("{") && rawPath.includes("=>")) {
+    return rawPath.replace(/\{[^}]*\s*=>\s*([^}]*)\}/, "$1");
+  }
+  // Handle simple "old => new" notation
+  if (rawPath.includes(" => ")) {
+    return rawPath.split(" => ")[1]!.trim();
+  }
+  return rawPath;
 }
 
 function mergeFileInfo(

@@ -1,8 +1,12 @@
 import { XMLParser } from "fast-xml-parser";
 import pLimit from "p-limit";
 import type { LLMClient } from "../llm/types.js";
-import type { TextUnit, TextUnitId, EntityType, RelationType } from "../shared/types.js";
+import type { TextUnit, TextUnitId } from "../shared/types.js";
+import { EntityType, RelationType } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
+
+const VALID_ENTITY_TYPES = new Set(Object.values(EntityType));
+const VALID_RELATION_TYPES = new Set(Object.values(RelationType));
 
 // ================================================================
 // Types
@@ -128,9 +132,11 @@ function parseExtractionXml(text: string): ExtractorResult {
   const entities: ExtractedEntity[] = [];
   for (const e of rawEntities) {
     if (!e?.name || !e?.type) continue;
+    const type = String(e.type).trim().toUpperCase();
+    if (!VALID_ENTITY_TYPES.has(type as EntityType)) continue;
     entities.push({
       name: String(e.name).trim(),
-      type: String(e.type).trim().toUpperCase() as EntityType,
+      type: type as EntityType,
       description: String(e.description ?? "").trim(),
     });
   }
@@ -138,10 +144,12 @@ function parseExtractionXml(text: string): ExtractorResult {
   const relations: ExtractedRelation[] = [];
   for (const r of rawRelations) {
     if (!r?.source || !r?.target || !r?.type) continue;
+    const type = String(r.type).trim().toUpperCase();
+    if (!VALID_RELATION_TYPES.has(type as RelationType)) continue;
     relations.push({
       source: String(r.source).trim(),
       target: String(r.target).trim(),
-      type: String(r.type).trim().toUpperCase() as RelationType,
+      type: type as RelationType,
       description: String(r.description ?? "").trim(),
       weight: Math.min(10, Math.max(1, Number(r.weight) || 5)),
     });

@@ -118,6 +118,32 @@ I hope this helps!`;
     expect(result.entities[0]!.name).toBe("Valid");
   });
 
+  it("skips entities with invalid types", () => {
+    const xml = `<extraction>
+  <entities>
+    <entity><name>Valid</name><type>PERSON</type><description>ok</description></entity>
+    <entity><name>Invalid</name><type>SERVICE</type><description>not a valid type</description></entity>
+    <entity><name>Also Invalid</name><type>API</type><description>nope</description></entity>
+  </entities>
+  <relations>
+    <relation>
+      <source>Valid</source><target>Invalid</target><type>AUTHORED</type>
+      <description>ok</description><weight>5</weight>
+    </relation>
+    <relation>
+      <source>Valid</source><target>Invalid</target><type>CALLS</type>
+      <description>not a valid relation type</description><weight>5</weight>
+    </relation>
+  </relations>
+</extraction>`;
+
+    const result = parseExtractionXml(xml);
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0]!.name).toBe("Valid");
+    expect(result.relations).toHaveLength(1);
+    expect(result.relations[0]!.type).toBe("AUTHORED");
+  });
+
   it("returns empty result for non-XML response", () => {
     const result = parseExtractionXml("I cannot extract any entities from this text.");
     expect(result.entities).toHaveLength(0);

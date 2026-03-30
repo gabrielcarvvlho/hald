@@ -31,6 +31,9 @@ function buildSummaryPrompt(
   memberEntities: Entity[],
   memberRelations: Relation[],
 ): string {
+  // Build id → name lookup so relations show human-readable names
+  const nameById = new Map(memberEntities.map((e) => [e.id, e.name]));
+
   const entityList = memberEntities
     .map(
       (e) =>
@@ -39,10 +42,11 @@ function buildSummaryPrompt(
     .join("\n");
 
   const relationList = memberRelations
-    .map(
-      (r) =>
-        `- ${r.sourceId} --[${r.type}]--> ${r.targetId}: ${r.description} (weight: ${r.weight})`,
-    )
+    .map((r) => {
+      const sourceName = nameById.get(r.sourceId) ?? r.sourceId;
+      const targetName = nameById.get(r.targetId) ?? r.targetId;
+      return `- ${sourceName} --[${r.type}]--> ${targetName}: ${r.description} (weight: ${r.weight})`;
+    })
     .join("\n");
 
   return `Summarize this community from the repository's knowledge graph.
