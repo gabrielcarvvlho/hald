@@ -118,6 +118,23 @@ describe("Store — Entities", () => {
     expect(results).toHaveLength(1);
     expect(results[0]!.id).toBe("module:src/billing");
   });
+
+  it("FTS search strips stop words from conversational queries", () => {
+    store.upsertEntity(sampleEntity);
+    store.upsertEntity(sampleEntity2);
+
+    // "who is the lead developer" → after stop words: "lead developer"
+    const results = store.searchEntities("who is the Lead developer");
+    expect(results).toHaveLength(1);
+    expect(results[0]!.id).toBe("person:alice");
+  });
+
+  it("FTS search returns empty for all-stop-word queries", () => {
+    store.upsertEntity(sampleEntity);
+
+    const results = store.searchEntities("who is the");
+    expect(results).toHaveLength(0);
+  });
 });
 
 describe("Store — Relations", () => {

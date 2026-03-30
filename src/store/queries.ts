@@ -428,16 +428,30 @@ function prepareStatements(db: Database.Database) {
 
 /**
  * Sanitize user input for FTS5 MATCH queries.
- * Splits on non-alphanumeric chars and wraps each token in quotes
- * to avoid FTS5 syntax errors (e.g. `-` as NOT, `:` as column selector).
+ * Strips stop words (conversational filler), splits on non-alphanumeric chars,
+ * and wraps each token in quotes to avoid FTS5 syntax errors.
  */
 function sanitizeFtsQuery(query: string): string | null {
   const tokens = query
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((t) => t.length > 0);
+    .filter((t) => t.length > 0)
+    .filter((t) => !STOP_WORDS.has(t.toLowerCase()));
   if (tokens.length === 0) return null;
   return tokens.map((t) => `"${t}"`).join(" ");
 }
+
+const STOP_WORDS = new Set([
+  "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "can", "shall",
+  "i", "me", "my", "we", "our", "you", "your",
+  "he", "she", "it", "they", "them", "their",
+  "this", "that", "these", "those",
+  "who", "what", "where", "when", "why", "how",
+  "not", "no", "nor", "but", "or", "and",
+  "if", "then", "than", "so", "as",
+  "in", "on", "at", "to", "for", "of", "with", "by", "from", "about",
+]);
 
 // ================================================================
 // Row → Domain Mappers
