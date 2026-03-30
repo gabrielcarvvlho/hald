@@ -433,7 +433,7 @@ function prepareStatements(db: Database.Database) {
  */
 function sanitizeFtsQuery(query: string): string | null {
   const tokens = query
-    .split(/[^a-zA-Z0-9]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length > 0);
   if (tokens.length === 0) return null;
   return tokens.map((t) => `"${t}"`).join(" ");

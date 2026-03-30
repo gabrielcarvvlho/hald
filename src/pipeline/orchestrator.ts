@@ -1,26 +1,17 @@
-import type { GitOracleConfig } from "../shared/types.js";
-import type {
-  CommitData,
-  Entity,
-  Relation,
-  TextUnit,
-} from "../shared/types.js";
-import { RelationType } from "../shared/types.js";
-import type { LLMClient } from "../llm/types.js";
-import type { Store } from "../store/queries.js";
-import type { ExtractedRelation, ExtractorResult } from "./extractor.js";
+import type { GitOracleConfig, CommitData, Entity, Relation } from "../shared/types.js";
+import type { ExtractedRelation, ExtractorResult, ExtractedEntity } from "./extractor.js";
 import { openDatabase } from "../store/db.js";
+import { Store } from "../store/queries.js";
 import { readCommits, getHead } from "./git-reader.js";
 import { chunk } from "./chunker.js";
 import { extractBatch } from "./extractor.js";
 import { resolve } from "./resolver.js";
-import { normalizeModulePath, generateEntityId } from "./resolver.js";
+import { normalizeModulePath } from "./resolver.js";
 import { build, generateRelationId } from "./graph-builder.js";
 import { cluster } from "./clusterer.js";
 import { summarizeBatch } from "./summarizer.js";
 import { createClient } from "../llm/client.js";
 import { logger } from "../shared/logger.js";
-import { EntityType } from "../shared/types.js";
 
 export interface IndexOptions {
   full?: boolean;
@@ -45,7 +36,7 @@ export async function indexRepository(
 
   // 1. Open/create database
   const db = openDatabase(config.storagePath);
-  const store = new (await import("../store/queries.js")).Store(db);
+  const store = new Store(db);
 
   // 2. Determine what to index
   let sinceCommit: string | undefined;
@@ -70,12 +61,13 @@ export async function indexRepository(
 
   if (commits.length === 0) {
     logger.info("orchestrator: no new commits to index");
+    const stats = store.getStats();
     store.close();
     return {
       commitsProcessed: 0,
-      entitiesFound: store.getStats().entities,
-      relationsFound: store.getStats().relations,
-      communitiesFound: store.getStats().communities,
+      entitiesFound: stats.entities,
+      relationsFound: stats.relations,
+      communitiesFound: stats.communities,
     };
   }
 
@@ -99,11 +91,7 @@ export async function indexRepository(
 
   // 6. Extract entities and relations
   const extractions = new Map<string, ExtractorResult>();
-  const allExtractedEntities: Array<{
-    name: string;
-    type: string;
-    description: string;
-  }> = [];
+  const allExtractedEntities: ExtractedEntity[] = [];
   const allExtractedRelations: ExtractedRelation[] = [];
 
   for await (const { textUnitId, result } of extractBatch(
@@ -126,7 +114,7 @@ export async function indexRepository(
 
   // 7. Resolve (deduplicate) entities
   const resolvedEntities = resolve(
-    allExtractedEntities as Parameters<typeof resolve>[0],
+    allExtractedEntities,
     config.entityResolutionThreshold,
   );
   logger.info("orchestrator: resolved", {
