@@ -1,0 +1,103 @@
+import { estimateTokens } from "./chunker.js";
+import type { TextUnit } from "../shared/types.js";
+
+// ================================================================
+// Cost per 1M tokens by provider (input + output combined estimate)
+// ================================================================
+
+const COST_PER_1M_TOKENS: Record<string, { input: number; output: number }> = {
+  anthropic: { input: 3.0, output: 15.0 }, // Claude Sonnet
+  openai: { input: 0.4, output: 1.6 }, // GPT-4.1-mini
+  google: { input: 0.15, output: 0.6 }, // Gemini Flash
+};
+
+export interface CostEstimate {
+  provider: string;
+  extractionTokens: number;
+  summarizationTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  breakdown: {
+    extraction: string;
+    summarization: string;
+    total: string;
+  };
+}
+
+/**
+ * Estimate the cost of indexing before running the pipeline.
+ * Uses rough token estimates based on text unit content length.
+ */
+export function estimateCost(
+  textUnits: TextUnit[],
+  estimatedCommunities: number,
+  provider: string,
+): CostEstimate {
+  // Extraction: ~500 tokens per text unit (input) + ~500 tokens output
+  const extractionInputTokens = textUnits.reduce(
+    (sum, tu) => sum + estimateTokens(tu.content),
+    0,
+  );
+  // System prompt is ~600 tokens, added per call
+  const systemPromptTokens = 600 * textUnits.length;
+  const extractionOutputTokens = textUnits.length * 500; // estimated output
+  const extractionTokens =
+    extractionInputTokens + systemPromptTokens + extractionOutputTokens;
+
+  // Summarization: ~300 tokens per community (input context + output)
+  const summarizationTokens = estimatedCommunities * 800; // input + output
+
+  const totalTokens = extractionTokens + summarizationTokens;
+
+  const rates = COST_PER_1M_TOKENS[provider] ?? COST_PER_1M_TOKENS.anthropic!;
+
+  // Rough split: 60% input, 40% output for extraction
+  const inputTokens = totalTokens * 0.6;
+  const outputTokens = totalTokens * 0.4;
+  const estimatedCostUsd =
+    (inputTokens / 1_000_000) * rates.input +
+    (outputTokens / 1_000_000) * rates.output;
+
+  return {
+    provider,
+    extractionTokens,
+    summarizationTokens,
+    totalTokens,
+    estimatedCostUsd,
+    breakdown: {
+      extraction: `~${extractionTokens.toLocaleString()} tokens (${textUnits.length} text units)`,
+      summarization: `~${summarizationTokens.toLocaleString()} tokens (~${estimatedCommunities} communities)`,
+      total: `~${totalTokens.toLocaleString()} tokens ≈ $${estimatedCostUsd.toFixed(2)}`,
+    },
+  };
+}
+
+/**
+ * Estimate how many communities will be produced from a given number of entities.
+ * Rough heuristic: 1 community per 4-6 entities (at the finest resolution).
+ */
+export function estimateCommunityCount(entityCount: number): number {
+  return Math.max(1, Math.round(entityCount / 5));
+}
+
+/**
+ * Format cost estimate for CLI display.
+ */
+export function formatCostEstimate(estimate: CostEstimate): string {
+  const lines = [
+    `  Provider:       ${estimate.provider}`,
+    `  Extraction:     ${estimate.breakdown.extraction}`,
+    `  Summarization:  ${estimate.breakdown.summarization}`,
+    `  Total:          ${estimate.breakdown.total}`,
+  ];
+
+  if (estimate.provider === "google") {
+    lines.push(`  (Google Gemini Flash — lowest cost)`);
+  } else if (estimate.provider === "openai") {
+    lines.push(`  (OpenAI GPT-4.1-mini)`);
+  } else if (estimate.provider === "anthropic") {
+    lines.push(`  (Anthropic Claude Sonnet)`);
+  }
+
+  return lines.join("\n");
+}
