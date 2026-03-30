@@ -31,36 +31,43 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       }),
     },
     async ({ question, search_type }) => {
-      const store = getStore();
-      const searchType =
-        search_type === "auto" ? classifyQuery(question) : search_type;
+      try {
+        const store = getStore();
+        const searchType =
+          search_type === "auto" ? classifyQuery(question) : search_type;
 
-      if (searchType === "global") {
-        const result = globalSearch(store, { query: question, maxCommunities: 5 });
+        if (searchType === "global") {
+          const result = globalSearch(store, { query: question, maxCommunities: 5 });
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: formatGlobalResult(result.communities),
+              },
+            ],
+          };
+        }
+
+        const result = localSearch(store, {
+          query: question,
+          maxEntities: 10,
+          maxRelations: 20,
+          maxTextUnits: 5,
+        });
         return {
           content: [
             {
               type: "text" as const,
-              text: formatGlobalResult(result.communities),
+              text: formatLocalResult(result),
             },
           ],
         };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Query failed: ${err instanceof Error ? err.message : String(err)}\n\nHave you run git_oracle_index yet?` }],
+          isError: true,
+        };
       }
-
-      const result = localSearch(store, {
-        query: question,
-        maxEntities: 10,
-        maxRelations: 20,
-        maxTextUnits: 5,
-      });
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: formatLocalResult(result),
-          },
-        ],
-      };
     },
   );
 
@@ -84,36 +91,43 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       }),
     },
     async ({ module, top_n }) => {
-      const store = getStore();
-      const results = findExperts(store, module, top_n);
+      try {
+        const store = getStore();
+        const results = findExperts(store, module, top_n);
 
-      if (results.length === 0) {
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `No experts found for "${module}". The module may not exist in the index, or no one has authored/modified it.`,
+              },
+            ],
+          };
+        }
+
+        const lines = results.map((r, i) => {
+          const modules = r.modules.map((m) => {
+            const entity = store.getEntity(m);
+            return entity?.name ?? m;
+          });
+          return `${i + 1}. **${r.person.name}** — score: ${r.score}, commits: ${r.commitCount}, last active: ${r.lastActive}, modules: ${modules.join(", ")}`;
+        });
+
         return {
           content: [
             {
               type: "text" as const,
-              text: `No experts found for "${module}". The module may not exist in the index, or no one has authored/modified it.`,
+              text: `## Experts for "${module}"\n\n${lines.join("\n")}`,
             },
           ],
         };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Find expert failed: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
       }
-
-      const lines = results.map((r, i) => {
-        const modules = r.modules.map((m) => {
-          const entity = store.getEntity(m);
-          return entity?.name ?? m;
-        });
-        return `${i + 1}. **${r.person.name}** — score: ${r.score}, commits: ${r.commitCount}, last active: ${r.lastActive}, modules: ${modules.join(", ")}`;
-      });
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `## Experts for "${module}"\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
     },
   );
 
@@ -135,43 +149,50 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       }),
     },
     async ({ topic }) => {
-      const store = getStore();
+      try {
+        const store = getStore();
 
-      // Search for DECISION entities matching the topic
-      const result = localSearch(store, {
-        query: topic,
-        maxEntities: 10,
-        maxRelations: 20,
-        maxTextUnits: 10,
-        entityTypes: [EntityType.DECISION],
-      });
-
-      // Also do a broader search if no decisions found
-      if (result.entities.length === 0) {
-        const broader = localSearch(store, {
+        // Search for DECISION entities matching the topic
+        const result = localSearch(store, {
           query: topic,
           maxEntities: 10,
           maxRelations: 20,
           maxTextUnits: 10,
+          entityTypes: [EntityType.DECISION],
         });
+
+        // Also do a broader search if no decisions found
+        if (result.entities.length === 0) {
+          const broader = localSearch(store, {
+            query: topic,
+            maxEntities: 10,
+            maxRelations: 20,
+            maxTextUnits: 10,
+          });
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: formatLocalResult(broader),
+              },
+            ],
+          };
+        }
+
         return {
           content: [
             {
               type: "text" as const,
-              text: formatLocalResult(broader),
+              text: formatLocalResult(result),
             },
           ],
         };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Trace decision failed: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
       }
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: formatLocalResult(result),
-          },
-        ],
-      };
     },
   );
 
@@ -195,33 +216,40 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       }),
     },
     async ({ module, min_co_changes }) => {
-      const store = getStore();
-      const results = getCoupling(store, module, min_co_changes);
+      try {
+        const store = getStore();
+        const results = getCoupling(store, module, min_co_changes);
 
-      if (results.length === 0) {
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `No coupling data found for "${module}" with minimum ${min_co_changes} co-changes.`,
+              },
+            ],
+          };
+        }
+
+        const lines = results.map(
+          (r) =>
+            `- **${r.module.name}**: ${r.coChangeCount} co-changes (ratio: ${(r.coChangeRatio * 100).toFixed(1)}%), shared authors: ${r.sharedAuthors.join(", ") || "none"}`,
+        );
+
         return {
           content: [
             {
               type: "text" as const,
-              text: `No coupling data found for "${module}" with minimum ${min_co_changes} co-changes.`,
+              text: `## Coupling for "${module}"\n\n${lines.join("\n")}`,
             },
           ],
         };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Show coupling failed: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
       }
-
-      const lines = results.map(
-        (r) =>
-          `- **${r.module.name}**: ${r.coChangeCount} co-changes (ratio: ${(r.coChangeRatio * 100).toFixed(1)}%), shared authors: ${r.sharedAuthors.join(", ") || "none"}`,
-      );
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `## Coupling for "${module}"\n\n${lines.join("\n")}`,
-          },
-        ],
-      };
     },
   );
 
