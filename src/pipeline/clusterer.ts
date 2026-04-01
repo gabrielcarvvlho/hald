@@ -4,15 +4,48 @@ const { UndirectedGraph } = graphologyPkg as unknown as { UndirectedGraph: typeo
 import louvainModule from "graphology-communities-louvain";
 const louvain = louvainModule as unknown as (
   graph: InstanceType<typeof UndirectedGraph>,
-  options?: { resolution?: number; getEdgeWeight?: string | null },
+  options?: { resolution?: number; getEdgeWeight?: string | null; rng?: () => number },
 ) => Record<string, number>;
+import graphologyComponentsPkg from "graphology-components";
+const { connectedComponents } = graphologyComponentsPkg as unknown as {
+  connectedComponents: (graph: InstanceType<typeof UndirectedGraph>) => string[][];
+};
 import type {
   Entity,
   Relation,
   Community,
   CommunityId,
 } from "../shared/types.js";
+import { createHash } from "crypto";
 import { logger } from "../shared/logger.js";
+
+/** Mulberry32: fast 32-bit seeded PRNG. */
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Hash sorted entity IDs into a deterministic 32-bit seed. */
+function graphSeed(entityIds: string[]): number {
+  const str = [...entityIds].sort().join("\0");
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+/** Content-based community ID: same entity set → same ID. */
+function communityId(level: number, entityIds: string[]): CommunityId {
+  const sorted = [...entityIds].sort().join("\0");
+  const hash = createHash("sha256").update(sorted).digest("hex").slice(0, 10);
+  return `comm:${level}:${hash}`;
+}
 
 /**
  * Run Louvain community detection at multiple resolutions.
@@ -34,9 +67,58 @@ export function cluster(
   // Build undirected weighted graph
   const graph = buildGraph(entities, relations);
 
+  // Guard: no edges → single community with all entities
   if (graph.order === 0 || graph.size === 0) {
     end();
-    return [];
+    if (entities.length < minCommunitySize) return [];
+    return [
+      {
+        id: communityId(0, entities.map((e) => e.id)),
+        level: 0,
+        title: "",
+        summary: "",
+        entityIds: entities.map((e) => e.id),
+        childIds: [],
+      },
+    ];
+  }
+
+  // Guard: tiny graph → single-resolution run, skip hierarchy
+  if (entities.length < minCommunitySize * 2) {
+    const seed = graphSeed(entities.map((e) => e.id));
+    const partition = louvain(graph, {
+      resolution: 1.0,
+      getEdgeWeight: "weight",
+      rng: mulberry32(seed),
+    });
+
+    const communityMembers = new Map<number, string[]>();
+    for (const [nodeId, communityIdx] of Object.entries(partition)) {
+      const members = communityMembers.get(communityIdx) ?? [];
+      members.push(nodeId);
+      communityMembers.set(communityIdx, members);
+    }
+
+    end();
+    return [...communityMembers.values()]
+      .filter((members) => members.length >= minCommunitySize)
+      .map((members) => ({
+        id: communityId(0, members),
+        level: 0,
+        title: "",
+        summary: "",
+        entityIds: members,
+        childIds: [],
+      }));
+  }
+
+  // Log disconnected components for diagnostics
+  const components = connectedComponents(graph);
+  if (components.length > 1) {
+    logger.debug("clusterer: disconnected graph", {
+      components: components.length,
+      sizes: components.map((c) => c.length).sort((a, b) => b - a),
+    });
   }
 
   const allCommunities: Community[] = [];
@@ -44,12 +126,15 @@ export function cluster(
   // Run Louvain at each resolution level
   const sortedResolutions = [...resolutions].sort((a, b) => a - b);
 
+  const seed = graphSeed(entities.map((e) => e.id));
+
   for (let level = 0; level < sortedResolutions.length; level++) {
     const resolution = sortedResolutions[level]!;
 
     const partition = louvain(graph, {
       resolution,
       getEdgeWeight: "weight",
+      rng: mulberry32(seed ^ level),
     });
 
     // Group nodes by community
@@ -61,20 +146,17 @@ export function cluster(
     }
 
     // Create Community objects, filtering by min size
-    let idx = 0;
     for (const [, members] of communityMembers) {
       if (members.length < minCommunitySize) continue;
 
-      const id: CommunityId = `comm:${level}:${idx}`;
       allCommunities.push({
-        id,
+        id: communityId(level, members),
         level,
         title: "",
         summary: "",
         entityIds: members,
         childIds: [],
       });
-      idx++;
     }
   }
 
@@ -94,7 +176,7 @@ export function cluster(
 // Graph construction
 // ================================================================
 
-function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph {
+export function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph {
   const graph = new UndirectedGraph();
 
   for (const entity of entities) {
@@ -119,7 +201,30 @@ function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph 
     }
   }
 
+  // Log-normalize edge weights to dampen high-frequency CO_CHANGED dominance
+  graph.forEachEdge((edge) => {
+    const w = graph.getEdgeAttribute(edge, "weight") as number;
+    graph.setEdgeAttribute(edge, "weight", 1 + Math.log(Math.max(w, 1)));
+  });
+
   return graph;
+}
+
+// ================================================================
+// Jaccard similarity (exported for orchestrator + tests)
+// ================================================================
+
+/** Jaccard similarity between two ID sets: |intersection| / |union|. */
+export function jaccardSimilarity(a: string[], b: string[]): number {
+  if (a.length === 0 && b.length === 0) return 0;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let intersection = 0;
+  for (const id of setA) {
+    if (setB.has(id)) intersection++;
+  }
+  const union = new Set([...a, ...b]).size;
+  return intersection / union;
 }
 
 // ================================================================
@@ -159,10 +264,37 @@ function linkHierarchy(communities: Community[]): void {
         }
       }
 
-      if (bestParent && bestOverlap > 0) {
+      const overlapRatio = bestOverlap / child.entityIds.length;
+
+      if (bestParent && overlapRatio > 0.3) {
         child.parentId = bestParent.id;
         bestParent.childIds.push(child.id);
+
+        if (overlapRatio < 0.7) {
+          logger.debug("clusterer: split community", {
+            child: child.id,
+            parent: bestParent.id,
+            overlapRatio: overlapRatio.toFixed(2),
+          });
+        }
+      } else {
+        logger.warn("clusterer: orphan community", {
+          id: child.id,
+          level: child.level,
+          members: child.entityIds.length,
+        });
       }
+    }
+  }
+
+  // Validation: no community should appear as child of multiple parents
+  const childToParent = new Map<CommunityId, CommunityId>();
+  for (const c of communities) {
+    for (const childId of c.childIds) {
+      if (childToParent.has(childId)) {
+        logger.error("clusterer: duplicate parent assignment", { childId });
+      }
+      childToParent.set(childId, c.id);
     }
   }
 }
