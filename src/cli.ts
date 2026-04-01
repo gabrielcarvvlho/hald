@@ -295,6 +295,18 @@ program
   });
 
 // ================================================================
+// serve
+// ================================================================
+
+program
+  .command("serve")
+  .description("Start the MCP server on stdio (for use with AI agents)")
+  .action(async () => {
+    const { startServer } = await import("./mcp/server.js");
+    await startServer();
+  });
+
+// ================================================================
 // Run
 // ================================================================
 
