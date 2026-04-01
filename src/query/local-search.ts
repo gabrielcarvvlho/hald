@@ -258,9 +258,9 @@ function expandHops(
     hopDistance: number;
   }> = [];
 
-  // --- 1-hop: expand seeds in score order, capped per seed ---
+  // --- 1-hop: collect neighbor IDs ---
   let hop1Budget = Math.min(HOP1_BUDGET, maxRelations);
-  const hop1Entries: Array<{ entity: Entity; relWeight: number }> = [];
+  const hop1Pending: Array<{ neighborId: string; relWeight: number }> = [];
 
   for (const seed of seeds) {
     if (hop1Budget <= 0) break;
@@ -282,25 +282,30 @@ function expandHops(
       const neighborId =
         rel.sourceId === seed.id ? rel.targetId : rel.sourceId;
       if (!knownIds.has(neighborId)) {
-        const neighbor = store.getEntity(neighborId);
-        if (neighbor) {
-          knownIds.add(neighborId);
-          rawNeighbors.push({
-            entity: neighbor,
-            relWeight: rel.weight,
-            hopDistance: 1,
-          });
-          hop1Entries.push({ entity: neighbor, relWeight: rel.weight });
-        }
+        knownIds.add(neighborId);
+        hop1Pending.push({ neighborId, relWeight: rel.weight });
       }
     }
   }
 
-  // --- 2-hop: expand top 1-hop neighbors with tighter thresholds ---
+  // Batch resolve 1-hop neighbors
+  const hop1EntityMap = store.getEntitiesByIds(hop1Pending.map((p) => p.neighborId));
+  const hop1Entries: Array<{ entity: Entity; relWeight: number }> = [];
+
+  for (const { neighborId, relWeight } of hop1Pending) {
+    const entity = hop1EntityMap.get(neighborId);
+    if (entity) {
+      rawNeighbors.push({ entity, relWeight, hopDistance: 1 });
+      hop1Entries.push({ entity, relWeight });
+    }
+  }
+
+  // --- 2-hop: collect neighbor IDs ---
   let hop2Budget = Math.min(HOP2_BUDGET, maxRelations - allRelations.length);
   const topNeighbors = hop1Entries
     .sort((a, b) => b.relWeight - a.relWeight)
     .slice(0, HOP2_TOP_NEIGHBORS);
+  const hop2Pending: Array<{ neighborId: string; relWeight: number }> = [];
 
   for (const { entity } of topNeighbors) {
     if (hop2Budget <= 0) break;
@@ -321,15 +326,19 @@ function expandHops(
       const neighborId =
         rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
       if (!knownIds.has(neighborId)) {
-        const neighbor = store.getEntity(neighborId);
-        if (neighbor) {
-          knownIds.add(neighborId);
-          rawNeighbors.push({
-            entity: neighbor,
-            relWeight: rel.weight,
-            hopDistance: 2,
-          });
-        }
+        knownIds.add(neighborId);
+        hop2Pending.push({ neighborId, relWeight: rel.weight });
+      }
+    }
+  }
+
+  // Batch resolve 2-hop neighbors
+  if (hop2Pending.length > 0) {
+    const hop2EntityMap = store.getEntitiesByIds(hop2Pending.map((p) => p.neighborId));
+    for (const { neighborId, relWeight } of hop2Pending) {
+      const entity = hop2EntityMap.get(neighborId);
+      if (entity) {
+        rawNeighbors.push({ entity, relWeight, hopDistance: 2 });
       }
     }
   }

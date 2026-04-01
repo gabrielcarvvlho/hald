@@ -108,8 +108,11 @@ export function findExperts(
   const now = new Date();
   const results: ExpertResult[] = [];
 
+  const personIds = [...personScores.keys()];
+  const personMap = store.getEntitiesByIds(personIds);
+
   for (const [personId, data] of personScores) {
-    const person = store.getEntity(personId);
+    const person = personMap.get(personId);
     if (!person || person.type !== EntityType.PERSON) continue;
 
     const daysSince = data.lastSeen
@@ -146,10 +149,9 @@ export function getCoupling(
   if (modules.length === 0) return [];
 
   const moduleIds = new Set(modules.map((m) => m.id));
-  const couplingMap = new Map<
-    string,
-    { weight: number; moduleEntity: Entity }
-  >();
+
+  // Collect all candidate coupled module IDs and accumulate weights
+  const candidateWeights = new Map<string, number>();
 
   for (const moduleId of moduleIds) {
     const relations = store.getRelationsForEntity(moduleId);
@@ -159,17 +161,26 @@ export function getCoupling(
 
       const otherId =
         rel.sourceId === moduleId ? rel.targetId : rel.sourceId;
-      if (moduleIds.has(otherId)) continue; // skip self-references
+      if (moduleIds.has(otherId)) continue;
 
-      const existing = couplingMap.get(otherId);
-      if (existing) {
-        existing.weight += rel.weight;
-      } else {
-        const otherEntity = store.getEntity(otherId);
-        if (otherEntity) {
-          couplingMap.set(otherId, { weight: rel.weight, moduleEntity: otherEntity });
-        }
-      }
+      candidateWeights.set(
+        otherId,
+        (candidateWeights.get(otherId) ?? 0) + rel.weight,
+      );
+    }
+  }
+
+  // Batch fetch all coupled module entities
+  const otherEntities = store.getEntitiesByIds([...candidateWeights.keys()]);
+  const couplingMap = new Map<
+    string,
+    { weight: number; moduleEntity: Entity }
+  >();
+
+  for (const [otherId, weight] of candidateWeights) {
+    const otherEntity = otherEntities.get(otherId);
+    if (otherEntity) {
+      couplingMap.set(otherId, { weight, moduleEntity: otherEntity });
     }
   }
 
@@ -185,10 +196,11 @@ export function getCoupling(
   };
 
   const sourceAuthorNames = getAuthorNames(store, moduleIds, resolvePersonName);
-  const totalChanges = [...moduleIds].reduce((sum, id) => {
-    const entity = store.getEntity(id);
-    return sum + (entity?.frequency ?? 0);
-  }, 0);
+  const sourceModuleEntities = store.getEntitiesByIds([...moduleIds]);
+  const totalChanges = [...sourceModuleEntities.values()].reduce(
+    (sum, e) => sum + (e.frequency ?? 0),
+    0,
+  );
 
   for (const [otherId, data] of couplingMap) {
     if (data.weight < minWeight) continue;
