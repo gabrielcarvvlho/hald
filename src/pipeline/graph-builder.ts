@@ -123,6 +123,8 @@ function buildCoChangeEdges(commits: CommitData[]): Relation[] {
   const relations: Relation[] = [];
 
   for (const commit of commits) {
+    // Skip merge commits — their file lists duplicate the merged branch commits
+    if (commit.parentHashes.length > 1) continue;
     const modules = [
       ...new Set(
         commit.filesChanged.map((f) =>
