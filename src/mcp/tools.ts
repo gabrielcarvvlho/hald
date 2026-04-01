@@ -557,22 +557,24 @@ function formatLocalResult(result: ReturnType<typeof localSearch>): string {
   const sections: string[] = [];
 
   if (result.entities.length > 0) {
-    sections.push("## Entities\n");
+    const header =
+      result.totalEntityMatches > result.entities.length
+        ? `## Entities (showing ${result.entities.length} of ${result.totalEntityMatches} matches)\n`
+        : "## Entities\n";
+    sections.push(header);
     for (const e of result.entities) {
+      const tag = e.isSeed ? "seed" : `${e.hopDistance}-hop`;
       sections.push(
-        `- **[${e.type}] ${e.name}**: ${e.description} (frequency: ${e.frequency}, last seen: ${e.lastSeen})`,
+        `- **[${e.type}] ${e.name}** (${tag}, score: ${e.score.toFixed(2)}): ${e.description} (last seen: ${e.lastSeen})`,
       );
     }
   }
 
   if (result.relations.length > 0) {
-    const nameById = new Map(result.entities.map((e) => [e.id, e.name]));
     sections.push("\n## Relationships\n");
     for (const r of result.relations.slice(0, 15)) {
-      const source = nameById.get(r.sourceId) ?? r.sourceId;
-      const target = nameById.get(r.targetId) ?? r.targetId;
       sections.push(
-        `- ${source} —[${r.type}]→ ${target}: ${r.description} (weight: ${r.weight})`,
+        `- ${r.sourceName} —[${r.type}]→ ${r.targetName}: ${r.description} (weight: ${r.weight})`,
       );
     }
   }

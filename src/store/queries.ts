@@ -70,6 +70,21 @@ export class Store {
     return rows.map(toEntity);
   }
 
+  searchEntitiesRanked(
+    query: string,
+    limit = 10,
+  ): Array<{ entity: Entity; ftsRank: number }> {
+    const safe = sanitizeFtsQuery(query);
+    if (!safe) return [];
+    const rows = this.stmts.searchEntitiesRanked.all(safe, limit) as (EntityRow & {
+      fts_rank: number;
+    })[];
+    return rows.map((row) => ({
+      entity: toEntity(row),
+      ftsRank: row.fts_rank,
+    }));
+  }
+
   getAllEntities(): Entity[] {
     const rows = this.stmts.getAllEntities.all() as EntityRow[];
     return rows.map(toEntity);
@@ -331,6 +346,14 @@ function prepareStatements(db: Database.Database) {
       ORDER BY rank
       LIMIT ?
     `),
+    searchEntitiesRanked: db.prepare(`
+      SELECT entities.*, bm25(entities_fts, 10.0, 5.0, 1.0) AS fts_rank
+      FROM entities_fts
+      JOIN entities ON entities.rowid = entities_fts.rowid
+      WHERE entities_fts MATCH ?
+      ORDER BY fts_rank
+      LIMIT ?
+    `),
 
     // --- Relations ---
     upsertRelation: db.prepare(`
@@ -428,16 +451,40 @@ function prepareStatements(db: Database.Database) {
 
 /**
  * Sanitize user input for FTS5 MATCH queries.
- * Strips stop words (conversational filler), splits on non-alphanumeric chars,
- * and wraps each token in quotes to avoid FTS5 syntax errors.
+ *
+ * Improvements over naive tokenization:
+ * - Splits camelCase/PascalCase ("PaymentGateway" → ["Payment", "Gateway"])
+ * - Prefix matching for short tokens (< 6 chars) to handle abbreviations
+ * - Stop word removal for conversational filler
  */
 function sanitizeFtsQuery(query: string): string | null {
-  const tokens = query
+  let tokens = query
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((t) => t.length > 0)
+    .filter((t) => t.length > 0);
+
+  // Split camelCase/PascalCase: "PaymentGateway" → ["PaymentGateway", "Payment", "Gateway"]
+  // Keep original alongside splits so "gRPC" → ["gRPC", "g", "RPC"] → after filter → ["gRPC", "RPC"]
+  tokens = [
+    ...new Set(
+      tokens.flatMap((t) => {
+        const parts = t.split(
+          /(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/,
+        );
+        return parts.length > 1 ? [t, ...parts] : parts;
+      }),
+    ),
+  ];
+
+  tokens = tokens
+    .filter((t) => t.length > 1)
     .filter((t) => !STOP_WORDS.has(t.toLowerCase()));
+
   if (tokens.length === 0) return null;
-  return tokens.map((t) => `"${t}"`).join(" OR ");
+
+  // Short tokens get prefix matching (auth → auth*), longer ones get exact match
+  return tokens
+    .map((t) => (t.length < 6 ? `${t}*` : `"${t}"`))
+    .join(" OR ");
 }
 
 const STOP_WORDS = new Set([

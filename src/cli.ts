@@ -213,24 +213,25 @@ program
         if (result.entities.length === 0) {
           console.log("No relevant entities found.");
         } else {
-          const nameById = new Map(
-            result.entities.map((e) => [e.id, e.name]),
-          );
-
-          console.log("### Entities");
-          for (const e of result.entities) {
+          if (result.totalEntityMatches > result.entities.length) {
             console.log(
-              `  [${e.type}] ${e.name} — ${e.description} (freq: ${e.frequency})`,
+              `### Entities (showing ${result.entities.length} of ${result.totalEntityMatches})`,
+            );
+          } else {
+            console.log("### Entities");
+          }
+          for (const e of result.entities) {
+            const tag = e.isSeed ? "seed" : `${e.hopDistance}-hop`;
+            console.log(
+              `  [${e.type}] ${e.name} — ${e.description} (${tag}, score: ${e.score.toFixed(2)})`,
             );
           }
 
           if (result.relations.length > 0) {
             console.log("\n### Relations");
             for (const r of result.relations.slice(0, 10)) {
-              const sourceName = nameById.get(r.sourceId) ?? r.sourceId;
-              const targetName = nameById.get(r.targetId) ?? r.targetId;
               console.log(
-                `  ${sourceName} --[${r.type}]--> ${targetName} (weight: ${r.weight})`,
+                `  ${r.sourceName} --[${r.type}]--> ${r.targetName} (weight: ${r.weight})`,
               );
             }
           }
