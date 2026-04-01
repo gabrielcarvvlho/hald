@@ -247,10 +247,37 @@ function linkHierarchy(communities: Community[]): void {
         }
       }
 
-      if (bestParent && bestOverlap > 0) {
+      const overlapRatio = bestOverlap / child.entityIds.length;
+
+      if (bestParent && overlapRatio > 0.3) {
         child.parentId = bestParent.id;
         bestParent.childIds.push(child.id);
+
+        if (overlapRatio < 0.7) {
+          logger.debug("clusterer: split community", {
+            child: child.id,
+            parent: bestParent.id,
+            overlapRatio: overlapRatio.toFixed(2),
+          });
+        }
+      } else {
+        logger.warn("clusterer: orphan community", {
+          id: child.id,
+          level: child.level,
+          members: child.entityIds.length,
+        });
       }
+    }
+  }
+
+  // Validation: no community should appear as child of multiple parents
+  const childToParent = new Map<CommunityId, CommunityId>();
+  for (const c of communities) {
+    for (const childId of c.childIds) {
+      if (childToParent.has(childId)) {
+        logger.error("clusterer: duplicate parent assignment", { childId });
+      }
+      childToParent.set(childId, c.id);
     }
   }
 }

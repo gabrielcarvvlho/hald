@@ -259,6 +259,51 @@ describe("clusterer", () => {
     expect(ids1).toEqual(ids2);
   });
 
+  it("marks orphan communities when no parent has sufficient overlap", () => {
+    const entities = Array.from({ length: 12 }, (_, i) => makeEntity(`n${i}`));
+    const relations = [
+      makeRelation("n0", "n1", 10), makeRelation("n1", "n2", 10), makeRelation("n0", "n2", 10),
+      makeRelation("n3", "n4", 10), makeRelation("n4", "n5", 10), makeRelation("n3", "n5", 10),
+      makeRelation("n6", "n7", 10), makeRelation("n7", "n8", 10), makeRelation("n6", "n8", 10),
+      makeRelation("n9", "n10", 10), makeRelation("n10", "n11", 10), makeRelation("n9", "n11", 10),
+      makeRelation("n2", "n3", 1), makeRelation("n5", "n6", 1), makeRelation("n8", "n9", 1),
+    ];
+
+    const communities = cluster(entities, relations, [0.5, 2.0], 3);
+
+    // Every child with a parent must have >30% overlap
+    for (const c of communities) {
+      if (c.parentId) {
+        const parent = communities.find((p) => p.id === c.parentId);
+        expect(parent).toBeDefined();
+        const childSet = new Set(c.entityIds);
+        const overlap = parent!.entityIds.filter((id) => childSet.has(id)).length;
+        expect(overlap / c.entityIds.length).toBeGreaterThan(0.3);
+      }
+    }
+  });
+
+  it("does not assign duplicate parents", () => {
+    const entities = Array.from({ length: 12 }, (_, i) => makeEntity(`n${i}`));
+    const relations = [
+      makeRelation("n0", "n1", 10), makeRelation("n1", "n2", 10), makeRelation("n0", "n2", 10),
+      makeRelation("n3", "n4", 10), makeRelation("n4", "n5", 10), makeRelation("n3", "n5", 10),
+      makeRelation("n6", "n7", 10), makeRelation("n7", "n8", 10), makeRelation("n6", "n8", 10),
+      makeRelation("n9", "n10", 10), makeRelation("n10", "n11", 10), makeRelation("n9", "n11", 10),
+      makeRelation("n2", "n3", 1), makeRelation("n5", "n6", 1), makeRelation("n8", "n9", 1),
+    ];
+
+    const communities = cluster(entities, relations, [0.5, 1.0, 2.0], 3);
+
+    const childToParent = new Map<string, string>();
+    for (const c of communities) {
+      for (const childId of c.childIds) {
+        expect(childToParent.has(childId)).toBe(false);
+        childToParent.set(childId, c.id);
+      }
+    }
+  });
+
   it("links parent/child across levels", () => {
     // Large enough graph to have hierarchy
     const entities = Array.from({ length: 12 }, (_, i) =>
