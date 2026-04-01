@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
-import { initSchema } from "../../src/store/schema.js";
+import { openDatabase } from "../../src/store/db.js";
 import { Store } from "../../src/store/queries.js";
 import {
   EntityType,
@@ -13,9 +13,7 @@ import {
 } from "../../src/shared/types.js";
 
 function createTestStore(): { db: Database.Database; store: Store } {
-  const db = new Database(":memory:");
-  db.pragma("foreign_keys = ON");
-  initSchema(db);
+  const db = openDatabase(":memory:");
   return { db, store: new Store(db) };
 }
 

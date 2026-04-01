@@ -1,14 +1,12 @@
-import Database from "better-sqlite3";
-import { initSchema } from "../../src/store/schema.js";
+import type Database from "better-sqlite3";
+import { openDatabase } from "../../src/store/db.js";
 import { Store } from "../../src/store/queries.js";
 import { EntityType, RelationType } from "../../src/shared/types.js";
 import type { Entity, Relation, TextUnit, Community } from "../../src/shared/types.js";
 
 /** Creates an in-memory store populated with sample data for query tests. */
 export function createPopulatedStore(): { db: Database.Database; store: Store } {
-  const db = new Database(":memory:");
-  db.pragma("foreign_keys = ON");
-  initSchema(db);
+  const db = openDatabase(":memory:");
   const store = new Store(db);
 
   // === Entities ===
