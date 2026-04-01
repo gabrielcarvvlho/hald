@@ -59,11 +59,14 @@ const DEFAULT_WEIGHTS: RankingWeights = {
   degree: 0.2,
 };
 
+const SEED_ENTITY_RATIO = 0.6; // Fraction of maxEntities reserved for seeds (rest for neighbors)
 const MAX_RELATIONS_PER_SEED = 15;
 const MIN_RELATION_WEIGHT = 1.0;
 const HOP1_BUDGET = 15;
 const HOP2_BUDGET = 5;
 const HOP2_TOP_NEIGHBORS = 3;
+const HOP1_SCORE_DECAY = 0.5; // Max score for 1-hop neighbors (seeds score higher)
+const HOP2_SCORE_DECAY = 0.25; // Max score for 2-hop neighbors
 
 // ================================================================
 // Local Search
@@ -101,7 +104,7 @@ export function localSearch(
   }
 
   const totalEntityMatches = rankedSeeds.length;
-  const seedLimit = Math.ceil(maxEntities * 0.6);
+  const seedLimit = Math.ceil(maxEntities * SEED_ENTITY_RATIO);
   rankedSeeds = rankedSeeds.slice(0, seedLimit);
 
   if (rankedSeeds.length === 0) {
@@ -202,15 +205,15 @@ function computeScore(
   now: Date,
   weights: RankingWeights,
 ): number {
-  // FTS: normalize BM25 (more negative = better match, cap at 1.0)
-  const ftsScore = Math.min(1, -ftsRank / 20);
+  // FTS: normalize BM25 (more negative = better match, clamp to [0, 1])
+  const ftsScore = Math.max(0, Math.min(1, -ftsRank / 20));
 
-  // Recency: exponential decay, ~0.5 at 180 days
-  const daysSince = Math.max(
-    0,
-    (now.getTime() - new Date(entity.lastSeen).getTime()) / 86_400_000,
-  );
-  const recencyScore = Math.exp(-daysSince / 260);
+  // Recency: exponential decay, ~0.5 at 180 days (guard against invalid dates)
+  const daysSince =
+    (now.getTime() - new Date(entity.lastSeen).getTime()) / 86_400_000;
+  const recencyScore = Number.isFinite(daysSince)
+    ? Math.exp(-Math.max(0, daysSince) / 260)
+    : 0;
 
   // Degree: log-normalized to dampen hub dominance
   const degreeScore =
@@ -246,12 +249,18 @@ function expandHops(
   const knownIds = new Set(seeds.map((s) => s.id));
   const allRelations: Relation[] = [];
   const relSeen = new Set<string>();
-  const neighbors: ScoredEntity[] = [];
   let totalRelations = 0;
+
+  // Collect raw neighbors with their connecting relation weight
+  const rawNeighbors: Array<{
+    entity: Entity;
+    relWeight: number;
+    hopDistance: number;
+  }> = [];
 
   // --- 1-hop: expand seeds in score order, capped per seed ---
   let hop1Budget = Math.min(HOP1_BUDGET, maxRelations);
-  const hop1Neighbors: Array<{ entity: Entity; relWeight: number }> = [];
+  const hop1Entries: Array<{ entity: Entity; relWeight: number }> = [];
 
   for (const seed of seeds) {
     if (hop1Budget <= 0) break;
@@ -276,14 +285,12 @@ function expandHops(
         const neighbor = store.getEntity(neighborId);
         if (neighbor) {
           knownIds.add(neighborId);
-          neighbors.push({
-            ...neighbor,
-            score: 0,
-            isSeed: false,
+          rawNeighbors.push({
+            entity: neighbor,
+            relWeight: rel.weight,
             hopDistance: 1,
-            degree: 0,
           });
-          hop1Neighbors.push({ entity: neighbor, relWeight: rel.weight });
+          hop1Entries.push({ entity: neighbor, relWeight: rel.weight });
         }
       }
     }
@@ -291,7 +298,7 @@ function expandHops(
 
   // --- 2-hop: expand top 1-hop neighbors with tighter thresholds ---
   let hop2Budget = Math.min(HOP2_BUDGET, maxRelations - allRelations.length);
-  const topNeighbors = hop1Neighbors
+  const topNeighbors = hop1Entries
     .sort((a, b) => b.relWeight - a.relWeight)
     .slice(0, HOP2_TOP_NEIGHBORS);
 
@@ -317,17 +324,30 @@ function expandHops(
         const neighbor = store.getEntity(neighborId);
         if (neighbor) {
           knownIds.add(neighborId);
-          neighbors.push({
-            ...neighbor,
-            score: 0,
-            isSeed: false,
+          rawNeighbors.push({
+            entity: neighbor,
+            relWeight: rel.weight,
             hopDistance: 2,
-            degree: 0,
           });
         }
       }
     }
   }
+
+  // Score neighbors: normalize by max relation weight, decay by hop distance
+  const maxWeight = Math.max(
+    ...rawNeighbors.map((n) => n.relWeight),
+    1,
+  );
+  const neighbors: ScoredEntity[] = rawNeighbors.map((n) => ({
+    ...n.entity,
+    score:
+      (n.relWeight / maxWeight) *
+      (n.hopDistance === 1 ? HOP1_SCORE_DECAY : HOP2_SCORE_DECAY),
+    isSeed: false,
+    hopDistance: n.hopDistance,
+    degree: 0,
+  }));
 
   return { neighbors, relations: allRelations, totalRelations };
 }
@@ -360,6 +380,7 @@ function selectTextUnits(
       const tu = candidates[round];
       if (!tu || seen.has(tu.id)) continue;
 
+      // ~4 chars/token is a reasonable approximation for English text with code snippets
       const tuTokens = Math.ceil(tu.content.length / 4);
       if (tuTokens > tokenBudget) continue;
 
