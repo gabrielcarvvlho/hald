@@ -150,10 +150,10 @@ async function runPipeline(
 
   // 7. Resolve (deduplicate) entities
   progress("resolving", 0, 0);
-  const resolvedEntities = resolve(
-    allExtractedEntities,
-    config.entityResolutionThreshold,
-  );
+  const resolvedEntities = resolve(allExtractedEntities, {
+    threshold: config.entityResolutionThreshold,
+    moduleDepth: config.moduleDepth,
+  });
   logger.info("orchestrator: resolved", {
     entities: resolvedEntities.length,
   });
@@ -162,6 +162,7 @@ async function runPipeline(
   const resolvedRelations = resolveExtractedRelations(
     allExtractedRelations,
     resolvedEntities,
+    config.moduleDepth,
   );
 
   // 9. Build graph
@@ -172,6 +173,7 @@ async function runPipeline(
     relations: resolvedRelations,
     extractions,
     commits,
+    moduleDepth: config.moduleDepth,
   });
 
   // 10. Snapshot old communities (membership + summaries for reuse)
@@ -309,6 +311,7 @@ async function runPipeline(
 export function resolveExtractedRelations(
   extractedRelations: ExtractedRelation[],
   resolvedEntities: Entity[],
+  moduleDepth?: number,
 ): Relation[] {
   const entityByName = new Map<string, Entity>();
   for (const e of resolvedEntities) {
@@ -321,7 +324,7 @@ export function resolveExtractedRelations(
   function findEntity(name: string): Entity | undefined {
     return (
       entityByName.get(name.toLowerCase()) ??
-      entityByName.get(normalizeModulePath(name).toLowerCase())
+      entityByName.get(normalizeModulePath(name, moduleDepth).toLowerCase())
     );
   }
 

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   EntityType,
   type Entity,
@@ -6,36 +5,96 @@ import {
 } from "../shared/types.js";
 import type { ExtractedEntity } from "./extractor.js";
 
+export interface ResolveOptions {
+  threshold: number;
+  /** Module path normalization depth (number of path segments to keep). Default: 2 */
+  moduleDepth?: number;
+}
+
 /**
  * Deduplicate extracted entities. Groups by identity (same type + similar name),
  * merges descriptions, and assigns canonical IDs + aliases.
  *
- * Temporal data (firstSeen/lastSeen/frequency) is set to defaults here —
- * the graph builder updates them when upserting with text unit context.
+ * Strategies (applied in order):
+ * 1. Exact match (case-insensitive)
+ * 2. Alias/abbreviation match (known tech abbreviations)
+ * 3. Fuzzy match (Jaro-Winkler above threshold)
+ * 4. Module path normalization (configurable depth)
+ *
+ * Input is sorted deterministically before clustering to guarantee
+ * the same input always produces the same output.
  */
 export function resolve(
   entities: ExtractedEntity[],
-  threshold: number,
+  thresholdOrOptions: number | ResolveOptions,
 ): Entity[] {
+  const opts: ResolveOptions =
+    typeof thresholdOrOptions === "number"
+      ? { threshold: thresholdOrOptions }
+      : thresholdOrOptions;
+
   const byType = groupBy(entities, (e) => e.type as string);
   const resolved: Entity[] = [];
 
   for (const [typeStr, group] of byType) {
     const type = typeStr as EntityType;
-    if (type === EntityType.PERSON) {
-      resolved.push(...resolveGroup(group, type, threshold));
-    } else if (type === EntityType.MODULE) {
+    if (type === EntityType.MODULE) {
       const normalized = group.map((e) => ({
         ...e,
-        name: normalizeModulePath(e.name),
+        name: normalizeModulePath(e.name, opts.moduleDepth),
       }));
-      resolved.push(...resolveGroup(normalized, type, threshold));
+      resolved.push(...resolveGroup(normalized, type, opts.threshold));
     } else {
-      resolved.push(...resolveGroup(group, type, threshold));
+      resolved.push(...resolveGroup(group, type, opts.threshold));
     }
   }
 
   return resolved;
+}
+
+// ================================================================
+// Known abbreviations (bidirectional lookup)
+// ================================================================
+
+const ABBREVIATIONS: ReadonlyMap<string, string> = new Map([
+  ["ts", "typescript"],
+  ["js", "javascript"],
+  ["py", "python"],
+  ["rb", "ruby"],
+  ["k8s", "kubernetes"],
+  ["pg", "postgresql"],
+  ["postgres", "postgresql"],
+  ["mongo", "mongodb"],
+  ["es", "elasticsearch"],
+  ["tf", "terraform"],
+  ["gh", "github"],
+  ["gl", "gitlab"],
+  ["gql", "graphql"],
+  ["node", "node.js"],
+  ["react.js", "react"],
+  ["reactjs", "react"],
+  ["vue.js", "vue"],
+  ["vuejs", "vue"],
+  ["next.js", "nextjs"],
+  ["express.js", "express"],
+  ["nuxt.js", "nuxt"],
+  ["svelte.js", "svelte"],
+]);
+
+/**
+ * Expand a name to its canonical form using the abbreviation table.
+ * Returns the canonical name if found, otherwise the original.
+ */
+function expandAbbreviation(name: string): string {
+  const lower = name.toLowerCase();
+  return ABBREVIATIONS.get(lower) ?? lower;
+}
+
+/**
+ * Check if two names are alias-equivalent via the abbreviation table.
+ */
+function isAliasMatch(a: string, b: string): boolean {
+  return expandAbbreviation(a) === expandAbbreviation(b);
 }
 
 // ================================================================
@@ -47,19 +106,54 @@ function resolveGroup(
   type: EntityType,
   threshold: number,
 ): Entity[] {
-  const clusters: ExtractedEntity[][] = [];
+  // Sort deterministically: by lowercased name, then by description length (descending),
+  // then by description content (code-point order). This guarantees the same input
+  // always produces the same clusters regardless of extraction order from concurrent LLM calls.
+  const sorted = [...entities].sort((a, b) => {
+    const na = a.name.toLowerCase().trim();
+    const nb = b.name.toLowerCase().trim();
+    if (na < nb) return -1;
+    if (na > nb) return 1;
+    const dlen = b.description.length - a.description.length;
+    if (dlen !== 0) return dlen;
+    // Final tiebreaker: description content (code-point, not locale-dependent)
+    if (a.description < b.description) return -1;
+    if (a.description > b.description) return 1;
+    return 0;
+  });
 
-  for (const entity of entities) {
+  const clusters: ExtractedEntity[][] = [];
+  // Track the expanded (abbreviation-resolved) key for each cluster head
+  const clusterExpandedKeys: string[] = [];
+
+  for (const entity of sorted) {
     const key = entity.name.toLowerCase().trim();
+    const expandedKey = expandAbbreviation(key);
     let merged = false;
 
-    for (const cluster of clusters) {
-      const clusterKey = cluster[0]!.name.toLowerCase().trim();
-      if (
-        key === clusterKey ||
-        jaroWinkler(key, clusterKey) >= threshold
-      ) {
-        cluster.push(entity);
+    for (let ci = 0; ci < clusters.length; ci++) {
+      const clusterKey = clusters[ci]![0]!.name.toLowerCase().trim();
+      const clusterExpanded = clusterExpandedKeys[ci]!;
+
+      // Strategy 1: Exact match (case-insensitive, after trim)
+      if (key === clusterKey) {
+        clusters[ci]!.push(entity);
+        merged = true;
+        break;
+      }
+
+      // Strategy 2: Alias/abbreviation match
+      if (expandedKey === clusterExpanded) {
+        clusters[ci]!.push(entity);
+        merged = true;
+        break;
+      }
+
+      // Strategy 3: Fuzzy match with prefix blocking
+      // Skip JW if length difference is too large (> 50% of the longer string)
+      // or if strings share no common prefix — these can't score above typical thresholds.
+      if (canFuzzyMatch(key, clusterKey) && jaroWinkler(key, clusterKey) >= threshold) {
+        clusters[ci]!.push(entity);
         merged = true;
         break;
       }
@@ -67,21 +161,43 @@ function resolveGroup(
 
     if (!merged) {
       clusters.push([entity]);
+      clusterExpandedKeys.push(expandedKey);
     }
   }
 
   return clusters.map((cluster) => mergeCluster(cluster, type));
 }
 
+/**
+ * Cheap pre-filter: skip Jaro-Winkler for pairs that can't possibly score above ~0.85.
+ * Length ratio < 0.5 → max JW score is well below 0.85.
+ */
+function canFuzzyMatch(a: string, b: string): boolean {
+  const lenA = a.length;
+  const lenB = b.length;
+  if (lenA === 0 || lenB === 0) return false;
+
+  // Length ratio check
+  const ratio = Math.min(lenA, lenB) / Math.max(lenA, lenB);
+  if (ratio < 0.5) return false;
+
+  return true;
+}
+
 function mergeCluster(cluster: ExtractedEntity[], type: EntityType): Entity {
-  // Pick the most common or longest name as canonical
+  // Pick the most common name as canonical.
+  // Tiebreaker 1: longer name (prefer "TypeScript" over "TS").
+  // Tiebreaker 2: lexicographic order (determinism guarantee).
   const nameFreq = new Map<string, number>();
   for (const e of cluster) {
     const n = e.name.trim();
     nameFreq.set(n, (nameFreq.get(n) ?? 0) + 1);
   }
   const canonicalName = [...nameFreq.entries()].sort(
-    (a, b) => b[1] - a[1] || b[0].length - a[0].length,
+    (a, b) =>
+      b[1] - a[1] ||           // most frequent first
+      b[0].length - a[0].length || // longest first
+      (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0), // code-point tiebreaker (locale-independent)
   )[0]![0];
 
   // Collect unique aliases (all name variants except canonical)
@@ -91,12 +207,12 @@ function mergeCluster(cluster: ExtractedEntity[], type: EntityType): Entity {
         .map((e) => e.name.trim())
         .filter((n) => n !== canonicalName),
     ),
-  ];
+  ].sort(); // Sort for determinism
 
-  // Pick the longest description
+  // Pick the longest description; tiebreaker on content for determinism
   const description = cluster
     .map((e) => e.description)
-    .sort((a, b) => b.length - a.length)[0] ?? "";
+    .sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0))[0] ?? "";
 
   const id = generateEntityId(type, canonicalName);
 
@@ -131,19 +247,44 @@ export function generateEntityId(type: EntityType, name: string): EntityId {
 // Module path normalization
 // ================================================================
 
-export function normalizeModulePath(filePath: string): string {
+/**
+ * Normalize a file path to a module-level identifier.
+ *
+ * @param filePath - Raw file path (e.g., "src/billing/processor.ts")
+ * @param depth - Number of path segments to keep (default: 2).
+ *   depth=2: "src/billing/processor.ts" → "src/billing"
+ *   depth=3: "src/api/routes/auth.ts" → "src/api/routes"
+ *   depth=undefined: auto (strip file, keep directory)
+ */
+export function normalizeModulePath(filePath: string, depth?: number): string {
   // Strip index files: src/billing/index.ts → src/billing
   let normalized = filePath.replace(/\/index\.[^/]+$/, "");
 
-  // For deeper paths, group to directory: src/billing/processor.ts → src/billing
-  if (/\.[a-z]+$/i.test(normalized)) {
-    const parts = normalized.split("/");
-    if (parts.length >= 3) {
-      normalized = parts.slice(0, -1).join("/");
-    }
+  // If no file extension, it's already a directory-level path
+  if (!/\.[a-z]+$/i.test(normalized)) {
+    return applyDepth(normalized, depth);
   }
 
-  return normalized;
+  // Strip the filename to get the directory
+  const parts = normalized.split("/");
+  if (parts.length >= 3) {
+    normalized = parts.slice(0, -1).join("/");
+  }
+  // For shallow paths (< 3 parts), keep as-is (e.g., "src/cli.ts" stays)
+  // since stripping would lose too much info
+
+  return applyDepth(normalized, depth);
+}
+
+/**
+ * If depth is set, truncate the path to that many segments.
+ * "src/api/routes" with depth=2 becomes "src/api".
+ */
+function applyDepth(path: string, depth?: number): string {
+  if (depth == null) return path;
+  const parts = path.split("/");
+  if (parts.length <= depth) return path;
+  return parts.slice(0, depth).join("/");
 }
 
 // ================================================================
@@ -204,7 +345,13 @@ export function jaroWinkler(s1: string, s2: string): number {
 }
 
 // ================================================================
-// Helpers
+// Exported helpers for alias matching
+// ================================================================
+
+export { isAliasMatch, expandAbbreviation, ABBREVIATIONS };
+
+// ================================================================
+// Internal helpers
 // ================================================================
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {

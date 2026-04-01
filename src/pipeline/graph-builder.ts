@@ -28,6 +28,8 @@ export interface BuildInput {
   extractions: Map<string, ExtractorResult>;
   /** Original commits for co-change edge creation */
   commits: CommitData[];
+  /** Module path normalization depth (passed through from config) */
+  moduleDepth?: number;
 }
 
 /**
@@ -54,7 +56,7 @@ export function build(store: Store, input: BuildInput): GraphStats {
     for (const extracted of extraction.entities) {
       const entity =
         entityMap.get(extracted.name.toLowerCase()) ??
-        entityMap.get(normalizeModulePath(extracted.name).toLowerCase());
+        entityMap.get(normalizeModulePath(extracted.name, input.moduleDepth).toLowerCase());
       if (!entity) continue;
 
       store.upsertEntity({
@@ -91,7 +93,7 @@ export function build(store: Store, input: BuildInput): GraphStats {
   }
 
   // 5. Create co-change edges
-  const coChangeRelations = buildCoChangeEdges(input.commits);
+  const coChangeRelations = buildCoChangeEdges(input.commits, input.moduleDepth);
   for (const rel of coChangeRelations) {
     // Only create co-change edges if both modules exist as entities
     if (store.getEntity(rel.sourceId) && store.getEntity(rel.targetId)) {
@@ -119,7 +121,7 @@ export function build(store: Store, input: BuildInput): GraphStats {
 // Co-change edges
 // ================================================================
 
-function buildCoChangeEdges(commits: CommitData[]): Relation[] {
+function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relation[] {
   const relations: Relation[] = [];
 
   for (const commit of commits) {
@@ -128,7 +130,7 @@ function buildCoChangeEdges(commits: CommitData[]): Relation[] {
     const modules = [
       ...new Set(
         commit.filesChanged.map((f) =>
-          normalizeModulePath(f.path),
+          normalizeModulePath(f.path, moduleDepth),
         ),
       ),
     ];
