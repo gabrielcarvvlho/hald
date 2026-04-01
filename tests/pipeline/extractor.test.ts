@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseExtractionXml } from "../../src/pipeline/extractor.js";
+import {
+  parseExtractionXml,
+  shouldGlean,
+  stripCodeFences,
+} from "../../src/pipeline/extractor.js";
+import { EntityType } from "../../src/shared/types.js";
+import type { TextUnit } from "../../src/shared/types.js";
 
 describe("extractor — XML parsing", () => {
   it("parses a well-formed extraction response", () => {
@@ -172,5 +178,114 @@ I hope this helps!`;
 
     const result = parseExtractionXml(xml);
     expect(result.relations[0]!.weight).toBe(5);
+  });
+
+  it("parses XML wrapped in markdown code fences", () => {
+    const text =
+      '```xml\n<extraction>\n  <entities>\n    <entity>\n      <name>Test</name>\n      <type>PERSON</type>\n      <description>dev</description>\n    </entity>\n  </entities>\n  <relations/>\n</extraction>\n```';
+
+    const result = parseExtractionXml(text);
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0]!.name).toBe("Test");
+  });
+
+  it("skips relations with wrong source/target entity types", () => {
+    const xml = `<extraction>
+  <entities>
+    <entity><name>Alice</name><type>PERSON</type><description>dev</description></entity>
+    <entity><name>React</name><type>TECHNOLOGY</type><description>lib</description></entity>
+  </entities>
+  <relations>
+    <relation>
+      <source>Alice</source><target>React</target><type>INTRODUCED</type>
+      <description>Alice introduced React</description><weight>8</weight>
+    </relation>
+    <relation>
+      <source>Alice</source><target>React</target><type>CO_CHANGED</type>
+      <description>wrong types for CO_CHANGED</description><weight>5</weight>
+    </relation>
+  </relations>
+</extraction>`;
+
+    const result = parseExtractionXml(xml);
+    expect(result.relations).toHaveLength(1);
+    expect(result.relations[0]!.type).toBe("INTRODUCED");
+  });
+
+  it("allows relations when source/target entity is not in entities list", () => {
+    const xml = `<extraction>
+  <entities>
+    <entity><name>Alice</name><type>PERSON</type><description>dev</description></entity>
+  </entities>
+  <relations>
+    <relation>
+      <source>Alice</source><target>Unknown Module</target><type>AUTHORED</type>
+      <description>dangling relation</description><weight>5</weight>
+    </relation>
+  </relations>
+</extraction>`;
+
+    const result = parseExtractionXml(xml);
+    expect(result.relations).toHaveLength(1);
+  });
+});
+
+describe("extractor — stripCodeFences", () => {
+  it("strips xml code fences", () => {
+    expect(stripCodeFences("```xml\n<extraction>test</extraction>\n```")).toBe(
+      "<extraction>test</extraction>\n",
+    );
+  });
+
+  it("strips plain code fences", () => {
+    expect(stripCodeFences("```\n<extraction>test</extraction>\n```")).toBe(
+      "<extraction>test</extraction>\n",
+    );
+  });
+
+  it("leaves text without fences unchanged", () => {
+    expect(stripCodeFences("<extraction>test</extraction>")).toBe(
+      "<extraction>test</extraction>",
+    );
+  });
+});
+
+describe("extractor — shouldGlean", () => {
+  function makeTextUnit(commitCount: number): TextUnit {
+    return {
+      id: "test-tu",
+      content: "test content",
+      commitHashes: Array.from({ length: commitCount }, (_, i) => `hash${i}`),
+      dateRange: { start: "2024-01-01", end: "2024-01-31" },
+      entityIds: [],
+      relationIds: [],
+    };
+  }
+
+  it("returns false for small chunks (< 8 commits)", () => {
+    const result = {
+      entities: [{ name: "A", type: EntityType.PERSON, description: "" }],
+      relations: [],
+    };
+    expect(shouldGlean(result, makeTextUnit(5))).toBe(false);
+  });
+
+  it("returns true for large chunks with few entities", () => {
+    const result = {
+      entities: [{ name: "A", type: EntityType.PERSON, description: "" }],
+      relations: [],
+    };
+    expect(shouldGlean(result, makeTextUnit(10))).toBe(true);
+  });
+
+  it("returns false for large chunks with enough entities", () => {
+    const entities = Array.from({ length: 6 }, (_, i) => ({
+      name: `Entity${i}`,
+      type: EntityType.PERSON,
+      description: "",
+    }));
+    expect(shouldGlean({ entities, relations: [] }, makeTextUnit(10))).toBe(
+      false,
+    );
   });
 });

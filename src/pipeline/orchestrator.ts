@@ -1,5 +1,5 @@
 import type { GitOracleConfig, CommitData, Entity, Relation, Community } from "../shared/types.js";
-import type { ExtractedRelation, ExtractorResult, ExtractedEntity } from "./extractor.js";
+import type { ExtractedRelation, ExtractorResult, ExtractedEntity, TokenAccumulator } from "./extractor.js";
 import { openDatabase } from "../store/db.js";
 import { Store } from "../store/queries.js";
 import { readCommits, getHead } from "./git-reader.js";
@@ -111,23 +111,41 @@ async function runPipeline(
   const extractions = new Map<string, ExtractorResult>();
   const allExtractedEntities: ExtractedEntity[] = [];
   const allExtractedRelations: ExtractedRelation[] = [];
+  const tokenUsage: TokenAccumulator = {
+    inputTokens: 0,
+    outputTokens: 0,
+    requestCount: 0,
+    failedCount: 0,
+  };
+  let failedChunks = 0;
 
-  for await (const { textUnitId, result } of extractBatch(
+  for await (const { textUnitId, result, failed } of extractBatch(
     textUnits,
     client,
     {
       concurrency: config.maxConcurrency,
       onProgress: (done, total) => progress("extracting", done, total),
+      tokenUsage,
     },
   )) {
+    if (failed) failedChunks++;
     extractions.set(textUnitId, result);
     allExtractedEntities.push(...result.entities);
     allExtractedRelations.push(...result.relations);
   }
 
+  if (failedChunks > 0) {
+    logger.warn(
+      `orchestrator: ${failedChunks}/${textUnits.length} chunks failed extraction`,
+    );
+  }
+
   logger.info("orchestrator: extracted", {
     entities: allExtractedEntities.length,
     relations: allExtractedRelations.length,
+    inputTokens: tokenUsage.inputTokens,
+    outputTokens: tokenUsage.outputTokens,
+    failedChunks,
   });
 
   // 7. Resolve (deduplicate) entities
@@ -244,6 +262,10 @@ async function runPipeline(
     "head_at_index",
     await getHead(config.repoPath).catch(() => "unknown"),
   );
+  store.setMeta("last_extraction_input_tokens", String(tokenUsage.inputTokens));
+  store.setMeta("last_extraction_output_tokens", String(tokenUsage.outputTokens));
+  store.setMeta("last_extraction_requests", String(tokenUsage.requestCount));
+  store.setMeta("last_extraction_failures", String(tokenUsage.failedCount));
 
   const finalStats = store.getStats();
 
