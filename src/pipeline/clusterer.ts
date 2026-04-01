@@ -4,7 +4,7 @@ const { UndirectedGraph } = graphologyPkg as unknown as { UndirectedGraph: typeo
 import louvainModule from "graphology-communities-louvain";
 const louvain = louvainModule as unknown as (
   graph: InstanceType<typeof UndirectedGraph>,
-  options?: { resolution?: number; getEdgeWeight?: string | null },
+  options?: { resolution?: number; getEdgeWeight?: string | null; rng?: () => number },
 ) => Record<string, number>;
 import type {
   Entity,
@@ -12,7 +12,36 @@ import type {
   Community,
   CommunityId,
 } from "../shared/types.js";
+import { createHash } from "crypto";
 import { logger } from "../shared/logger.js";
+
+/** Mulberry32: fast 32-bit seeded PRNG. */
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Hash sorted entity IDs into a deterministic 32-bit seed. */
+function graphSeed(entityIds: string[]): number {
+  const str = [...entityIds].sort().join("\0");
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+/** Content-based community ID: same entity set → same ID. */
+function communityId(level: number, entityIds: string[]): CommunityId {
+  const sorted = [...entityIds].sort().join("\0");
+  const hash = createHash("sha256").update(sorted).digest("hex").slice(0, 10);
+  return `comm:${level}:${hash}`;
+}
 
 /**
  * Run Louvain community detection at multiple resolutions.
@@ -46,10 +75,12 @@ export function cluster(
 
   for (let level = 0; level < sortedResolutions.length; level++) {
     const resolution = sortedResolutions[level]!;
+    const seed = graphSeed(entities.map((e) => e.id));
 
     const partition = louvain(graph, {
       resolution,
       getEdgeWeight: "weight",
+      rng: mulberry32(seed ^ level),
     });
 
     // Group nodes by community
@@ -61,20 +92,17 @@ export function cluster(
     }
 
     // Create Community objects, filtering by min size
-    let idx = 0;
     for (const [, members] of communityMembers) {
       if (members.length < minCommunitySize) continue;
 
-      const id: CommunityId = `comm:${level}:${idx}`;
       allCommunities.push({
-        id,
+        id: communityId(level, members),
         level,
         title: "",
         summary: "",
         entityIds: members,
         childIds: [],
       });
-      idx++;
     }
   }
 

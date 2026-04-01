@@ -70,7 +70,7 @@ describe("clusterer", () => {
     // Each community should have members
     for (const c of communities) {
       expect(c.entityIds.length).toBeGreaterThanOrEqual(2);
-      expect(c.id).toMatch(/^comm:\d+:\d+$/);
+      expect(c.id).toMatch(/^comm:\d+:[a-f0-9]{10}$/);
     }
   });
 
@@ -119,9 +119,72 @@ describe("clusterer", () => {
     const communities = cluster(entities, relations, [1.0], 2);
 
     for (const c of communities) {
-      expect(c.id).toMatch(/^comm:\d+:\d+$/);
+      expect(c.id).toMatch(/^comm:\d+:[a-f0-9]{10}$/);
       expect(c.level).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("produces deterministic output across runs", () => {
+    const entities = ["a", "b", "c", "d", "e", "f"].map(makeEntity);
+    const relations = [
+      makeRelation("a", "b", 10),
+      makeRelation("b", "c", 10),
+      makeRelation("a", "c", 10),
+      makeRelation("d", "e", 10),
+      makeRelation("e", "f", 10),
+      makeRelation("d", "f", 10),
+      makeRelation("c", "d", 1),
+    ];
+
+    const run1 = cluster(entities, relations, [1.0], 2);
+    const run2 = cluster(entities, relations, [1.0], 2);
+
+    expect(run1.length).toBe(run2.length);
+    const ids1 = run1.map((c) => c.id).sort();
+    const ids2 = run2.map((c) => c.id).sort();
+    expect(ids1).toEqual(ids2);
+    const members1 = run1.map((c) => [...c.entityIds].sort().join(",")).sort();
+    const members2 = run2.map((c) => [...c.entityIds].sort().join(",")).sort();
+    expect(members1).toEqual(members2);
+  });
+
+  it("uses content-based community IDs", () => {
+    const entities = ["a", "b", "c", "d", "e", "f"].map(makeEntity);
+    const relations = [
+      makeRelation("a", "b", 10),
+      makeRelation("b", "c", 10),
+      makeRelation("a", "c", 10),
+      makeRelation("d", "e", 10),
+      makeRelation("e", "f", 10),
+      makeRelation("d", "f", 10),
+      makeRelation("c", "d", 1),
+    ];
+
+    const communities = cluster(entities, relations, [1.0], 2);
+    for (const c of communities) {
+      expect(c.id).toMatch(/^comm:\d+:[a-f0-9]{10}$/);
+    }
+  });
+
+  it("produces stable IDs regardless of input entity order", () => {
+    const entitiesAsc = ["a", "b", "c", "d", "e", "f"].map(makeEntity);
+    const entitiesDesc = ["f", "e", "d", "c", "b", "a"].map(makeEntity);
+    const relations = [
+      makeRelation("a", "b", 10),
+      makeRelation("b", "c", 10),
+      makeRelation("a", "c", 10),
+      makeRelation("d", "e", 10),
+      makeRelation("e", "f", 10),
+      makeRelation("d", "f", 10),
+      makeRelation("c", "d", 1),
+    ];
+
+    const run1 = cluster(entitiesAsc, relations, [1.0], 2);
+    const run2 = cluster(entitiesDesc, relations, [1.0], 2);
+
+    const ids1 = run1.map((c) => c.id).sort();
+    const ids2 = run2.map((c) => c.id).sort();
+    expect(ids1).toEqual(ids2);
   });
 
   it("links parent/child across levels", () => {
