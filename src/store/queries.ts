@@ -95,6 +95,27 @@ export class Store {
     return rows.map(toEntity);
   }
 
+  /** Batch entity lookup. Returns a Map for O(1) per-ID access. */
+  getEntitiesByIds(ids: EntityId[]): Map<EntityId, Entity> {
+    if (ids.length === 0) return new Map();
+
+    const result = new Map<EntityId, Entity>();
+    const unique = [...new Set(ids)];
+
+    for (let i = 0; i < unique.length; i += 500) {
+      const chunk = unique.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = this.db
+        .prepare(`SELECT * FROM entities WHERE id IN (${placeholders})`)
+        .all(...chunk) as EntityRow[];
+      for (const row of rows) {
+        result.set(row.id, toEntity(row));
+      }
+    }
+
+    return result;
+  }
+
   // ================================================================
   // Relations
   // ================================================================

@@ -545,6 +545,44 @@ describe("Store — Junction Tables", () => {
   });
 });
 
+describe("Store — Batch Entity Lookup", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+    store.upsertEntity(sampleEntity);  // person:alice
+    store.upsertEntity(sampleEntity2); // module:src/billing
+  });
+  afterEach(() => db.close());
+
+  it("returns a map of entities by ID", () => {
+    const result = store.getEntitiesByIds(["person:alice", "module:src/billing"]);
+
+    expect(result.size).toBe(2);
+    expect(result.get("person:alice")!.name).toBe("Alice Chen");
+    expect(result.get("module:src/billing")!.name).toBe("src/billing");
+  });
+
+  it("skips non-existent IDs without error", () => {
+    const result = store.getEntitiesByIds(["person:alice", "nonexistent:id"]);
+
+    expect(result.size).toBe(1);
+    expect(result.has("person:alice")).toBe(true);
+    expect(result.has("nonexistent:id")).toBe(false);
+  });
+
+  it("returns empty map for empty input", () => {
+    const result = store.getEntitiesByIds([]);
+    expect(result.size).toBe(0);
+  });
+
+  it("deduplicates input IDs", () => {
+    const result = store.getEntitiesByIds(["person:alice", "person:alice"]);
+    expect(result.size).toBe(1);
+  });
+});
+
 describe("Store — Transactions", () => {
   let store: Store;
   let db: Database.Database;
