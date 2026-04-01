@@ -204,48 +204,51 @@ async function runPipeline(
   });
 
   // 12. Smart re-summarization: reuse summaries for unchanged communities
-  store.clearCommunities();
-
   const communitiesToSummarize: Community[] = [];
-  for (const c of communities) {
-    // Layer 1: exact match by content-based community ID
-    const oldSummary = oldSummaries.get(c.id);
-    if (oldSummary && oldSummary.summary) {
-      c.title = oldSummary.title;
-      c.summary = oldSummary.summary;
-      store.upsertCommunity(c);
-      continue;
-    }
 
-    // Layer 2: Jaccard fallback — find best-matching old community at same level
-    let bestMatch: { id: CommunityId; jaccard: number } | null = null;
-    for (const [oldId, oldMemberJson] of oldMembership) {
-      if (!oldId.startsWith(`comm:${c.level}:`)) continue;
-      const oldMembers: string[] = JSON.parse(oldMemberJson);
-      const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
-      if (jaccard > (bestMatch?.jaccard ?? 0)) {
-        bestMatch = { id: oldId, jaccard };
-      }
-    }
+  store.transaction(() => {
+    store.clearCommunities();
 
-    if (bestMatch && bestMatch.jaccard > 0.7) {
-      const old = oldSummaries.get(bestMatch.id);
-      if (old && old.summary) {
-        c.title = old.title;
-        c.summary = old.summary;
-        logger.debug("orchestrator: reusing summary via Jaccard match", {
-          communityId: c.id,
-          matchedId: bestMatch.id,
-          jaccard: bestMatch.jaccard.toFixed(2),
-        });
+    for (const c of communities) {
+      // Layer 1: exact match by content-based community ID
+      const oldSummary = oldSummaries.get(c.id);
+      if (oldSummary && oldSummary.summary) {
+        c.title = oldSummary.title;
+        c.summary = oldSummary.summary;
         store.upsertCommunity(c);
         continue;
       }
-    }
 
-    communitiesToSummarize.push(c);
-    store.upsertCommunity(c);
-  }
+      // Layer 2: Jaccard fallback — find best-matching old community at same level
+      let bestMatch: { id: CommunityId; jaccard: number } | null = null;
+      for (const [oldId, oldMemberJson] of oldMembership) {
+        if (!oldId.startsWith(`comm:${c.level}:`)) continue;
+        const oldMembers: string[] = JSON.parse(oldMemberJson);
+        const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
+        if (jaccard > (bestMatch?.jaccard ?? 0)) {
+          bestMatch = { id: oldId, jaccard };
+        }
+      }
+
+      if (bestMatch && bestMatch.jaccard > 0.7) {
+        const old = oldSummaries.get(bestMatch.id);
+        if (old && old.summary) {
+          c.title = old.title;
+          c.summary = old.summary;
+          logger.debug("orchestrator: reusing summary via Jaccard match", {
+            communityId: c.id,
+            matchedId: bestMatch.id,
+            jaccard: bestMatch.jaccard.toFixed(2),
+          });
+          store.upsertCommunity(c);
+          continue;
+        }
+      }
+
+      communitiesToSummarize.push(c);
+      store.upsertCommunity(c);
+    }
+  });
 
   const reusedCount = communities.length - communitiesToSummarize.length;
   if (reusedCount > 0) {
@@ -258,6 +261,8 @@ async function runPipeline(
   // Summarize only the changed/new communities
   let summarized = 0;
   if (communitiesToSummarize.length > 0) {
+    const summarizedCommunities: Community[] = [];
+
     for await (const { communityId, result } of summarizeBatch(
       communitiesToSummarize,
       allEntities,
@@ -269,10 +274,18 @@ async function runPipeline(
       if (community) {
         community.title = result.title;
         community.summary = result.summary;
-        store.upsertCommunity(community);
+        summarizedCommunities.push(community);
         summarized++;
         progress("summarizing", summarized, communitiesToSummarize.length);
       }
+    }
+
+    if (summarizedCommunities.length > 0) {
+      store.transaction(() => {
+        for (const c of summarizedCommunities) {
+          store.upsertCommunity(c);
+        }
+      });
     }
   }
 
