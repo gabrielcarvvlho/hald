@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Store } from "../store/queries.js";
 import { loadConfig } from "../shared/config.js";
 import { indexRepository } from "../pipeline/orchestrator.js";
-import { findExperts, getCoupling } from "../query/graph-ops.js";
+import { findExperts, getCoupling, getPath, getEntity as lookupEntity } from "../query/graph-ops.js";
 import { localSearch } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
 import { EntityType } from "../shared/types.js";
@@ -247,6 +247,197 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       } catch (err) {
         return {
           content: [{ type: "text" as const, text: `Show coupling failed: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git_oracle_get_path
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_get_path",
+    {
+      description:
+        "Find the shortest relationship path between two entities in the knowledge graph. Useful for discovering how people, modules, technologies, and decisions are connected.",
+      inputSchema: z.object({
+        from: z
+          .string()
+          .describe(
+            "Source entity ID or name (e.g., 'person:alice-chen' or 'Alice Chen')",
+          ),
+        to: z
+          .string()
+          .describe(
+            "Target entity ID or name (e.g., 'module:src/payments' or 'src/payments')",
+          ),
+        max_depth: z
+          .number()
+          .default(5)
+          .describe("Maximum traversal depth"),
+      }),
+    },
+    async ({ from, to, max_depth }) => {
+      try {
+        const store = getStore();
+
+        // Resolve names to IDs
+        const fromEntity = lookupEntity(store, from);
+        const toEntity = lookupEntity(store, to);
+
+        if (!fromEntity) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Entity not found: "${from}"`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        if (!toEntity) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Entity not found: "${to}"`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = getPath(store, fromEntity.id, toEntity.id, max_depth);
+
+        if (!result) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `No path found between "${fromEntity.name}" and "${toEntity.name}" within depth ${max_depth}.`,
+              },
+            ],
+          };
+        }
+
+        if (result.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `"${fromEntity.name}" and "${toEntity.name}" are the same entity.`,
+              },
+            ],
+          };
+        }
+
+        const steps = result.relations.map((rel, i) => {
+          const source = result.path[i]!;
+          const target = result.path[i + 1]!;
+          return `  ${source.name} --[${rel.type}]--> ${target.name}`;
+        });
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `## Path: ${fromEntity.name} -> ${toEntity.name} (${result.length} hops)\n\n${steps.join("\n")}`,
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Get path failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git_oracle_get_entity
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_get_entity",
+    {
+      description:
+        "Look up a specific entity (person, module, technology, decision, pattern) by ID, name, or search query. Returns full entity details including description, aliases, and activity timeline.",
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe(
+            "Entity ID (e.g., 'person:alice-chen'), name (e.g., 'Alice Chen'), or search term",
+          ),
+      }),
+    },
+    async ({ query }) => {
+      try {
+        const store = getStore();
+        const entity = lookupEntity(store, query);
+
+        if (!entity) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `No entity found matching "${query}".`,
+              },
+            ],
+          };
+        }
+
+        const lines = [
+          `## ${entity.name}`,
+          "",
+          `- **Type:** ${entity.type}`,
+          `- **ID:** ${entity.id}`,
+          `- **Description:** ${entity.description}`,
+          `- **First seen:** ${entity.firstSeen}`,
+          `- **Last seen:** ${entity.lastSeen}`,
+          `- **Frequency:** ${entity.frequency}`,
+        ];
+
+        if (entity.aliases.length > 0) {
+          lines.push(`- **Aliases:** ${entity.aliases.join(", ")}`);
+        }
+
+        // Show relations
+        const rels = store.getRelationsForEntity(entity.id);
+        if (rels.length > 0) {
+          lines.push("", "### Relationships", "");
+          for (const rel of rels.slice(0, 15)) {
+            const otherId =
+              rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
+            const other = store.getEntity(otherId);
+            const otherName = other?.name ?? otherId;
+            const direction =
+              rel.sourceId === entity.id
+                ? `${entity.name} --[${rel.type}]--> ${otherName}`
+                : `${otherName} --[${rel.type}]--> ${entity.name}`;
+            lines.push(`- ${direction} (weight: ${rel.weight})`);
+          }
+        }
+
+        return {
+          content: [{ type: "text" as const, text: lines.join("\n") }],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Get entity failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
