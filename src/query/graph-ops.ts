@@ -45,17 +45,9 @@ export function findExperts(
   modulePath: string,
   topN = 5,
 ): ExpertResult[] {
-  // Find all module entities matching the path
+  // Find all module entities matching the path (exact + prefix sub-modules)
   const modules = store.findModulesByPath(modulePath);
-  if (modules.length === 0) {
-    // Try FTS as fallback
-    const ftsResults = store.searchEntities(modulePath, 5);
-    const moduleResults = ftsResults.filter(
-      (e) => e.type === EntityType.MODULE,
-    );
-    if (moduleResults.length === 0) return [];
-    modules.push(...moduleResults);
-  }
+  if (modules.length === 0) return [];
 
   const moduleIds = new Set(modules.map((m) => m.id));
 
