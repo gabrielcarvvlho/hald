@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import type { Store as StoreType } from "../../src/store/queries.js";
 import { Store } from "../../src/store/queries.js";
-import { initSchema } from "../../src/store/schema.js";
+import { initSchema, runMigrations } from "../../src/store/schema.js";
 import { createPopulatedStore } from "../helpers/sample-store.js";
 import { localSearch } from "../../src/query/local-search.js";
 import type { ScoredEntity, AnnotatedRelation } from "../../src/query/local-search.js";
@@ -440,6 +440,7 @@ describe("localSearch — hub entity budget control", () => {
     db = new Database(":memory:");
     db.pragma("foreign_keys = ON");
     initSchema(db);
+    runMigrations(db);
     store = new Store(db);
 
     // Create a hub MODULE with many relations to test budget capping

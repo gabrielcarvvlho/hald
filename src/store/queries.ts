@@ -147,6 +147,9 @@ export class Store {
       entityIds: JSON.stringify(textUnit.entityIds),
       relationIds: JSON.stringify(textUnit.relationIds),
     });
+    for (const entityId of textUnit.entityIds) {
+      this.stmts.insertTextUnitEntity.run(textUnit.id, entityId, entityId);
+    }
   }
 
   getTextUnit(id: TextUnitId): TextUnit | null {
@@ -175,6 +178,10 @@ export class Store {
       parentId: community.parentId ?? null,
       childIds: JSON.stringify(community.childIds),
     });
+    this.stmts.deleteCommunityEntities.run(community.id);
+    for (const entityId of community.entityIds) {
+      this.stmts.insertCommunityEntity.run(community.id, entityId, entityId);
+    }
   }
 
   getCommunity(id: CommunityId): Community | null {
@@ -431,14 +438,27 @@ function prepareStatements(db: Database.Database) {
     ),
     getMeta: db.prepare("SELECT * FROM index_meta WHERE key = ?"),
 
+    // --- Junction table operations ---
+    insertTextUnitEntity: db.prepare(
+      "INSERT OR IGNORE INTO text_unit_entities(text_unit_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)"
+    ),
+    deleteCommunityEntities: db.prepare(
+      "DELETE FROM community_entities WHERE community_id = ?"
+    ),
+    insertCommunityEntity: db.prepare(
+      "INSERT OR IGNORE INTO community_entities(community_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)"
+    ),
+
     // --- Query helpers ---
     textUnitsForEntity: db.prepare(`
-      SELECT DISTINCT t.* FROM text_units t, json_each(t.entity_ids) je
-      WHERE je.value = ?
+      SELECT t.* FROM text_unit_entities tue
+      JOIN text_units t ON t.id = tue.text_unit_id
+      WHERE tue.entity_id = ?
     `),
     communitiesForEntity: db.prepare(`
-      SELECT DISTINCT c.* FROM communities c, json_each(c.entity_ids) je
-      WHERE je.value = ?
+      SELECT c.* FROM community_entities ce
+      JOIN communities c ON c.id = ce.community_id
+      WHERE ce.entity_id = ?
     `),
     findModulesByPath: db.prepare(`
       SELECT * FROM entities
