@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Store } from "../store/queries.js";
 import { loadConfig } from "../shared/config.js";
 import { indexRepository } from "../pipeline/orchestrator.js";
-import { findExperts, getCoupling, getPath, getEntity as lookupEntity } from "../query/graph-ops.js";
+import { findExperts, getCoupling, getPath, getEntity as lookupEntity, findKnowledgeSilos } from "../query/graph-ops.js";
 import { localSearch } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
 import { EntityType } from "../shared/types.js";
@@ -111,7 +111,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
             const entity = store.getEntity(m);
             return entity?.name ?? m;
           });
-          return `${i + 1}. **${r.person.name}** — score: ${r.score}, commits: ${r.commitCount}, last active: ${r.lastActive}, modules: ${modules.join(", ")}`;
+          return `${i + 1}. **${r.person.name}** — score: ${r.score}, weight: ${r.commitCount}, last active: ${r.lastActive}, modules: ${modules.join(", ")}`;
         });
 
         return {
@@ -335,9 +335,13 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         }
 
         const steps = result.relations.map((rel, i) => {
-          const source = result.path[i]!;
-          const target = result.path[i + 1]!;
-          return `  ${source.name} --[${rel.type}]--> ${target.name}`;
+          const stepFrom = result.path[i]!;
+          const stepTo = result.path[i + 1]!;
+          // Respect actual relation direction, not BFS traversal direction
+          if (rel.sourceId === stepFrom.id) {
+            return `  ${stepFrom.name} --[${rel.type}]--> ${stepTo.name}`;
+          }
+          return `  ${stepFrom.name} <--[${rel.type}]-- ${stepTo.name}`;
         });
 
         return {
@@ -436,6 +440,84 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
             {
               type: "text" as const,
               text: `Get entity failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git_oracle_find_silos
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_find_silos",
+    {
+      description:
+        "Find knowledge silos (bus factor ≤ 1) and orphaned modules (no active maintainer). Useful for identifying risk areas in the codebase.",
+      inputSchema: z.object({
+        min_frequency: z
+          .number()
+          .default(3)
+          .describe("Minimum change frequency to consider a module (filters out trivial files)"),
+        inactive_days: z
+          .number()
+          .default(180)
+          .describe("Days since last contribution before an author is considered inactive"),
+      }),
+    },
+    async ({ min_frequency, inactive_days }) => {
+      try {
+        const store = getStore();
+        const results = findKnowledgeSilos(store, {
+          minFrequency: min_frequency,
+          inactiveDays: inactive_days,
+        });
+
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No knowledge silos or orphaned modules found. All modules have multiple active contributors.",
+              },
+            ],
+          };
+        }
+
+        const orphaned = results.filter((r) => r.activeExpertCount === 0);
+        const silos = results.filter((r) => r.activeExpertCount === 1);
+        const sections: string[] = ["## Knowledge Risk Report\n"];
+
+        if (orphaned.length > 0) {
+          sections.push(`### Orphaned Modules (no active maintainer)\n`);
+          for (const r of orphaned) {
+            sections.push(
+              `- **${r.module.name}** — frequency: ${r.module.frequency}, last activity: ${r.lastActivity}`,
+            );
+          }
+        }
+
+        if (silos.length > 0) {
+          sections.push(`\n### Knowledge Silos (bus factor = 1)\n`);
+          for (const r of silos) {
+            sections.push(
+              `- **${r.module.name}** — sole expert: ${r.soloExpert?.name ?? "unknown"}, frequency: ${r.module.frequency}, last activity: ${r.lastActivity}`,
+            );
+          }
+        }
+
+        return {
+          content: [{ type: "text" as const, text: sections.join("\n") }],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Find silos failed: ${err instanceof Error ? err.message : String(err)}`,
             },
           ],
           isError: true,

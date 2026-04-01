@@ -13,7 +13,9 @@ import {
 
 export interface ExpertResult {
   person: Entity;
+  /** Composite score: sum(authorship weights) × recencyMultiplier. Not normalized across modules. */
   score: number;
+  /** Sum of AUTHORED + MODIFIED relation weights (approximate commit involvement). */
   commitCount: number;
   lastActive: string;
   modules: string[];
@@ -22,6 +24,11 @@ export interface ExpertResult {
 export interface CouplingResult {
   module: Entity;
   coChangeCount: number;
+  /**
+   * Conditional probability P(other changed | source changed).
+   * Asymmetric: getCoupling("A") and getCoupling("B") yield different ratios.
+   * Computed as: co_change_weight / source_module_frequency.
+   */
   coChangeRatio: number;
   sharedAuthors: string[];
 }
@@ -32,6 +39,15 @@ export interface PathResult {
   length: number;
 }
 
+export interface KnowledgeSiloResult {
+  module: Entity;
+  /** The single active expert, or null if the module is truly orphaned (0 active experts). */
+  soloExpert: Entity | null;
+  /** 0 = orphaned (no active expert), 1 = knowledge silo (bus factor 1). */
+  activeExpertCount: number;
+  lastActivity: string;
+}
+
 // ================================================================
 // Graph Operations
 // ================================================================
@@ -39,6 +55,13 @@ export interface PathResult {
 /**
  * Find the top N experts for a module (by authorship weight × recency).
  * Also searches sub-modules matching the given path prefix.
+ *
+ * Scoring formula:
+ *   score = Σ(AUTHORED + MODIFIED relation weights) × 1/(1 + daysSinceLastActive/365)
+ *
+ * The recency multiplier is a hyperbolic decay: 1.0 at 0 days, 0.5 at 1 year, 0.33 at 2 years.
+ * Scores are NOT normalized by module commit volume — they're comparable within a single
+ * findExperts call but not meaningful across calls for different modules.
  */
 export function findExperts(
   store: Store,
@@ -108,6 +131,10 @@ export function findExperts(
 
 /**
  * Show modules that co-change with the given module.
+ *
+ * coChangeRatio is the conditional probability P(other changed | source changed),
+ * computed as co_change_weight / source_module_frequency.
+ * This is asymmetric: getCoupling("A") ≠ getCoupling("B").
  */
 export function getCoupling(
   store: Store,
@@ -146,9 +173,18 @@ export function getCoupling(
     }
   }
 
-  // Find shared authors between the source and coupled modules
+  // Compute shared authors with person name caching to avoid N+1 lookups
   const results: CouplingResult[] = [];
-  const sourceAuthors = getAuthors(store, moduleIds);
+  const personNameCache = new Map<string, string | null>();
+  const resolvePersonName = (personId: string): string | null => {
+    if (!personNameCache.has(personId)) {
+      const person = store.getEntity(personId);
+      personNameCache.set(personId, person?.name ?? null);
+    }
+    return personNameCache.get(personId) ?? null;
+  };
+
+  const sourceAuthorNames = getAuthorNames(store, moduleIds, resolvePersonName);
   const totalChanges = [...moduleIds].reduce((sum, id) => {
     const entity = store.getEntity(id);
     return sum + (entity?.frequency ?? 0);
@@ -157,8 +193,8 @@ export function getCoupling(
   for (const [otherId, data] of couplingMap) {
     if (data.weight < minWeight) continue;
 
-    const otherAuthors = getAuthors(store, new Set([otherId]));
-    const shared = [...sourceAuthors].filter((a) => otherAuthors.has(a));
+    const otherAuthorNames = getAuthorNames(store, new Set([otherId]), resolvePersonName);
+    const shared = [...sourceAuthorNames].filter((a) => otherAuthorNames.has(a));
 
     results.push({
       module: data.moduleEntity,
@@ -237,11 +273,79 @@ export function getEntity(store: Store, query: string): Entity | null {
   return ftsResults[0] ?? null;
 }
 
+/**
+ * Find modules with bus factor ≤ 1: knowledge silos (1 active expert)
+ * and orphaned modules (0 active experts).
+ *
+ * "Active" means the author's last contribution to the module was within `inactiveDays`.
+ * Modules with frequency below `minFrequency` are skipped (trivial/config files).
+ */
+export function findKnowledgeSilos(
+  store: Store,
+  options: { minFrequency?: number; inactiveDays?: number } = {},
+): KnowledgeSiloResult[] {
+  const { minFrequency = 3, inactiveDays = 180 } = options;
+
+  const modules = store.getEntitiesByType(EntityType.MODULE);
+  const now = new Date();
+  const results: KnowledgeSiloResult[] = [];
+
+  for (const mod of modules) {
+    if (mod.frequency < minFrequency) continue;
+
+    const rels = store.getRelationsByTarget(mod.id);
+    const activeAuthors = new Map<string, true>();
+    let lastActivity = "";
+
+    for (const rel of rels) {
+      if (
+        rel.type !== RelationType.AUTHORED &&
+        rel.type !== RelationType.MODIFIED
+      )
+        continue;
+
+      if (rel.lastSeen > lastActivity) lastActivity = rel.lastSeen;
+
+      const daysSince =
+        (now.getTime() - new Date(rel.lastSeen).getTime()) / 86_400_000;
+      if (daysSince <= inactiveDays) {
+        activeAuthors.set(rel.sourceId, true);
+      }
+    }
+
+    if (activeAuthors.size <= 1) {
+      const soloExpertId = [...activeAuthors.keys()][0];
+      const soloExpert = soloExpertId
+        ? store.getEntity(soloExpertId) ?? null
+        : null;
+
+      results.push({
+        module: mod,
+        soloExpert,
+        activeExpertCount: activeAuthors.size,
+        lastActivity,
+      });
+    }
+  }
+
+  // Orphaned first (0 experts), then silos (1 expert), then by frequency desc
+  return results.sort((a, b) => {
+    if (a.activeExpertCount !== b.activeExpertCount)
+      return a.activeExpertCount - b.activeExpertCount;
+    return b.module.frequency - a.module.frequency;
+  });
+}
+
 // ================================================================
 // Helpers
 // ================================================================
 
-function getAuthors(store: Store, moduleIds: Set<string>): Set<string> {
+/** Get author names for a set of modules, using a shared cache to avoid redundant entity lookups. */
+function getAuthorNames(
+  store: Store,
+  moduleIds: Set<string>,
+  resolvePersonName: (id: string) => string | null,
+): Set<string> {
   const authors = new Set<string>();
   for (const moduleId of moduleIds) {
     const rels = store.getRelationsByTarget(moduleId);
@@ -250,8 +354,8 @@ function getAuthors(store: Store, moduleIds: Set<string>): Set<string> {
         rel.type === RelationType.AUTHORED ||
         rel.type === RelationType.MODIFIED
       ) {
-        const person = store.getEntity(rel.sourceId);
-        if (person) authors.add(person.name);
+        const name = resolvePersonName(rel.sourceId);
+        if (name) authors.add(name);
       }
     }
   }

@@ -49,6 +49,7 @@ describe("MCP integration", () => {
     expect(names).toContain("git_oracle_show_coupling");
     expect(names).toContain("git_oracle_get_path");
     expect(names).toContain("git_oracle_get_entity");
+    expect(names).toContain("git_oracle_find_silos");
     expect(names).toContain("git_oracle_index");
     expect(names).toContain("git_oracle_stats");
   });
@@ -180,6 +181,19 @@ describe("MCP integration", () => {
     expect(result.isError).toBeFalsy();
     const text = (result.content as Array<{ type: string; text: string }>)[0]!.text;
     expect(text).toContain("No entity found");
+  });
+
+  it("git_oracle_find_silos identifies knowledge risks", async () => {
+    const result = await client.callTool({
+      name: "git_oracle_find_silos",
+      arguments: { min_frequency: 1, inactive_days: 100_000 },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content as Array<{ type: string; text: string }>)[0]!.text;
+    // billing (only Bob) and middleware (only Alice) are silos
+    expect(text).toContain("Knowledge");
+    expect(text).toContain("src/billing");
   });
 
   it("lists MCP resources", async () => {
