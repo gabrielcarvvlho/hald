@@ -53,18 +53,26 @@ export class OpenAIClient implements LLMClient {
           ],
         });
 
+        const finishReason = response.choices[0]?.finish_reason;
         return {
           text: response.choices[0]?.message?.content ?? "",
           inputTokens: response.usage?.prompt_tokens ?? 0,
           outputTokens: response.usage?.completion_tokens ?? 0,
           model: response.model,
+          stopReason:
+            finishReason === "stop"
+              ? "end_turn"
+              : finishReason === "length"
+                ? "max_tokens"
+                : finishReason ?? "unknown",
         };
       } catch (error: unknown) {
         const status = (error as { status?: number }).status;
         if (attempt < this.maxRetries && (status === 429 || (status && status >= 500))) {
-          const delay = Math.pow(2, attempt) * 1000;
+          const baseDelay = Math.pow(2, attempt) * 1000;
+          const delay = baseDelay + Math.random() * baseDelay * 0.5;
           logger.warn(
-            `OpenAI API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${delay}ms`,
+            `OpenAI API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${Math.round(delay)}ms`,
             { status, error: String(error) },
           );
           await sleep(delay);

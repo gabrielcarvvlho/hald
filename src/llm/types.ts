@@ -21,6 +21,7 @@ export interface LLMResponse {
   inputTokens: number;
   outputTokens: number;
   model: string;
+  stopReason: string; // "end_turn" | "max_tokens" | provider-specific
 }
 
 export interface LLMClientConfig {

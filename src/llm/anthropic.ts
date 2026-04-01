@@ -62,13 +62,15 @@ export class AnthropicClient implements LLMClient {
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
           model: response.model,
+          stopReason: response.stop_reason ?? "unknown",
         };
       } catch (error: unknown) {
         const status = (error as { status?: number }).status;
         if (attempt < this.maxRetries && (status === 429 || (status && status >= 500))) {
-          const delay = Math.pow(2, attempt) * 1000;
+          const baseDelay = Math.pow(2, attempt) * 1000;
+          const delay = baseDelay + Math.random() * baseDelay * 0.5;
           logger.warn(
-            `Anthropic API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${delay}ms`,
+            `Anthropic API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${Math.round(delay)}ms`,
             { status, error: String(error) },
           );
           await sleep(delay);
