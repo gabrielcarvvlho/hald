@@ -6,6 +6,10 @@ const louvain = louvainModule as unknown as (
   graph: InstanceType<typeof UndirectedGraph>,
   options?: { resolution?: number; getEdgeWeight?: string | null; rng?: () => number },
 ) => Record<string, number>;
+import graphologyComponentsPkg from "graphology-components";
+const { connectedComponents } = graphologyComponentsPkg as unknown as {
+  connectedComponents: (graph: InstanceType<typeof UndirectedGraph>) => string[][];
+};
 import type {
   Entity,
   Relation,
@@ -63,9 +67,58 @@ export function cluster(
   // Build undirected weighted graph
   const graph = buildGraph(entities, relations);
 
+  // Guard: no edges → single community with all entities
   if (graph.order === 0 || graph.size === 0) {
     end();
-    return [];
+    if (entities.length < minCommunitySize) return [];
+    return [
+      {
+        id: communityId(0, entities.map((e) => e.id)),
+        level: 0,
+        title: "",
+        summary: "",
+        entityIds: entities.map((e) => e.id),
+        childIds: [],
+      },
+    ];
+  }
+
+  // Guard: tiny graph → single-resolution run, skip hierarchy
+  if (entities.length < minCommunitySize * 2) {
+    const seed = graphSeed(entities.map((e) => e.id));
+    const partition = louvain(graph, {
+      resolution: 1.0,
+      getEdgeWeight: "weight",
+      rng: mulberry32(seed),
+    });
+
+    const communityMembers = new Map<number, string[]>();
+    for (const [nodeId, communityIdx] of Object.entries(partition)) {
+      const members = communityMembers.get(communityIdx) ?? [];
+      members.push(nodeId);
+      communityMembers.set(communityIdx, members);
+    }
+
+    end();
+    return [...communityMembers.values()]
+      .filter((members) => members.length >= minCommunitySize)
+      .map((members) => ({
+        id: communityId(0, members),
+        level: 0,
+        title: "",
+        summary: "",
+        entityIds: members,
+        childIds: [],
+      }));
+  }
+
+  // Log disconnected components for diagnostics
+  const components = connectedComponents(graph);
+  if (components.length > 1) {
+    logger.debug("clusterer: disconnected graph", {
+      components: components.length,
+      sizes: components.map((c) => c.length).sort((a, b) => b - a),
+    });
   }
 
   const allCommunities: Community[] = [];

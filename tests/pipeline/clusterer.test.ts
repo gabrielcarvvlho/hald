@@ -40,10 +40,82 @@ describe("clusterer", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("returns empty when no edges", () => {
-    const entities = [makeEntity("a"), makeEntity("b"), makeEntity("c")];
+  it("returns empty when no edges and entities below minCommunitySize", () => {
+    const entities = [makeEntity("a")];
     const result = cluster(entities, [], [1.0], 2);
     expect(result).toHaveLength(0);
+  });
+
+  it("returns single community for edgeless graph when entities >= minCommunitySize", () => {
+    const entities = ["a", "b", "c", "d", "e"].map(makeEntity);
+    const result = cluster(entities, [], [1.0], 2);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.entityIds.sort()).toEqual(["a", "b", "c", "d", "e"]);
+    expect(result[0]!.level).toBe(0);
+    expect(result[0]!.id).toMatch(/^comm:0:[a-f0-9]{10}$/);
+  });
+
+  it("returns empty for edgeless graph when entities < minCommunitySize", () => {
+    const entities = ["a"].map(makeEntity);
+    const result = cluster(entities, [], [1.0], 2);
+    expect(result).toHaveLength(0);
+  });
+
+  it("handles tiny graph with single-resolution fallback", () => {
+    const entities = ["a", "b", "c"].map(makeEntity);
+    const relations = [
+      makeRelation("a", "b", 10),
+      makeRelation("b", "c", 10),
+    ];
+
+    const result = cluster(entities, relations, [0.5, 1.0, 2.0], 2);
+
+    // Should produce communities but only at level 0 (single-resolution)
+    for (const c of result) {
+      expect(c.level).toBe(0);
+    }
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles star topology without crashing", () => {
+    const hub = makeEntity("hub");
+    const leaves = Array.from({ length: 20 }, (_, i) => makeEntity(`leaf${i}`));
+    const entities = [hub, ...leaves];
+    const relations = leaves.map((l) => makeRelation("hub", l.id, 5));
+
+    const result = cluster(entities, relations, [1.0], 2);
+
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    const hubCommunity = result.find((c) => c.entityIds.includes("hub"));
+    expect(hubCommunity).toBeDefined();
+  });
+
+  it("handles disconnected components", () => {
+    const clique1 = ["a1", "a2", "a3", "a4", "a5"].map(makeEntity);
+    const clique2 = ["b1", "b2", "b3", "b4", "b5"].map(makeEntity);
+    const entities = [...clique1, ...clique2];
+    const relations = [
+      makeRelation("a1", "a2", 10), makeRelation("a1", "a3", 10),
+      makeRelation("a1", "a4", 10), makeRelation("a1", "a5", 10),
+      makeRelation("a2", "a3", 10), makeRelation("a2", "a4", 10),
+      makeRelation("a2", "a5", 10), makeRelation("a3", "a4", 10),
+      makeRelation("a3", "a5", 10), makeRelation("a4", "a5", 10),
+      makeRelation("b1", "b2", 10), makeRelation("b1", "b3", 10),
+      makeRelation("b1", "b4", 10), makeRelation("b1", "b5", 10),
+      makeRelation("b2", "b3", 10), makeRelation("b2", "b4", 10),
+      makeRelation("b2", "b5", 10), makeRelation("b3", "b4", 10),
+      makeRelation("b3", "b5", 10), makeRelation("b4", "b5", 10),
+    ];
+
+    const result = cluster(entities, relations, [1.0], 3);
+
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    for (const c of result) {
+      const hasA = c.entityIds.some((id) => id.startsWith("a"));
+      const hasB = c.entityIds.some((id) => id.startsWith("b"));
+      expect(hasA && hasB).toBe(false);
+    }
   });
 
   it("detects communities in a simple graph", () => {
