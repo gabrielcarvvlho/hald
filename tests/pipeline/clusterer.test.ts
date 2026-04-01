@@ -34,6 +34,17 @@ function makeRelation(
   };
 }
 
+/** Generate all unique pairs from an array. */
+function pairs(ids: string[]): [string, string][] {
+  const result: [string, string][] = [];
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      result.push([ids[i]!, ids[j]!]);
+    }
+  }
+  return result;
+}
+
 describe("clusterer", () => {
   it("returns empty for empty input", () => {
     const result = cluster([], [], [1.0], 2);
@@ -301,6 +312,39 @@ describe("clusterer", () => {
         expect(childToParent.has(childId)).toBe(false);
         childToParent.set(childId, c.id);
       }
+    }
+  });
+
+  it("full pipeline: multi-resolution with hierarchy is deterministic", () => {
+    const entities = Array.from({ length: 20 }, (_, i) => makeEntity(`m${i}`));
+    const relations = [
+      // Cluster A: m0-m4 (tight)
+      ...pairs(["m0", "m1", "m2", "m3", "m4"]).map(([a, b]) => makeRelation(a, b, 10)),
+      // Cluster B: m5-m9 (tight)
+      ...pairs(["m5", "m6", "m7", "m8", "m9"]).map(([a, b]) => makeRelation(a, b, 10)),
+      // Cluster C: m10-m14 (tight)
+      ...pairs(["m10", "m11", "m12", "m13", "m14"]).map(([a, b]) => makeRelation(a, b, 10)),
+      // Cluster D: m15-m19 (tight)
+      ...pairs(["m15", "m16", "m17", "m18", "m19"]).map(([a, b]) => makeRelation(a, b, 10)),
+      // Weak bridges
+      makeRelation("m4", "m5", 1),
+      makeRelation("m9", "m10", 1),
+      makeRelation("m14", "m15", 1),
+    ];
+
+    const run1 = cluster(entities, relations, [0.5, 1.0, 2.0], 3);
+    const run2 = cluster(entities, relations, [0.5, 1.0, 2.0], 3);
+
+    // Same number of communities
+    expect(run1.length).toBe(run2.length);
+
+    // Same IDs in same order
+    expect(run1.map((c) => c.id)).toEqual(run2.map((c) => c.id));
+
+    // Same hierarchy
+    for (let i = 0; i < run1.length; i++) {
+      expect(run1[i]!.parentId).toBe(run2[i]!.parentId);
+      expect(run1[i]!.childIds.sort()).toEqual(run2[i]!.childIds.sort());
     }
   });
 
