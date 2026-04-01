@@ -69,9 +69,23 @@ export function build(store: Store, input: BuildInput): GraphStats {
       }
     }
 
-    // 2. Upsert relations (only if both entities exist — avoids FK violations)
+    // Pre-fetch entity existence for FK validation (batch instead of per-relation lookup)
+    const coChangeRelations = buildCoChangeEdges(input.commits, input.moduleDepth);
+
+    const relationEntityIds = new Set<string>();
     for (const relation of input.relations) {
-      if (store.getEntity(relation.sourceId) && store.getEntity(relation.targetId)) {
+      relationEntityIds.add(relation.sourceId);
+      relationEntityIds.add(relation.targetId);
+    }
+    for (const rel of coChangeRelations) {
+      relationEntityIds.add(rel.sourceId);
+      relationEntityIds.add(rel.targetId);
+    }
+    const existingEntities = store.getEntitiesByIds([...relationEntityIds]);
+
+    // 2. Upsert relations (use pre-fetched map instead of per-relation getEntity)
+    for (const relation of input.relations) {
+      if (existingEntities.has(relation.sourceId) && existingEntities.has(relation.targetId)) {
         store.upsertRelation(relation);
       } else {
         logger.debug("graph-builder: skipping relation, missing entity", {
@@ -93,11 +107,9 @@ export function build(store: Store, input: BuildInput): GraphStats {
       store.insertCommit(commit, commitToTextUnit.get(commit.hash) ?? null);
     }
 
-    // 5. Create co-change edges
-    const coChangeRelations = buildCoChangeEdges(input.commits, input.moduleDepth);
+    // 5. Create co-change edges (use pre-fetched map)
     for (const rel of coChangeRelations) {
-      // Only create co-change edges if both modules exist as entities
-      if (store.getEntity(rel.sourceId) && store.getEntity(rel.targetId)) {
+      if (existingEntities.has(rel.sourceId) && existingEntities.has(rel.targetId)) {
         store.upsertRelation(rel);
       }
     }
