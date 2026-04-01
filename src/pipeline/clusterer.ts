@@ -211,6 +211,23 @@ export function buildGraph(entities: Entity[], relations: Relation[]): Undirecte
 }
 
 // ================================================================
+// Jaccard similarity (exported for orchestrator + tests)
+// ================================================================
+
+/** Jaccard similarity between two ID sets: |intersection| / |union|. */
+export function jaccardSimilarity(a: string[], b: string[]): number {
+  if (a.length === 0 && b.length === 0) return 0;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let intersection = 0;
+  for (const id of setA) {
+    if (setB.has(id)) intersection++;
+  }
+  const union = new Set([...a, ...b]).size;
+  return intersection / union;
+}
+
+// ================================================================
 // Hierarchy linking
 // ================================================================
 

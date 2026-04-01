@@ -1,4 +1,4 @@
-import type { GitOracleConfig, CommitData, Entity, Relation, Community } from "../shared/types.js";
+import type { GitOracleConfig, CommitData, Entity, Relation, Community, CommunityId } from "../shared/types.js";
 import type { ExtractedRelation, ExtractorResult, ExtractedEntity, TokenAccumulator } from "./extractor.js";
 import { openDatabase } from "../store/db.js";
 import { Store } from "../store/queries.js";
@@ -8,7 +8,7 @@ import { extractBatch } from "./extractor.js";
 import { resolve } from "./resolver.js";
 import { normalizeModulePath } from "./resolver.js";
 import { build, generateRelationId } from "./graph-builder.js";
-import { cluster } from "./clusterer.js";
+import { cluster, jaccardSimilarity } from "./clusterer.js";
 import { summarizeBatch } from "./summarizer.js";
 import { createClient } from "../llm/client.js";
 import { logger } from "../shared/logger.js";
@@ -206,22 +206,42 @@ async function runPipeline(
 
   const communitiesToSummarize: Community[] = [];
   for (const c of communities) {
-    const prevMembership = oldMembership.get(c.id);
-    const newMembership = JSON.stringify([...c.entityIds].sort());
+    // Layer 1: exact match by content-based community ID
+    const oldSummary = oldSummaries.get(c.id);
+    if (oldSummary && oldSummary.summary) {
+      c.title = oldSummary.title;
+      c.summary = oldSummary.summary;
+      store.upsertCommunity(c);
+      continue;
+    }
 
-    if (prevMembership === newMembership) {
-      // Membership unchanged — reuse old summary
-      const old = oldSummaries.get(c.id);
+    // Layer 2: Jaccard fallback — find best-matching old community at same level
+    let bestMatch: { id: CommunityId; jaccard: number } | null = null;
+    for (const [oldId, oldMemberJson] of oldMembership) {
+      if (!oldId.startsWith(`comm:${c.level}:`)) continue;
+      const oldMembers: string[] = JSON.parse(oldMemberJson);
+      const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
+      if (jaccard > (bestMatch?.jaccard ?? 0)) {
+        bestMatch = { id: oldId, jaccard };
+      }
+    }
+
+    if (bestMatch && bestMatch.jaccard > 0.7) {
+      const old = oldSummaries.get(bestMatch.id);
       if (old && old.summary) {
         c.title = old.title;
         c.summary = old.summary;
-      } else {
-        communitiesToSummarize.push(c);
+        logger.debug("orchestrator: reusing summary via Jaccard match", {
+          communityId: c.id,
+          matchedId: bestMatch.id,
+          jaccard: bestMatch.jaccard.toFixed(2),
+        });
+        store.upsertCommunity(c);
+        continue;
       }
-    } else {
-      communitiesToSummarize.push(c);
     }
 
+    communitiesToSummarize.push(c);
     store.upsertCommunity(c);
   }
 

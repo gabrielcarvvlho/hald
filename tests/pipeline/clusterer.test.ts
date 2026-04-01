@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cluster, buildGraph } from "../../src/pipeline/clusterer.js";
+import { cluster, buildGraph, jaccardSimilarity } from "../../src/pipeline/clusterer.js";
 import { EntityType, RelationType, type Entity, type Relation } from "../../src/shared/types.js";
 
 function makeEntity(id: string): Entity {
@@ -340,6 +340,25 @@ describe("clusterer", () => {
     if (communities.length > 3) {
       expect(withParent.length + withChildren.length).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("jaccardSimilarity", () => {
+  it("returns 1.0 for identical sets", () => {
+    expect(jaccardSimilarity(["a", "b", "c"], ["a", "b", "c"])).toBe(1.0);
+  });
+
+  it("returns 0.0 for disjoint sets", () => {
+    expect(jaccardSimilarity(["a", "b"], ["c", "d"])).toBe(0.0);
+  });
+
+  it("computes correct similarity for overlapping sets", () => {
+    // intersection={b,c}=2, union={a,b,c,d}=4 → 2/4 = 0.5
+    expect(jaccardSimilarity(["a", "b", "c"], ["b", "c", "d"])).toBeCloseTo(0.5, 5);
+  });
+
+  it("returns 0.0 for empty sets", () => {
+    expect(jaccardSimilarity([], [])).toBe(0.0);
   });
 });
 
