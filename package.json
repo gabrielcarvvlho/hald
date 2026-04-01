@@ -22,6 +22,26 @@
     "institutional-knowledge"
   ],
   "license": "MIT",
+  "files": [
+    "dist",
+    "skills",
+    "hooks",
+    ".claude-plugin",
+    ".cursor-plugin",
+    ".opencode",
+    ".codex",
+    ".mcp.json",
+    "gemini-extension.json",
+    "GEMINI.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggoc/git-oracle.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@google/genai": "^1.0.0",
