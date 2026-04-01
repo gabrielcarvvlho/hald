@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cluster } from "../../src/pipeline/clusterer.js";
+import { cluster, buildGraph } from "../../src/pipeline/clusterer.js";
 import { EntityType, RelationType, type Entity, type Relation } from "../../src/shared/types.js";
 
 function makeEntity(id: string): Entity {
@@ -223,5 +223,46 @@ describe("clusterer", () => {
     if (communities.length > 3) {
       expect(withParent.length + withChildren.length).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("buildGraph", () => {
+  it("log-normalizes accumulated edge weights", () => {
+    const entities = ["a", "b"].map(makeEntity);
+    const relations = [makeRelation("a", "b", 50)];
+
+    const graph = buildGraph(entities, relations);
+
+    const edge = graph.edge("a", "b")!;
+    const weight = graph.getEdgeAttribute(edge, "weight") as number;
+    // 1 + ln(50) ≈ 4.91
+    expect(weight).toBeCloseTo(4.91, 1);
+  });
+
+  it("preserves weight=1 edges after normalization", () => {
+    const entities = ["a", "b"].map(makeEntity);
+    const relations = [makeRelation("a", "b", 1)];
+
+    const graph = buildGraph(entities, relations);
+
+    const edge = graph.edge("a", "b")!;
+    const weight = graph.getEdgeAttribute(edge, "weight") as number;
+    // 1 + ln(1) = 1.0
+    expect(weight).toBeCloseTo(1.0, 5);
+  });
+
+  it("accumulates then normalizes multiple relations between same pair", () => {
+    const entities = ["a", "b"].map(makeEntity);
+    const relations = [
+      makeRelation("a", "b", 7),
+      { ...makeRelation("a", "b", 3), id: "rel:a-b-2" },
+    ];
+
+    const graph = buildGraph(entities, relations);
+
+    const edge = graph.edge("a", "b")!;
+    const weight = graph.getEdgeAttribute(edge, "weight") as number;
+    // 1 + ln(10) ≈ 3.30
+    expect(weight).toBeCloseTo(3.30, 1);
   });
 });

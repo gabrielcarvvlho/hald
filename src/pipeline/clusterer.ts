@@ -73,9 +73,10 @@ export function cluster(
   // Run Louvain at each resolution level
   const sortedResolutions = [...resolutions].sort((a, b) => a - b);
 
+  const seed = graphSeed(entities.map((e) => e.id));
+
   for (let level = 0; level < sortedResolutions.length; level++) {
     const resolution = sortedResolutions[level]!;
-    const seed = graphSeed(entities.map((e) => e.id));
 
     const partition = louvain(graph, {
       resolution,
@@ -122,7 +123,7 @@ export function cluster(
 // Graph construction
 // ================================================================
 
-function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph {
+export function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph {
   const graph = new UndirectedGraph();
 
   for (const entity of entities) {
@@ -146,6 +147,12 @@ function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph 
       });
     }
   }
+
+  // Log-normalize edge weights to dampen high-frequency CO_CHANGED dominance
+  graph.forEachEdge((edge) => {
+    const w = graph.getEdgeAttribute(edge, "weight") as number;
+    graph.setEdgeAttribute(edge, "weight", 1 + Math.log(Math.max(w, 1)));
+  });
 
   return graph;
 }
