@@ -35,6 +35,11 @@ export class Store {
     this.db = db;
   }
 
+  /** Wrap multiple operations in a single SQLite transaction. */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
   // ================================================================
   // Entities
   // ================================================================

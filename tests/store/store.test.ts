@@ -399,3 +399,44 @@ describe("Store — Stats", () => {
     expect(stats.entities).toBe(2);
   });
 });
+
+describe("Store — Transactions", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+  });
+  afterEach(() => db.close());
+
+  it("wraps multiple operations in a single transaction", () => {
+    store.transaction(() => {
+      store.upsertEntity(sampleEntity);
+      store.upsertEntity(sampleEntity2);
+    });
+
+    expect(store.getEntity("person:alice")).not.toBeNull();
+    expect(store.getEntity("module:src/billing")).not.toBeNull();
+  });
+
+  it("rolls back all operations on error", () => {
+    expect(() => {
+      store.transaction(() => {
+        store.upsertEntity(sampleEntity);
+        throw new Error("simulated failure");
+      });
+    }).toThrow("simulated failure");
+
+    expect(store.getEntity("person:alice")).toBeNull();
+  });
+
+  it("returns the value from the wrapped function", () => {
+    const result = store.transaction(() => {
+      store.upsertEntity(sampleEntity);
+      return store.getEntity("person:alice");
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("Alice Chen");
+  });
+});
