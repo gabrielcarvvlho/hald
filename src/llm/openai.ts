@@ -1,5 +1,5 @@
 import type { LLMClient, LLMRequestOptions, LLMResponse } from "./types.js";
-import { logger } from "../shared/logger.js";
+import { withRetry } from "./retry.js";
 
 const DEFAULT_MODEL = "gpt-4.1-mini";
 
@@ -28,6 +28,8 @@ export class OpenAIClient implements LLMClient {
       const OpenAI = (await import("openai")).default;
       this.sdk = new OpenAI({
         apiKey: this.apiKey,
+        maxRetries: 0, // We manage retries ourselves — prevent double-retry amplification
+        timeout: 120_000,
         ...(this.baseUrl && { baseURL: this.baseUrl }),
       });
     }
@@ -41,8 +43,8 @@ export class OpenAIClient implements LLMClient {
   ): Promise<LLMResponse> {
     const client = await this.getClient();
 
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      try {
+    return withRetry(
+      async () => {
         const response = await client.chat.completions.create({
           model: this.model,
           temperature: options?.temperature ?? 0,
@@ -66,26 +68,9 @@ export class OpenAIClient implements LLMClient {
                 ? "max_tokens"
                 : finishReason ?? "unknown",
         };
-      } catch (error: unknown) {
-        const status = (error as { status?: number }).status;
-        if (attempt < this.maxRetries && (status === 429 || (status && status >= 500))) {
-          const baseDelay = Math.pow(2, attempt) * 1000;
-          const delay = baseDelay + Math.random() * baseDelay * 0.5;
-          logger.warn(
-            `OpenAI API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${Math.round(delay)}ms`,
-            { status, error: String(error) },
-          );
-          await sleep(delay);
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    throw new Error("Exhausted retries");
+      },
+      this.maxRetries,
+      "OpenAI API",
+    );
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
