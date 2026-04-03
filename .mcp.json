@@ -1,10 +1,15 @@
 {
   "mcpServers": {
     "git-oracle": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
+      "command": "sh",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/start-server.sh"],
       "env": {
-        "GIT_ORACLE_REPO": "${CLAUDE_PROJECT_ROOT}"
+        "GIT_ORACLE_REPO": "${CLAUDE_PROJECT_ROOT}",
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "GIT_ORACLE_BASE_URL": "${GIT_ORACLE_BASE_URL}"
       }
     }
   }
