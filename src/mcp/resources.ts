@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Store } from "../store/queries.js";
+import { EntityType } from "../shared/types.js";
 
 type GetStore = () => Store;
 
@@ -112,6 +113,57 @@ export function registerResources(
               uri: "git-oracle://graph/summary",
               mimeType: "text/plain",
               text: "No index found. Run git_oracle_index first.",
+            },
+          ],
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git-oracle://graph/entity-types
+  // ================================================================
+
+  server.registerResource(
+    "entity-types",
+    "git-oracle://graph/entity-types",
+    {
+      description:
+        "Breakdown of entities in the knowledge graph by type (PERSON, MODULE, TECHNOLOGY, DECISION, PATTERN) with counts and examples.",
+      mimeType: "application/json",
+    },
+    async () => {
+      try {
+        const store = getStore();
+        const breakdown: Record<string, { count: number; examples: string[] }> = {};
+
+        for (const type of Object.values(EntityType)) {
+          const entities = store.getEntitiesByType(type);
+          breakdown[type] = {
+            count: entities.length,
+            examples: entities
+              .sort((a, b) => b.frequency - a.frequency)
+              .slice(0, 5)
+              .map((e) => e.name),
+          };
+        }
+
+        return {
+          contents: [
+            {
+              uri: "git-oracle://graph/entity-types",
+              mimeType: "application/json",
+              text: JSON.stringify(breakdown, null, 2),
+            },
+          ],
+        };
+      } catch {
+        return {
+          contents: [
+            {
+              uri: "git-oracle://graph/entity-types",
+              mimeType: "application/json",
+              text: JSON.stringify({ error: "No index found" }),
             },
           ],
         };
