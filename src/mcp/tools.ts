@@ -28,14 +28,30 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_query",
     {
       description:
-        "Answer a free-form question about the repository's history, architecture, decisions, and team knowledge using the Git Oracle knowledge graph. Returns structured context that you should synthesize into a helpful narrative.",
+        "Search the Git Oracle knowledge graph to answer questions about the repository's history, architecture, team, and codebase. " +
+        "Returns entities, relationships, and evidence for you to synthesize.\n\n" +
+        "For specific lookups, prefer: git_oracle_find_expert (who knows X?), git_oracle_trace_decision (why/when was X decided?), " +
+        "git_oracle_show_coupling (what co-changes with X?), git_oracle_find_silos (bus factor risks). " +
+        "Use this tool for general, thematic, or cross-cutting questions.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
-        question: z.string().describe("The question to answer"),
+        question: z
+          .string()
+          .describe(
+            "Natural language question (e.g., 'what technologies does the auth module use?', 'how has the API layer evolved?')",
+          ),
         search_type: z
           .enum(["local", "global", "auto"])
           .default("auto")
           .describe(
-            "local = entity-centric (who/what questions), global = thematic (why/how questions), auto = let the system decide",
+            "Search strategy. 'local' = find specific entities and their relationships (who/what). " +
+            "'global' = search community summaries for themes and patterns (why/how/overview). " +
+            "'auto' = classify automatically based on question phrasing.",
           ),
       }),
     },
@@ -72,8 +88,12 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           ],
         };
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const hint = /no such table|unable to open|SQLITE_/i.test(msg)
+          ? "\n\nThe index may not exist yet. Run git_oracle_index first."
+          : "";
         return {
-          content: [{ type: "text" as const, text: `Query failed: ${err instanceof Error ? err.message : String(err)}\n\nHave you run git_oracle_index yet?` }],
+          content: [{ type: "text" as const, text: `Query failed: ${msg}${hint}` }],
           isError: true,
         };
       }
@@ -88,15 +108,26 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_find_expert",
     {
       description:
-        "Find the people with the most knowledge about a specific module, file, or area of the codebase. Returns ranked experts with their activity details.",
+        "Find the top contributors for a module, file path, or area of the codebase. " +
+        "Returns people ranked by authorship weight × recency decay.\n\n" +
+        "Use when asked: 'who knows about X?', 'who should review changes to X?', 'who maintains X?'.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         module: z
           .string()
-          .describe("File path, directory, or module name to find experts for"),
+          .describe(
+            "Module path, directory, or component name (e.g., 'src/payments', 'auth', 'database layer'). " +
+            "Matches against entity names in the knowledge graph.",
+          ),
         top_n: z
           .number()
           .default(5)
-          .describe("Number of experts to return"),
+          .describe("Number of experts to return (default: 5)"),
       }),
     },
     async ({ module, top_n }) => {
@@ -148,12 +179,21 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_trace_decision",
     {
       description:
-        "Trace the history of an architectural or technical decision. Returns the timeline of commits, people involved, and context.",
+        "Trace the history of a technical or architectural decision through the knowledge graph. " +
+        "Returns DECISION entities, the people who made them, related modules, and supporting commit evidence.\n\n" +
+        "Use when asked: 'why did we switch to X?', 'when was Y adopted?', 'what motivated the migration to Z?'. " +
+        "For general history questions, use git_oracle_query instead.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         topic: z
           .string()
           .describe(
-            "The decision or migration to trace (e.g., 'REST to gRPC migration', 'TypeScript adoption')",
+            "The decision or migration to trace (e.g., 'REST to gRPC migration', 'TypeScript adoption', 'monorepo restructure')",
           ),
       }),
     },
@@ -213,15 +253,26 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_show_coupling",
     {
       description:
-        "Show which modules/files tend to change together, indicating architectural coupling.",
+        "Find modules that frequently change together, revealing architectural coupling. " +
+        "Returns co-change counts, conditional probability ratios, and shared authors.\n\n" +
+        "Use when asked: 'what else changes when I modify X?', 'what's coupled to X?', " +
+        "'what's the blast radius of changing X?', or to assess refactoring impact.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         module: z
           .string()
-          .describe("File path or directory to analyze coupling for"),
+          .describe(
+            "Module path or directory (e.g., 'src/api', 'auth module'). Matches against entity names in the knowledge graph.",
+          ),
         min_co_changes: z
           .number()
           .default(3)
-          .describe("Minimum number of co-changes to include"),
+          .describe("Minimum co-change count to filter noise (default: 3). Lower values show weaker coupling."),
       }),
     },
     async ({ module, min_co_changes }) => {
@@ -270,7 +321,15 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_get_path",
     {
       description:
-        "Find the shortest relationship path between two entities in the knowledge graph. Useful for discovering how people, modules, technologies, and decisions are connected.",
+        "Find the shortest relationship path between two entities in the knowledge graph. " +
+        "Reveals how people, modules, technologies, and decisions are connected through authorship, usage, and co-change relationships.\n\n" +
+        "Use when asked: 'how is person X connected to module Y?', 'what's the relationship between X and Y?'.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         from: z
           .string()
@@ -383,12 +442,21 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_get_entity",
     {
       description:
-        "Look up a specific entity (person, module, technology, decision, pattern) by ID, name, or search query. Returns full entity details including description, aliases, and activity timeline.",
+        "Look up a specific entity by ID, exact name, or fuzzy search. Returns full details including type, " +
+        "description, aliases, activity timeline, and up to 15 relationships.\n\n" +
+        "Accepts entity IDs ('person:alice-chen'), names ('Alice Chen'), or search terms. " +
+        "For ranked expert lists, use git_oracle_find_expert instead.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         query: z
           .string()
           .describe(
-            "Entity ID (e.g., 'person:alice-chen'), name (e.g., 'Alice Chen'), or search term",
+            "Entity ID (e.g., 'person:alice-chen'), name (e.g., 'Alice Chen'), or search term (e.g., 'payments')",
           ),
       }),
     },
@@ -465,16 +533,25 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_find_silos",
     {
       description:
-        "Find knowledge silos (bus factor ≤ 1) and orphaned modules (no active maintainer). Useful for identifying risk areas in the codebase.",
+        "Identify knowledge risk areas: modules with bus factor ≤ 1 (single active maintainer) and orphaned modules " +
+        "(no active maintainer). Returns a risk report sorted by severity.\n\n" +
+        "Use when asked: 'what's our bus factor?', 'which modules lack coverage?', 'where are the knowledge silos?', " +
+        "or during team planning to identify onboarding priorities.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         min_frequency: z
           .number()
           .default(3)
-          .describe("Minimum change frequency to consider a module (filters out trivial files)"),
+          .describe("Minimum change frequency to consider a module — filters trivial/config files (default: 3)"),
         inactive_days: z
           .number()
           .default(180)
-          .describe("Days since last contribution before an author is considered inactive"),
+          .describe("Days since last contribution before an author is considered inactive (default: 180)"),
       }),
     },
     async ({ min_frequency, inactive_days }) => {
@@ -543,30 +620,51 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     "git_oracle_index",
     {
       description:
-        "Index or re-index the current repository. Run this before querying if the index doesn't exist or is stale.",
+        "Build or refresh the Git Oracle knowledge graph for this repository. Reads git history, extracts entities " +
+        "and relationships via LLM, resolves duplicates, detects communities, and generates summaries.\n\n" +
+        "Duration: ~1-2 min per 500 commits. Uses incremental indexing by default (only new commits since last run). " +
+        "If no LLM API key is available (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY), falls back to " +
+        "agent-mediated extraction where you perform the LLM calls yourself.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
       inputSchema: z.object({
         full: z
           .boolean()
           .default(false)
-          .describe("Force full re-index (vs incremental)"),
+          .describe("Force full re-index, ignoring previous progress (default: false = incremental)"),
         max_commits: z
           .number()
           .optional()
-          .describe("Limit number of commits to index"),
+          .describe("Limit number of commits to process (e.g., 500). Useful for large repos."),
         since_date: z
           .string()
           .optional()
-          .describe("Only index commits after this date (ISO format)"),
+          .describe("Only index commits after this date (e.g., '2024-01-01')"),
       }),
     },
-    async ({ full, max_commits, since_date }) => {
+    async ({ full, max_commits, since_date }, extra) => {
       try {
         const config = loadConfig({
           maxCommits: max_commits,
           sinceDate: since_date,
         });
 
-        const result = await indexRepository(config, { full });
+        // Wire MCP progress notifications if client provided a progress token
+        const progressToken = extra._meta?.progressToken;
+        const onProgress = progressToken
+          ? (stage: string, done: number, total: number) => {
+              extra.sendNotification({
+                method: "notifications/progress" as const,
+                params: { progressToken, progress: done, total, message: stage },
+              }).catch(() => {}); // fire-and-forget — progress is best-effort
+            }
+          : undefined;
+
+        const result = await indexRepository(config, { full, onProgress });
 
         return {
           content: [
@@ -664,7 +762,15 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   server.registerTool(
     "git_oracle_stats",
     {
-      description: "Get statistics about the current Git Oracle index.",
+      description:
+        "Get statistics about the current Git Oracle index: entity/relation/community counts, last indexed commit, " +
+        "and timestamp. Use this to check whether an index exists and is up-to-date before querying.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({}),
     },
     async () => {
@@ -673,6 +779,17 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         const stats = store.getStats();
         const lastCommit = store.getMeta("last_indexed_commit");
         const lastIndexed = store.getMeta("last_indexed_at");
+
+        if (!lastIndexed) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "The index exists but has never been populated. Run git_oracle_index first.",
+              },
+            ],
+          };
+        }
 
         return {
           content: [
@@ -698,9 +815,10 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           content: [
             {
               type: "text" as const,
-              text: "No index found. Run the git_oracle_index tool first.",
+              text: "No index found. Run git_oracle_index to build the knowledge graph.",
             },
           ],
+          isError: true,
         };
       }
     },
@@ -717,6 +835,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         "Get the next text unit chunk for agent-mediated entity extraction. " +
         "Returns the system prompt and user prompt to pass through your LLM. " +
         "Call this after git_oracle_index starts an agent-mediated session.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
       inputSchema: z.object({}),
     },
     async () => {
@@ -795,6 +918,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       description:
         "Submit the XML entity extraction result for the current chunk. " +
         "Call this after processing the prompt from git_oracle_extract_next.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         xml: z.string().describe("The <extraction>...</extraction> XML output from the LLM"),
       }),
@@ -854,6 +982,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         "Finalize the agent-mediated indexing session. Runs entity resolution, " +
         "graph building, and community detection on the submitted extractions. " +
         "Call this after all chunks have been processed.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
       inputSchema: z.object({}),
     },
     async () => {
