@@ -5,12 +5,14 @@ describe("detectProvider", () => {
   const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    // Save and clear all provider env vars
+    // Save and clear all provider env vars + host-agent vars
     for (const key of [
       "ANTHROPIC_API_KEY",
       "OPENAI_API_KEY",
       "GOOGLE_API_KEY",
       "GEMINI_API_KEY",
+      "CLAUDE_PLUGIN_ROOT",
+      "CURSOR_PLUGIN_ROOT",
     ]) {
       savedEnv[key] = process.env[key];
       delete process.env[key];
@@ -68,7 +70,7 @@ describe("detectProvider", () => {
     });
   });
 
-  it("prioritizes Anthropic > OpenAI > Google", () => {
+  it("prioritizes Anthropic > OpenAI > Google without host agent", () => {
     process.env.ANTHROPIC_API_KEY = "anthropic";
     process.env.OPENAI_API_KEY = "openai";
     process.env.GOOGLE_API_KEY = "google";
@@ -83,6 +85,35 @@ describe("detectProvider", () => {
 
     const result = detectProvider();
     expect(result!.provider).toBe("openai");
+  });
+
+  it("prefers OpenAI when CURSOR_PLUGIN_ROOT is set, even if Anthropic key exists", () => {
+    process.env.CURSOR_PLUGIN_ROOT = "/some/path";
+    process.env.ANTHROPIC_API_KEY = "anthropic";
+    process.env.OPENAI_API_KEY = "openai";
+
+    const result = detectProvider();
+    expect(result!.provider).toBe("openai");
+    expect(result!.apiKey).toBe("openai");
+  });
+
+  it("prefers Anthropic when CLAUDE_PLUGIN_ROOT is set", () => {
+    process.env.CLAUDE_PLUGIN_ROOT = "/some/path";
+    process.env.ANTHROPIC_API_KEY = "anthropic";
+    process.env.OPENAI_API_KEY = "openai";
+
+    const result = detectProvider();
+    expect(result!.provider).toBe("anthropic");
+    expect(result!.apiKey).toBe("anthropic");
+  });
+
+  it("falls back to priority order when host agent key is missing", () => {
+    process.env.CURSOR_PLUGIN_ROOT = "/some/path";
+    // No OPENAI_API_KEY set — Cursor hint can't be used
+    process.env.ANTHROPIC_API_KEY = "anthropic";
+
+    const result = detectProvider();
+    expect(result!.provider).toBe("anthropic");
   });
 });
 

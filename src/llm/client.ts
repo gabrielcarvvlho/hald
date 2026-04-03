@@ -9,13 +9,42 @@ export class NoProviderError extends Error {
 }
 
 /**
+ * Infer which host agent is running us from platform-specific env vars.
+ * Returns the provider that matches the host agent, or null if unknown.
+ */
+function detectHostAgent(): LLMProvider | null {
+  if (process.env.CLAUDE_PLUGIN_ROOT) return "anthropic";
+  if (process.env.CURSOR_PLUGIN_ROOT) return "openai";
+  // Gemini CLI doesn't set a plugin root, but if GEMINI_API_KEY is present
+  // without Anthropic/OpenAI keys, the fallback order below handles it.
+  return null;
+}
+
+/**
  * Detect which LLM provider is available from environment variables.
- * Priority: Anthropic → OpenAI → Google
+ *
+ * Strategy:
+ *   1. If we detect a host agent (Claude Code, Cursor), prefer that agent's
+ *      native provider — avoids surprise cross-provider billing.
+ *   2. Fall back to priority order: Anthropic → OpenAI → Google.
  */
 export function detectProvider(): {
   provider: LLMProvider;
   apiKey: string;
 } | null {
+  // 1. Host-agent-aware: match the provider to the platform running us
+  const hostHint = detectHostAgent();
+  if (hostHint) {
+    const key = getApiKeyForProvider(hostHint);
+    if (key) {
+      logger.debug("Provider auto-detected from host agent", {
+        host: hostHint,
+      });
+      return { provider: hostHint, apiKey: key };
+    }
+  }
+
+  // 2. Fallback: first available key wins
   if (process.env.ANTHROPIC_API_KEY) {
     return { provider: "anthropic", apiKey: process.env.ANTHROPIC_API_KEY };
   }
