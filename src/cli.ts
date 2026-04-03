@@ -150,6 +150,11 @@ program
       console.log(`  Relations:               ${result.relationsFound}`);
       console.log(`  Communities:             ${result.communitiesFound}`);
       console.log(`  Communities summarized:  ${result.communitiesSummarized}`);
+      if (result.tokenUsage.requests > 0) {
+        console.log(`  LLM requests:            ${result.tokenUsage.requests} (${result.tokenUsage.failures} failed)`);
+        console.log(`  Tokens:                  ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`);
+        console.log(`  Cost:                    $${result.actualCostUsd.toFixed(4)}`);
+      }
       console.log("");
     } catch (err) {
       process.stderr.write("\r");

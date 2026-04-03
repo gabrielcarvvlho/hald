@@ -11,6 +11,7 @@ import { build, generateRelationId } from "./graph-builder.js";
 import { cluster, jaccardSimilarity } from "./clusterer.js";
 import { summarizeBatch } from "./summarizer.js";
 import { createClient } from "../llm/client.js";
+import { calculateActualCost } from "./cost-estimator.js";
 import { logger } from "../shared/logger.js";
 
 export interface IndexOptions {
@@ -24,6 +25,8 @@ export interface IndexResult {
   relationsFound: number;
   communitiesFound: number;
   communitiesSummarized: number;
+  tokenUsage: { inputTokens: number; outputTokens: number; requests: number; failures: number };
+  actualCostUsd: number;
 }
 
 /**
@@ -85,6 +88,8 @@ async function runPipeline(
       relationsFound: stats.relations,
       communitiesFound: stats.communities,
       communitiesSummarized: 0,
+      tokenUsage: { inputTokens: 0, outputTokens: 0, requests: 0, failures: 0 },
+      actualCostUsd: 0,
     };
   }
 
@@ -268,7 +273,7 @@ async function runPipeline(
       allEntities,
       allRelations,
       client,
-      { concurrency: config.maxConcurrency },
+      { concurrency: config.maxConcurrency, tokenUsage },
     )) {
       const community = communities.find((c) => c.id === communityId);
       if (community) {
@@ -297,10 +302,30 @@ async function runPipeline(
     "head_at_index",
     await getHead(config.repoPath).catch(() => "unknown"),
   );
-  store.setMeta("last_extraction_input_tokens", String(tokenUsage.inputTokens));
-  store.setMeta("last_extraction_output_tokens", String(tokenUsage.outputTokens));
-  store.setMeta("last_extraction_requests", String(tokenUsage.requestCount));
-  store.setMeta("last_extraction_failures", String(tokenUsage.failedCount));
+  // Calculate actual cost from real token counts
+  const cost = calculateActualCost(
+    tokenUsage.inputTokens,
+    tokenUsage.outputTokens,
+    client.provider,
+    config.model,
+  );
+
+  logger.info("orchestrator: token usage and cost", {
+    inputTokens: tokenUsage.inputTokens,
+    outputTokens: tokenUsage.outputTokens,
+    requests: tokenUsage.requestCount,
+    failures: tokenUsage.failedCount,
+    costUsd: cost.costUsd.toFixed(4),
+    model: cost.model,
+  });
+
+  store.setMeta("last_input_tokens", String(tokenUsage.inputTokens));
+  store.setMeta("last_output_tokens", String(tokenUsage.outputTokens));
+  store.setMeta("last_requests", String(tokenUsage.requestCount));
+  store.setMeta("last_failures", String(tokenUsage.failedCount));
+  store.setMeta("last_cost_usd", cost.costUsd.toFixed(6));
+  store.setMeta("last_provider", cost.provider);
+  store.setMeta("last_model", cost.model);
 
   const finalStats = store.getStats();
 
@@ -310,6 +335,13 @@ async function runPipeline(
     relationsFound: finalStats.relations,
     communitiesFound: finalStats.communities,
     communitiesSummarized: summarized,
+    tokenUsage: {
+      inputTokens: tokenUsage.inputTokens,
+      outputTokens: tokenUsage.outputTokens,
+      requests: tokenUsage.requestCount,
+      failures: tokenUsage.failedCount,
+    },
+    actualCostUsd: cost.costUsd,
   };
 }
 
