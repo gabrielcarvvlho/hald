@@ -19,10 +19,19 @@
    ```json
    {
      "git-oracle": {
-       "command": "node",
-       "args": ["~/.codex/git-oracle/dist/index.js"]
+       "command": "sh",
+       "args": ["~/.codex/git-oracle/bin/start-server.sh"]
      }
    }
    ```
 
-5. Restart Codex.
+5. **API keys for indexing:** Codex runs in a sandbox with restricted env.
+   Set at least one of these in your Codex MCP server config's `env` block:
+   - `ANTHROPIC_API_KEY` — for Claude (default)
+   - `OPENAI_API_KEY` — for GPT-4.1 / compatible endpoints
+   - `GOOGLE_API_KEY` — for Gemini
+   - `GIT_ORACLE_BASE_URL` — for custom endpoints (Ollama, OpenRouter)
+
+   If no key is available, indexing falls back to agent-mediated mode (zero cost).
+
+6. Restart Codex.

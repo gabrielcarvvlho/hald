@@ -18,7 +18,8 @@ This is a TypeScript monorepo. All source code is in `src/`.
 - `.codex/INSTALL.md` — Codex install instructions (agent reads and follows these)
 - `.opencode/plugins/git-oracle.js` — OpenCode JS plugin hook
 - `gemini-extension.json` + `GEMINI.md` — Gemini CLI support
-- `.mcp.json` — MCP server config (shared by Claude Code + Cursor)
+- `.mcp.json` — MCP server config (Claude Code)
+- `.cursor/mcp.json` — MCP server config (Cursor, with explicit env var forwarding)
 - `hooks/session-start.sh` — Cross-platform bootstrap (detects platform, injects skills)
 
 ### Core Source
