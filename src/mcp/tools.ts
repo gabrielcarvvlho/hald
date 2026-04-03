@@ -3,6 +3,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Store } from "../store/queries.js";
 import { loadConfig } from "../shared/config.js";
 import { indexRepository } from "../pipeline/orchestrator.js";
+import { NoProviderError } from "../llm/client.js";
+import {
+  startAgentSession,
+  getSession,
+  getNextChunk,
+  submitExtraction,
+  finalizeSession,
+  clearSession,
+} from "./agent-session.js";
 import { findExperts, getCoupling, getPath, getEntity as lookupEntity, findKnowledgeSilos } from "../query/graph-ops.js";
 import { localSearch } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
@@ -563,11 +572,78 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           content: [
             {
               type: "text" as const,
-              text: `Indexing complete!\n\n- Commits processed: ${result.commitsProcessed}\n- Entities: ${result.entitiesFound}\n- Relations: ${result.relationsFound}\n- Communities: ${result.communitiesFound}`,
+              text: [
+                "Indexing complete!",
+                "",
+                `- Commits processed: ${result.commitsProcessed}`,
+                `- Entities: ${result.entitiesFound}`,
+                `- Relations: ${result.relationsFound}`,
+                `- Communities: ${result.communitiesFound}`,
+                ...(result.tokenUsage.requests > 0
+                  ? [
+                      `- LLM requests: ${result.tokenUsage.requests}`,
+                      `- Tokens: ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`,
+                      `- Cost: $${result.actualCostUsd.toFixed(4)}`,
+                    ]
+                  : []),
+              ].join("\n"),
             },
           ],
         };
       } catch (err) {
+        // Fall back to agent-mediated mode when no API key is available
+        if (err instanceof NoProviderError) {
+          try {
+            const { chunkCount, commitCount } = await startAgentSession({
+              full,
+              maxCommits: max_commits,
+              sinceDate: since_date,
+            });
+
+            if (commitCount === 0) {
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: "No new commits to index.",
+                  },
+                ],
+              };
+            }
+
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: [
+                    "No LLM API key found — switching to agent-mediated extraction.",
+                    `Found ${commitCount} commits, split into ${chunkCount} chunks.`,
+                    "",
+                    "You will perform entity extraction using your own LLM context.",
+                    "Follow this loop:",
+                    "",
+                    "1. Call **git_oracle_extract_next** to get the next chunk.",
+                    "2. Pass the system prompt and user prompt through your LLM to extract entities.",
+                    "3. Call **git_oracle_submit_extraction** with the resulting XML.",
+                    "4. Repeat until git_oracle_extract_next says all chunks are done.",
+                    "5. Call **git_oracle_finalize_index** to build the knowledge graph.",
+                  ].join("\n"),
+                },
+              ],
+            };
+          } catch (sessionErr) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Failed to start agent-mediated indexing: ${sessionErr instanceof Error ? sessionErr.message : String(sessionErr)}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+
         return {
           content: [
             {
@@ -625,6 +701,206 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
               text: "No index found. Run the git_oracle_index tool first.",
             },
           ],
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git_oracle_extract_next (agent-mediated)
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_extract_next",
+    {
+      description:
+        "Get the next text unit chunk for agent-mediated entity extraction. " +
+        "Returns the system prompt and user prompt to pass through your LLM. " +
+        "Call this after git_oracle_index starts an agent-mediated session.",
+      inputSchema: z.object({}),
+    },
+    async () => {
+      try {
+        const session = getSession();
+        if (!session) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No active agent-mediated session. Run git_oracle_index first (with no LLM API key set).",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const chunk = getNextChunk();
+
+        if (chunk.done) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: [
+                  `All ${chunk.total} chunks have been extracted (${chunk.extracted} submitted).`,
+                  "",
+                  "Call **git_oracle_finalize_index** to build the knowledge graph.",
+                ].join("\n"),
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                `## Chunk ${chunk.index + 1} of ${chunk.total}`,
+                "",
+                "Pass the following system prompt and user prompt to your LLM, then submit the XML output via **git_oracle_submit_extraction**.",
+                "",
+                "### System Prompt",
+                "",
+                chunk.systemPrompt,
+                "",
+                "### User Prompt",
+                "",
+                chunk.userPrompt,
+              ].join("\n"),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Extract next failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git_oracle_submit_extraction (agent-mediated)
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_submit_extraction",
+    {
+      description:
+        "Submit the XML entity extraction result for the current chunk. " +
+        "Call this after processing the prompt from git_oracle_extract_next.",
+      inputSchema: z.object({
+        xml: z.string().describe("The <extraction>...</extraction> XML output from the LLM"),
+      }),
+    },
+    async ({ xml }) => {
+      try {
+        const session = getSession();
+        if (!session) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No active agent-mediated session.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = submitExtraction(xml);
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                `Extraction accepted: ${result.entities} entities, ${result.relations} relations.`,
+                `Progress: ${result.progress}`,
+                "",
+                "Call **git_oracle_extract_next** for the next chunk.",
+              ].join("\n"),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Submit extraction failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ================================================================
+  // git_oracle_finalize_index (agent-mediated)
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_finalize_index",
+    {
+      description:
+        "Finalize the agent-mediated indexing session. Runs entity resolution, " +
+        "graph building, and community detection on the submitted extractions. " +
+        "Call this after all chunks have been processed.",
+      inputSchema: z.object({}),
+    },
+    async () => {
+      try {
+        const session = getSession();
+        if (!session) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No active agent-mediated session to finalize.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await finalizeSession();
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                "Agent-mediated indexing complete!",
+                "",
+                `- Commits processed: ${result.commitsProcessed}`,
+                `- Entities: ${result.entitiesFound}`,
+                `- Relations: ${result.relationsFound}`,
+                `- Communities: ${result.communitiesFound}`,
+                "",
+                "Note: Community summaries were skipped (no API key).",
+                "Run git_oracle_index again with an API key to generate summaries.",
+              ].join("\n"),
+            },
+          ],
+        };
+      } catch (err) {
+        clearSession();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Finalize failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
         };
       }
     },
