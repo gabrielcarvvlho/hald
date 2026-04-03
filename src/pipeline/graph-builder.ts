@@ -28,6 +28,8 @@ export interface BuildInput {
   extractions: Map<string, ExtractorResult>;
   /** Original commits for co-change edge creation */
   commits: CommitData[];
+  /** Module path normalization depth (passed through from config) */
+  moduleDepth?: number;
 }
 
 /**
@@ -37,67 +39,81 @@ export interface BuildInput {
 export function build(store: Store, input: BuildInput): GraphStats {
   const end = logger.time("graph-builder: build");
 
-  // 1. Upsert entities (with dates from text units)
-  // Build lookup that handles both canonical names and normalized paths
-  const entityMap = new Map<string, Entity>();
-  for (const e of input.entities) {
-    entityMap.set(e.name.toLowerCase(), e);
-    for (const alias of e.aliases) {
-      entityMap.set(alias.toLowerCase(), e);
+  store.transaction(() => {
+    // 1. Upsert entities (with dates from text units)
+    // Build lookup that handles both canonical names and normalized paths
+    const entityMap = new Map<string, Entity>();
+    for (const e of input.entities) {
+      entityMap.set(e.name.toLowerCase(), e);
+      for (const alias of e.aliases) {
+        entityMap.set(alias.toLowerCase(), e);
+      }
     }
-  }
 
-  for (const tu of input.textUnits) {
-    const extraction = input.extractions.get(tu.id);
-    if (!extraction) continue;
+    for (const tu of input.textUnits) {
+      const extraction = input.extractions.get(tu.id);
+      if (!extraction) continue;
 
-    for (const extracted of extraction.entities) {
-      const entity =
-        entityMap.get(extracted.name.toLowerCase()) ??
-        entityMap.get(normalizeModulePath(extracted.name).toLowerCase());
-      if (!entity) continue;
+      for (const extracted of extraction.entities) {
+        const entity =
+          entityMap.get(extracted.name.toLowerCase()) ??
+          entityMap.get(normalizeModulePath(extracted.name, input.moduleDepth).toLowerCase());
+        if (!entity) continue;
 
-      store.upsertEntity({
-        ...entity,
-        firstSeen: tu.dateRange.start,
-        lastSeen: tu.dateRange.end,
-        frequency: 1,
-      });
+        store.upsertEntity({
+          ...entity,
+          firstSeen: tu.dateRange.start,
+          lastSeen: tu.dateRange.end,
+          frequency: 1,
+        });
+      }
     }
-  }
 
-  // 2. Upsert relations (only if both entities exist — avoids FK violations)
-  for (const relation of input.relations) {
-    if (store.getEntity(relation.sourceId) && store.getEntity(relation.targetId)) {
-      store.upsertRelation(relation);
-    } else {
-      logger.debug("graph-builder: skipping relation, missing entity", {
-        id: relation.id,
-        sourceId: relation.sourceId,
-        targetId: relation.targetId,
-      });
+    // Pre-fetch entity existence for FK validation (batch instead of per-relation lookup)
+    const coChangeRelations = buildCoChangeEdges(input.commits, input.moduleDepth);
+
+    const relationEntityIds = new Set<string>();
+    for (const relation of input.relations) {
+      relationEntityIds.add(relation.sourceId);
+      relationEntityIds.add(relation.targetId);
     }
-  }
-
-  // 3. Insert text units
-  for (const tu of input.textUnits) {
-    store.insertTextUnit(tu);
-  }
-
-  // 4. Insert commits
-  const commitToTextUnit = buildCommitTextUnitMap(input.textUnits);
-  for (const commit of input.commits) {
-    store.insertCommit(commit, commitToTextUnit.get(commit.hash) ?? null);
-  }
-
-  // 5. Create co-change edges
-  const coChangeRelations = buildCoChangeEdges(input.commits);
-  for (const rel of coChangeRelations) {
-    // Only create co-change edges if both modules exist as entities
-    if (store.getEntity(rel.sourceId) && store.getEntity(rel.targetId)) {
-      store.upsertRelation(rel);
+    for (const rel of coChangeRelations) {
+      relationEntityIds.add(rel.sourceId);
+      relationEntityIds.add(rel.targetId);
     }
-  }
+    const existingEntities = store.getEntitiesByIds([...relationEntityIds]);
+
+    // 2. Upsert relations (use pre-fetched map instead of per-relation getEntity)
+    for (const relation of input.relations) {
+      if (existingEntities.has(relation.sourceId) && existingEntities.has(relation.targetId)) {
+        store.upsertRelation(relation);
+      } else {
+        logger.debug("graph-builder: skipping relation, missing entity", {
+          id: relation.id,
+          sourceId: relation.sourceId,
+          targetId: relation.targetId,
+        });
+      }
+    }
+
+    // 3. Insert text units
+    for (const tu of input.textUnits) {
+      store.insertTextUnit(tu);
+    }
+
+    // 4. Insert commits
+    const commitToTextUnit = buildCommitTextUnitMap(input.textUnits);
+    for (const commit of input.commits) {
+      store.insertCommit(commit, commitToTextUnit.get(commit.hash) ?? null);
+    }
+
+    // 5. Create co-change edges (use pre-fetched map)
+    for (const rel of coChangeRelations) {
+      if (existingEntities.has(rel.sourceId) && existingEntities.has(rel.targetId)) {
+        store.upsertRelation(rel);
+      }
+    }
+  });
 
   const stats = store.getStats();
 
@@ -119,7 +135,7 @@ export function build(store: Store, input: BuildInput): GraphStats {
 // Co-change edges
 // ================================================================
 
-function buildCoChangeEdges(commits: CommitData[]): Relation[] {
+function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relation[] {
   const relations: Relation[] = [];
 
   for (const commit of commits) {
@@ -128,7 +144,7 @@ function buildCoChangeEdges(commits: CommitData[]): Relation[] {
     const modules = [
       ...new Set(
         commit.filesChanged.map((f) =>
-          normalizeModulePath(f.path),
+          normalizeModulePath(f.path, moduleDepth),
         ),
       ),
     ];

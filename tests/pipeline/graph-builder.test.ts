@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
-import { initSchema } from "../../src/store/schema.js";
+import { initSchema, runMigrations } from "../../src/store/schema.js";
 import { Store } from "../../src/store/queries.js";
 import { build, generateRelationId } from "../../src/pipeline/graph-builder.js";
 import {
@@ -16,6 +16,7 @@ function createTestStore(): { db: Database.Database; store: Store } {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   initSchema(db);
+  runMigrations(db);
   return { db, store: new Store(db) };
 }
 

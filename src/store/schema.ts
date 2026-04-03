@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
+import { logger } from "../shared/logger.js";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export function initSchema(db: Database.Database): void {
   db.exec(`
@@ -111,8 +112,8 @@ export function initSchema(db: Database.Database): void {
 
   // Set schema version
   db.prepare(
-    `INSERT OR IGNORE INTO index_meta (key, value) VALUES ('schema_version', ?)`,
-  ).run(String(SCHEMA_VERSION));
+    `INSERT OR IGNORE INTO index_meta (key, value) VALUES ('schema_version', '1')`,
+  ).run();
 }
 
 function createFtsTriggers(db: Database.Database): void {
@@ -181,4 +182,82 @@ function createFtsTriggers(db: Database.Database): void {
       VALUES (new.rowid, new.content);
     END;
   `);
+}
+
+// ============================================================
+// Migration Framework
+// ============================================================
+
+interface Migration {
+  version: number;
+  description: string;
+  up: (db: Database.Database) => void;
+}
+
+const MIGRATIONS: Migration[] = [
+  {
+    version: 2,
+    description: "Add junction tables for text_unit_entities and community_entities",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS text_unit_entities (
+          text_unit_id TEXT NOT NULL REFERENCES text_units(id) ON DELETE CASCADE,
+          entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+          PRIMARY KEY (text_unit_id, entity_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tue_entity ON text_unit_entities(entity_id);
+
+        CREATE TABLE IF NOT EXISTS community_entities (
+          community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+          entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+          PRIMARY KEY (community_id, entity_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ce_entity ON community_entities(entity_id);
+      `);
+
+      // Populate from existing JSON (safe: skips dangling entity refs)
+      db.exec(`
+        INSERT OR IGNORE INTO text_unit_entities(text_unit_id, entity_id)
+          SELECT t.id, je.value
+          FROM text_units t, json_each(t.entity_ids) je
+          WHERE je.value IN (SELECT id FROM entities);
+
+        INSERT OR IGNORE INTO community_entities(community_id, entity_id)
+          SELECT c.id, je.value
+          FROM communities c, json_each(c.entity_ids) je
+          WHERE je.value IN (SELECT id FROM entities);
+      `);
+    },
+  },
+];
+
+export function runMigrations(db: Database.Database): void {
+  const row = db.prepare(
+    "SELECT value FROM index_meta WHERE key = 'schema_version'"
+  ).get() as { value: string } | undefined;
+
+  const currentVersion = row ? Number(row.value) : 1;
+
+  if (currentVersion > SCHEMA_VERSION) {
+    throw new Error(
+      `Database schema version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}. ` +
+      `Please upgrade git-oracle.`
+    );
+  }
+
+  if (currentVersion === SCHEMA_VERSION) return;
+
+  const pending = MIGRATIONS
+    .filter((m) => m.version > currentVersion)
+    .sort((a, b) => a.version - b.version);
+
+  for (const migration of pending) {
+    db.transaction(() => {
+      logger.info(`Running migration v${migration.version}: ${migration.description}`);
+      migration.up(db);
+      db.prepare(
+        "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('schema_version', ?)"
+      ).run(String(migration.version));
+    })();
+  }
 }

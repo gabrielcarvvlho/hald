@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
-import { initSchema } from "../../src/store/schema.js";
+import { openDatabase } from "../../src/store/db.js";
 import { Store } from "../../src/store/queries.js";
 import {
   EntityType,
@@ -13,9 +13,7 @@ import {
 } from "../../src/shared/types.js";
 
 function createTestStore(): { db: Database.Database; store: Store } {
-  const db = new Database(":memory:");
-  db.pragma("foreign_keys = ON");
-  initSchema(db);
+  const db = openDatabase(":memory:");
   return { db, store: new Store(db) };
 }
 
@@ -397,5 +395,231 @@ describe("Store — Stats", () => {
 
     const stats = store.getStats();
     expect(stats.entities).toBe(2);
+  });
+});
+
+describe("Store — Junction Tables", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+    store.upsertEntity(sampleEntity);  // person:alice
+    store.upsertEntity(sampleEntity2); // module:src/billing
+  });
+  afterEach(() => db.close());
+
+  it("insertTextUnit populates text_unit_entities junction table", () => {
+    const tu: TextUnit = {
+      id: "tu:test-001",
+      content: "Test content",
+      commitHashes: ["abc123"],
+      dateRange: { start: "2024-01-01", end: "2024-01-05" },
+      entityIds: ["person:alice", "module:src/billing"],
+      relationIds: [],
+    };
+
+    store.insertTextUnit(tu);
+
+    const rows = db.prepare(
+      "SELECT entity_id FROM text_unit_entities WHERE text_unit_id = ? ORDER BY entity_id"
+    ).all("tu:test-001") as { entity_id: string }[];
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.entity_id).toBe("module:src/billing");
+    expect(rows[1]!.entity_id).toBe("person:alice");
+  });
+
+  it("upsertCommunity populates community_entities junction table", () => {
+    const community: Community = {
+      id: "comm:0:test",
+      level: 0,
+      title: "Test Community",
+      summary: "A test community",
+      entityIds: ["person:alice", "module:src/billing"],
+      childIds: [],
+    };
+
+    store.upsertCommunity(community);
+
+    const rows = db.prepare(
+      "SELECT entity_id FROM community_entities WHERE community_id = ? ORDER BY entity_id"
+    ).all("comm:0:test") as { entity_id: string }[];
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.entity_id).toBe("module:src/billing");
+    expect(rows[1]!.entity_id).toBe("person:alice");
+  });
+
+  it("upsertCommunity replaces junction entries on re-upsert", () => {
+    const community: Community = {
+      id: "comm:0:test",
+      level: 0,
+      title: "Test",
+      summary: "",
+      entityIds: ["person:alice", "module:src/billing"],
+      childIds: [],
+    };
+
+    store.upsertCommunity(community);
+
+    store.upsertCommunity({
+      ...community,
+      entityIds: ["person:alice"],
+    });
+
+    const rows = db.prepare(
+      "SELECT entity_id FROM community_entities WHERE community_id = ?"
+    ).all("comm:0:test") as { entity_id: string }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.entity_id).toBe("person:alice");
+  });
+
+  it("clearCommunities cascades to community_entities", () => {
+    store.upsertCommunity({
+      id: "comm:0:test",
+      level: 0,
+      title: "Test",
+      summary: "",
+      entityIds: ["person:alice"],
+      childIds: [],
+    });
+
+    store.clearCommunities();
+
+    const rows = db.prepare("SELECT * FROM community_entities").all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("getTextUnitsForEntity uses junction table", () => {
+    store.insertTextUnit({
+      id: "tu:001",
+      content: "Alice worked on billing",
+      commitHashes: ["abc123"],
+      dateRange: { start: "2024-01-01", end: "2024-01-05" },
+      entityIds: ["person:alice", "module:src/billing"],
+      relationIds: [],
+    });
+    store.insertTextUnit({
+      id: "tu:002",
+      content: "Unrelated text unit",
+      commitHashes: ["def456"],
+      dateRange: { start: "2024-02-01", end: "2024-02-05" },
+      entityIds: ["module:src/billing"],
+      relationIds: [],
+    });
+
+    const aliceUnits = store.getTextUnitsForEntity("person:alice");
+    expect(aliceUnits).toHaveLength(1);
+    expect(aliceUnits[0]!.id).toBe("tu:001");
+
+    const billingUnits = store.getTextUnitsForEntity("module:src/billing");
+    expect(billingUnits).toHaveLength(2);
+  });
+
+  it("getCommunitiesForEntity uses junction table", () => {
+    store.upsertCommunity({
+      id: "comm:0:payments",
+      level: 0,
+      title: "Payments",
+      summary: "",
+      entityIds: ["person:alice", "module:src/billing"],
+      childIds: [],
+    });
+    store.upsertCommunity({
+      id: "comm:0:other",
+      level: 0,
+      title: "Other",
+      summary: "",
+      entityIds: ["module:src/billing"],
+      childIds: [],
+    });
+
+    const aliceComms = store.getCommunitiesForEntity("person:alice");
+    expect(aliceComms).toHaveLength(1);
+    expect(aliceComms[0]!.id).toBe("comm:0:payments");
+
+    const billingComms = store.getCommunitiesForEntity("module:src/billing");
+    expect(billingComms).toHaveLength(2);
+  });
+});
+
+describe("Store — Batch Entity Lookup", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+    store.upsertEntity(sampleEntity);  // person:alice
+    store.upsertEntity(sampleEntity2); // module:src/billing
+  });
+  afterEach(() => db.close());
+
+  it("returns a map of entities by ID", () => {
+    const result = store.getEntitiesByIds(["person:alice", "module:src/billing"]);
+
+    expect(result.size).toBe(2);
+    expect(result.get("person:alice")!.name).toBe("Alice Chen");
+    expect(result.get("module:src/billing")!.name).toBe("src/billing");
+  });
+
+  it("skips non-existent IDs without error", () => {
+    const result = store.getEntitiesByIds(["person:alice", "nonexistent:id"]);
+
+    expect(result.size).toBe(1);
+    expect(result.has("person:alice")).toBe(true);
+    expect(result.has("nonexistent:id")).toBe(false);
+  });
+
+  it("returns empty map for empty input", () => {
+    const result = store.getEntitiesByIds([]);
+    expect(result.size).toBe(0);
+  });
+
+  it("deduplicates input IDs", () => {
+    const result = store.getEntitiesByIds(["person:alice", "person:alice"]);
+    expect(result.size).toBe(1);
+  });
+});
+
+describe("Store — Transactions", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+  });
+  afterEach(() => db.close());
+
+  it("wraps multiple operations in a single transaction", () => {
+    store.transaction(() => {
+      store.upsertEntity(sampleEntity);
+      store.upsertEntity(sampleEntity2);
+    });
+
+    expect(store.getEntity("person:alice")).not.toBeNull();
+    expect(store.getEntity("module:src/billing")).not.toBeNull();
+  });
+
+  it("rolls back all operations on error", () => {
+    expect(() => {
+      store.transaction(() => {
+        store.upsertEntity(sampleEntity);
+        throw new Error("simulated failure");
+      });
+    }).toThrow("simulated failure");
+
+    expect(store.getEntity("person:alice")).toBeNull();
+  });
+
+  it("returns the value from the wrapped function", () => {
+    const result = store.transaction(() => {
+      store.upsertEntity(sampleEntity);
+      return store.getEntity("person:alice");
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("Alice Chen");
   });
 });

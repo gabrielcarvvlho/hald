@@ -11,6 +11,7 @@ import { build, generateRelationId } from "./graph-builder.js";
 import { cluster, jaccardSimilarity } from "./clusterer.js";
 import { summarizeBatch } from "./summarizer.js";
 import { createClient } from "../llm/client.js";
+import { calculateActualCost } from "./cost-estimator.js";
 import { logger } from "../shared/logger.js";
 
 export interface IndexOptions {
@@ -24,6 +25,8 @@ export interface IndexResult {
   relationsFound: number;
   communitiesFound: number;
   communitiesSummarized: number;
+  tokenUsage: { inputTokens: number; outputTokens: number; requests: number; failures: number };
+  actualCostUsd: number;
 }
 
 /**
@@ -85,6 +88,8 @@ async function runPipeline(
       relationsFound: stats.relations,
       communitiesFound: stats.communities,
       communitiesSummarized: 0,
+      tokenUsage: { inputTokens: 0, outputTokens: 0, requests: 0, failures: 0 },
+      actualCostUsd: 0,
     };
   }
 
@@ -150,10 +155,10 @@ async function runPipeline(
 
   // 7. Resolve (deduplicate) entities
   progress("resolving", 0, 0);
-  const resolvedEntities = resolve(
-    allExtractedEntities,
-    config.entityResolutionThreshold,
-  );
+  const resolvedEntities = resolve(allExtractedEntities, {
+    threshold: config.entityResolutionThreshold,
+    moduleDepth: config.moduleDepth,
+  });
   logger.info("orchestrator: resolved", {
     entities: resolvedEntities.length,
   });
@@ -162,6 +167,7 @@ async function runPipeline(
   const resolvedRelations = resolveExtractedRelations(
     allExtractedRelations,
     resolvedEntities,
+    config.moduleDepth,
   );
 
   // 9. Build graph
@@ -172,6 +178,7 @@ async function runPipeline(
     relations: resolvedRelations,
     extractions,
     commits,
+    moduleDepth: config.moduleDepth,
   });
 
   // 10. Snapshot old communities (membership + summaries for reuse)
@@ -202,48 +209,51 @@ async function runPipeline(
   });
 
   // 12. Smart re-summarization: reuse summaries for unchanged communities
-  store.clearCommunities();
-
   const communitiesToSummarize: Community[] = [];
-  for (const c of communities) {
-    // Layer 1: exact match by content-based community ID
-    const oldSummary = oldSummaries.get(c.id);
-    if (oldSummary && oldSummary.summary) {
-      c.title = oldSummary.title;
-      c.summary = oldSummary.summary;
-      store.upsertCommunity(c);
-      continue;
-    }
 
-    // Layer 2: Jaccard fallback — find best-matching old community at same level
-    let bestMatch: { id: CommunityId; jaccard: number } | null = null;
-    for (const [oldId, oldMemberJson] of oldMembership) {
-      if (!oldId.startsWith(`comm:${c.level}:`)) continue;
-      const oldMembers: string[] = JSON.parse(oldMemberJson);
-      const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
-      if (jaccard > (bestMatch?.jaccard ?? 0)) {
-        bestMatch = { id: oldId, jaccard };
-      }
-    }
+  store.transaction(() => {
+    store.clearCommunities();
 
-    if (bestMatch && bestMatch.jaccard > 0.7) {
-      const old = oldSummaries.get(bestMatch.id);
-      if (old && old.summary) {
-        c.title = old.title;
-        c.summary = old.summary;
-        logger.debug("orchestrator: reusing summary via Jaccard match", {
-          communityId: c.id,
-          matchedId: bestMatch.id,
-          jaccard: bestMatch.jaccard.toFixed(2),
-        });
+    for (const c of communities) {
+      // Layer 1: exact match by content-based community ID
+      const oldSummary = oldSummaries.get(c.id);
+      if (oldSummary && oldSummary.summary) {
+        c.title = oldSummary.title;
+        c.summary = oldSummary.summary;
         store.upsertCommunity(c);
         continue;
       }
-    }
 
-    communitiesToSummarize.push(c);
-    store.upsertCommunity(c);
-  }
+      // Layer 2: Jaccard fallback — find best-matching old community at same level
+      let bestMatch: { id: CommunityId; jaccard: number } | null = null;
+      for (const [oldId, oldMemberJson] of oldMembership) {
+        if (!oldId.startsWith(`comm:${c.level}:`)) continue;
+        const oldMembers: string[] = JSON.parse(oldMemberJson);
+        const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
+        if (jaccard > (bestMatch?.jaccard ?? 0)) {
+          bestMatch = { id: oldId, jaccard };
+        }
+      }
+
+      if (bestMatch && bestMatch.jaccard > 0.7) {
+        const old = oldSummaries.get(bestMatch.id);
+        if (old && old.summary) {
+          c.title = old.title;
+          c.summary = old.summary;
+          logger.debug("orchestrator: reusing summary via Jaccard match", {
+            communityId: c.id,
+            matchedId: bestMatch.id,
+            jaccard: bestMatch.jaccard.toFixed(2),
+          });
+          store.upsertCommunity(c);
+          continue;
+        }
+      }
+
+      communitiesToSummarize.push(c);
+      store.upsertCommunity(c);
+    }
+  });
 
   const reusedCount = communities.length - communitiesToSummarize.length;
   if (reusedCount > 0) {
@@ -256,21 +266,31 @@ async function runPipeline(
   // Summarize only the changed/new communities
   let summarized = 0;
   if (communitiesToSummarize.length > 0) {
+    const summarizedCommunities: Community[] = [];
+
     for await (const { communityId, result } of summarizeBatch(
       communitiesToSummarize,
       allEntities,
       allRelations,
       client,
-      { concurrency: config.maxConcurrency },
+      { concurrency: config.maxConcurrency, tokenUsage },
     )) {
       const community = communities.find((c) => c.id === communityId);
       if (community) {
         community.title = result.title;
         community.summary = result.summary;
-        store.upsertCommunity(community);
+        summarizedCommunities.push(community);
         summarized++;
         progress("summarizing", summarized, communitiesToSummarize.length);
       }
+    }
+
+    if (summarizedCommunities.length > 0) {
+      store.transaction(() => {
+        for (const c of summarizedCommunities) {
+          store.upsertCommunity(c);
+        }
+      });
     }
   }
 
@@ -282,10 +302,30 @@ async function runPipeline(
     "head_at_index",
     await getHead(config.repoPath).catch(() => "unknown"),
   );
-  store.setMeta("last_extraction_input_tokens", String(tokenUsage.inputTokens));
-  store.setMeta("last_extraction_output_tokens", String(tokenUsage.outputTokens));
-  store.setMeta("last_extraction_requests", String(tokenUsage.requestCount));
-  store.setMeta("last_extraction_failures", String(tokenUsage.failedCount));
+  // Calculate actual cost from real token counts
+  const cost = calculateActualCost(
+    tokenUsage.inputTokens,
+    tokenUsage.outputTokens,
+    client.provider,
+    config.model,
+  );
+
+  logger.info("orchestrator: token usage and cost", {
+    inputTokens: tokenUsage.inputTokens,
+    outputTokens: tokenUsage.outputTokens,
+    requests: tokenUsage.requestCount,
+    failures: tokenUsage.failedCount,
+    costUsd: cost.costUsd.toFixed(4),
+    model: cost.model,
+  });
+
+  store.setMeta("last_input_tokens", String(tokenUsage.inputTokens));
+  store.setMeta("last_output_tokens", String(tokenUsage.outputTokens));
+  store.setMeta("last_requests", String(tokenUsage.requestCount));
+  store.setMeta("last_failures", String(tokenUsage.failedCount));
+  store.setMeta("last_cost_usd", cost.costUsd.toFixed(6));
+  store.setMeta("last_provider", cost.provider);
+  store.setMeta("last_model", cost.model);
 
   const finalStats = store.getStats();
 
@@ -295,6 +335,13 @@ async function runPipeline(
     relationsFound: finalStats.relations,
     communitiesFound: finalStats.communities,
     communitiesSummarized: summarized,
+    tokenUsage: {
+      inputTokens: tokenUsage.inputTokens,
+      outputTokens: tokenUsage.outputTokens,
+      requests: tokenUsage.requestCount,
+      failures: tokenUsage.failedCount,
+    },
+    actualCostUsd: cost.costUsd,
   };
 }
 
@@ -309,6 +356,7 @@ async function runPipeline(
 export function resolveExtractedRelations(
   extractedRelations: ExtractedRelation[],
   resolvedEntities: Entity[],
+  moduleDepth?: number,
 ): Relation[] {
   const entityByName = new Map<string, Entity>();
   for (const e of resolvedEntities) {
@@ -321,7 +369,7 @@ export function resolveExtractedRelations(
   function findEntity(name: string): Entity | undefined {
     return (
       entityByName.get(name.toLowerCase()) ??
-      entityByName.get(normalizeModulePath(name).toLowerCase())
+      entityByName.get(normalizeModulePath(name, moduleDepth).toLowerCase())
     );
   }
 

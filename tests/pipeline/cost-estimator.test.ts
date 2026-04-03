@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   estimateCost,
   estimateCommunityCount,
+  calculateActualCost,
 } from "../../src/pipeline/cost-estimator.js";
 import type { TextUnit } from "../../src/shared/types.js";
 
@@ -74,6 +75,50 @@ describe("estimateCost", () => {
     const cost = estimateCost([makeTextUnit("test")], 1, "ollama");
     expect(cost.estimatedCostUsd).toBeGreaterThan(0);
     expect(cost.provider).toBe("ollama");
+  });
+});
+
+describe("calculateActualCost", () => {
+  it("calculates cost from real token counts with known model", () => {
+    // Claude Sonnet: $3/1M input, $15/1M output
+    const result = calculateActualCost(100_000, 50_000, "anthropic", "claude-sonnet-4-20250514");
+    expect(result.costUsd).toBeCloseTo(0.3 + 0.75, 4); // 1.05
+    expect(result.model).toBe("claude-sonnet-4-20250514");
+    expect(result.provider).toBe("anthropic");
+  });
+
+  it("uses provider-level fallback for unknown model", () => {
+    const result = calculateActualCost(1_000_000, 500_000, "anthropic", "claude-unknown-model");
+    // Falls back to anthropic provider rate: $3/1M input, $15/1M output
+    expect(result.costUsd).toBeCloseTo(3.0 + 7.5, 4);
+  });
+
+  it("uses default model when none specified", () => {
+    const result = calculateActualCost(1_000_000, 0, "openai");
+    // Default openai model is gpt-4.1-mini: $0.4/1M input
+    expect(result.costUsd).toBeCloseTo(0.4, 4);
+    expect(result.model).toBe("gpt-4.1-mini");
+  });
+
+  it("returns zero cost for zero tokens", () => {
+    const result = calculateActualCost(0, 0, "anthropic");
+    expect(result.costUsd).toBe(0);
+  });
+
+  it("returns zero cost for unknown provider with no model", () => {
+    const result = calculateActualCost(1_000_000, 1_000_000, "ollama");
+    expect(result.costUsd).toBe(0);
+    expect(result.model).toBe("unknown");
+  });
+
+  it("Google Gemini Flash is cheapest among defaults", () => {
+    const tokens = { input: 500_000, output: 200_000 };
+    const anthropic = calculateActualCost(tokens.input, tokens.output, "anthropic");
+    const openai = calculateActualCost(tokens.input, tokens.output, "openai");
+    const google = calculateActualCost(tokens.input, tokens.output, "google");
+
+    expect(google.costUsd).toBeLessThan(openai.costUsd);
+    expect(openai.costUsd).toBeLessThan(anthropic.costUsd);
   });
 });
 

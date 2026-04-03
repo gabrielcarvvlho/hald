@@ -7,6 +7,7 @@ import type {
   Entity,
   Relation,
 } from "../shared/types.js";
+import type { TokenAccumulator } from "./extractor.js";
 import { logger } from "../shared/logger.js";
 
 // ================================================================
@@ -96,6 +97,11 @@ export interface SummaryResult {
   summary: string;
 }
 
+interface SummaryResultWithTokens extends SummaryResult {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 function parseSummaryXml(text: string): SummaryResult {
   const xml = extractXmlBlock(text, "community_summary");
   if (!xml) return { title: "", summary: text.trim() };
@@ -115,12 +121,12 @@ function parseSummaryXml(text: string): SummaryResult {
 // ================================================================
 
 /** Generate summary for a single community. */
-export async function summarize(
+async function summarize(
   community: Community,
   memberEntities: Entity[],
   memberRelations: Relation[],
   client: LLMClient,
-): Promise<SummaryResult> {
+): Promise<SummaryResultWithTokens> {
   const prompt = buildSummaryPrompt(community, memberEntities, memberRelations);
 
   const response = await client.extract(prompt, SYSTEM_PROMPT, {
@@ -134,7 +140,12 @@ export async function summarize(
     outputTokens: response.outputTokens,
   });
 
-  return parseSummaryXml(response.text);
+  const parsed = parseSummaryXml(response.text);
+  return {
+    ...parsed,
+    inputTokens: response.inputTokens,
+    outputTokens: response.outputTokens,
+  };
 }
 
 /** Summarize all communities with concurrency control. */
@@ -143,7 +154,7 @@ export async function* summarizeBatch(
   entities: Entity[],
   relations: Relation[],
   client: LLMClient,
-  options: { concurrency: number },
+  options: { concurrency: number; tokenUsage?: TokenAccumulator },
 ): AsyncIterable<{ communityId: CommunityId; result: SummaryResult }> {
   const limit = pLimit(options.concurrency);
 
@@ -168,12 +179,20 @@ export async function* summarizeBatch(
           memberRelations,
           client,
         );
+        if (options.tokenUsage) {
+          options.tokenUsage.inputTokens += result.inputTokens;
+          options.tokenUsage.outputTokens += result.outputTokens;
+          options.tokenUsage.requestCount++;
+        }
         return { communityId: community.id, result };
       } catch (err) {
         logger.error("summarizer: failed", {
           communityId: community.id,
           error: String(err),
         });
+        if (options.tokenUsage) {
+          options.tokenUsage.failedCount++;
+        }
         return {
           communityId: community.id,
           result: { title: "", summary: "" },

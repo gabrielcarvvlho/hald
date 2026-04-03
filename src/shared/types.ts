@@ -111,6 +111,8 @@ export interface GitOracleConfig {
   maxRetries: number;
 
   entityResolutionThreshold: number;
+  /** Module path normalization depth (number of segments to keep). Default: 2 */
+  moduleDepth?: number;
   leidenResolutions: number[];
   minCommunitySize: number;
 

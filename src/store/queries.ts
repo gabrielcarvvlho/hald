@@ -35,6 +35,11 @@ export class Store {
     this.db = db;
   }
 
+  /** Wrap multiple operations in a single SQLite transaction. */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
   // ================================================================
   // Entities
   // ================================================================
@@ -70,9 +75,45 @@ export class Store {
     return rows.map(toEntity);
   }
 
+  searchEntitiesRanked(
+    query: string,
+    limit = 10,
+  ): Array<{ entity: Entity; ftsRank: number }> {
+    const safe = sanitizeFtsQuery(query);
+    if (!safe) return [];
+    const rows = this.stmts.searchEntitiesRanked.all(safe, limit) as (EntityRow & {
+      fts_rank: number;
+    })[];
+    return rows.map((row) => ({
+      entity: toEntity(row),
+      ftsRank: row.fts_rank,
+    }));
+  }
+
   getAllEntities(): Entity[] {
     const rows = this.stmts.getAllEntities.all() as EntityRow[];
     return rows.map(toEntity);
+  }
+
+  /** Batch entity lookup. Returns a Map for O(1) per-ID access. */
+  getEntitiesByIds(ids: EntityId[]): Map<EntityId, Entity> {
+    if (ids.length === 0) return new Map();
+
+    const result = new Map<EntityId, Entity>();
+    const unique = [...new Set(ids)];
+
+    for (let i = 0; i < unique.length; i += 500) {
+      const chunk = unique.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = this.db
+        .prepare(`SELECT * FROM entities WHERE id IN (${placeholders})`)
+        .all(...chunk) as EntityRow[];
+      for (const row of rows) {
+        result.set(row.id, toEntity(row));
+      }
+    }
+
+    return result;
   }
 
   // ================================================================
@@ -127,6 +168,9 @@ export class Store {
       entityIds: JSON.stringify(textUnit.entityIds),
       relationIds: JSON.stringify(textUnit.relationIds),
     });
+    for (const entityId of textUnit.entityIds) {
+      this.stmts.insertTextUnitEntity.run(textUnit.id, entityId, entityId);
+    }
   }
 
   getTextUnit(id: TextUnitId): TextUnit | null {
@@ -155,6 +199,10 @@ export class Store {
       parentId: community.parentId ?? null,
       childIds: JSON.stringify(community.childIds),
     });
+    this.stmts.deleteCommunityEntities.run(community.id);
+    for (const entityId of community.entityIds) {
+      this.stmts.insertCommunityEntity.run(community.id, entityId, entityId);
+    }
   }
 
   getCommunity(id: CommunityId): Community | null {
@@ -331,6 +379,14 @@ function prepareStatements(db: Database.Database) {
       ORDER BY rank
       LIMIT ?
     `),
+    searchEntitiesRanked: db.prepare(`
+      SELECT entities.*, bm25(entities_fts, 10.0, 5.0, 1.0) AS fts_rank
+      FROM entities_fts
+      JOIN entities ON entities.rowid = entities_fts.rowid
+      WHERE entities_fts MATCH ?
+      ORDER BY fts_rank
+      LIMIT ?
+    `),
 
     // --- Relations ---
     upsertRelation: db.prepare(`
@@ -403,14 +459,27 @@ function prepareStatements(db: Database.Database) {
     ),
     getMeta: db.prepare("SELECT * FROM index_meta WHERE key = ?"),
 
+    // --- Junction table operations ---
+    insertTextUnitEntity: db.prepare(
+      "INSERT OR IGNORE INTO text_unit_entities(text_unit_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)"
+    ),
+    deleteCommunityEntities: db.prepare(
+      "DELETE FROM community_entities WHERE community_id = ?"
+    ),
+    insertCommunityEntity: db.prepare(
+      "INSERT OR IGNORE INTO community_entities(community_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)"
+    ),
+
     // --- Query helpers ---
     textUnitsForEntity: db.prepare(`
-      SELECT DISTINCT t.* FROM text_units t, json_each(t.entity_ids) je
-      WHERE je.value = ?
+      SELECT t.* FROM text_unit_entities tue
+      JOIN text_units t ON t.id = tue.text_unit_id
+      WHERE tue.entity_id = ?
     `),
     communitiesForEntity: db.prepare(`
-      SELECT DISTINCT c.* FROM communities c, json_each(c.entity_ids) je
-      WHERE je.value = ?
+      SELECT c.* FROM community_entities ce
+      JOIN communities c ON c.id = ce.community_id
+      WHERE ce.entity_id = ?
     `),
     findModulesByPath: db.prepare(`
       SELECT * FROM entities
@@ -428,16 +497,40 @@ function prepareStatements(db: Database.Database) {
 
 /**
  * Sanitize user input for FTS5 MATCH queries.
- * Strips stop words (conversational filler), splits on non-alphanumeric chars,
- * and wraps each token in quotes to avoid FTS5 syntax errors.
+ *
+ * Improvements over naive tokenization:
+ * - Splits camelCase/PascalCase ("PaymentGateway" → ["Payment", "Gateway"])
+ * - Prefix matching for short tokens (< 6 chars) to handle abbreviations
+ * - Stop word removal for conversational filler
  */
 function sanitizeFtsQuery(query: string): string | null {
-  const tokens = query
+  let tokens = query
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((t) => t.length > 0)
+    .filter((t) => t.length > 0);
+
+  // Split camelCase/PascalCase: "PaymentGateway" → ["PaymentGateway", "Payment", "Gateway"]
+  // Keep original alongside splits so "gRPC" → ["gRPC", "g", "RPC"] → after filter → ["gRPC", "RPC"]
+  tokens = [
+    ...new Set(
+      tokens.flatMap((t) => {
+        const parts = t.split(
+          /(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/,
+        );
+        return parts.length > 1 ? [t, ...parts] : parts;
+      }),
+    ),
+  ];
+
+  tokens = tokens
+    .filter((t) => t.length > 1)
     .filter((t) => !STOP_WORDS.has(t.toLowerCase()));
+
   if (tokens.length === 0) return null;
-  return tokens.map((t) => `"${t}"`).join(" OR ");
+
+  // Short tokens get prefix matching (auth → auth*), longer ones get exact match
+  return tokens
+    .map((t) => (t.length < 6 ? `${t}*` : `"${t}"`))
+    .join(" OR ");
 }
 
 const STOP_WORDS = new Set([

@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../shared/logger.js";
-import { initSchema } from "./schema.js";
+import { initSchema, runMigrations } from "./schema.js";
 
 /**
  * Opens (or creates) the SQLite database and initializes the schema.
@@ -28,6 +28,7 @@ export function openDatabase(storagePath: string): Database.Database {
   db.pragma("foreign_keys = ON");
 
   initSchema(db);
+  runMigrations(db);
 
   return db;
 }

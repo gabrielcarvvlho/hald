@@ -1,5 +1,7 @@
 import type { LLMClient, LLMRequestOptions, LLMResponse } from "./types.js";
-import { logger } from "../shared/logger.js";
+import { withRetry } from "./retry.js";
+
+const REQUEST_TIMEOUT_MS = 120_000;
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
@@ -33,51 +35,46 @@ export class GoogleClient implements LLMClient {
   ): Promise<LLMResponse> {
     const client = await this.getClient();
 
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      try {
-        const response = await client.models.generateContent({
-          model: this.model,
-          contents: prompt,
-          config: {
-            systemInstruction: systemPrompt,
-            temperature: options?.temperature ?? 0,
-            maxOutputTokens: options?.maxTokens ?? 4096,
-          },
-        });
+    return withRetry(
+      async () => {
+        // Google SDK has no constructor-level timeout — use AbortController
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          REQUEST_TIMEOUT_MS,
+        );
 
-        const finishReason = response.candidates?.[0]?.finishReason;
-        return {
-          text: response.text ?? "",
-          inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
-          outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
-          model: this.model,
-          stopReason:
-            finishReason === "STOP"
-              ? "end_turn"
-              : finishReason === "MAX_TOKENS"
-                ? "max_tokens"
-                : finishReason?.toLowerCase() ?? "unknown",
-        };
-      } catch (error: unknown) {
-        const status = (error as { status?: number }).status;
-        if (attempt < this.maxRetries && (status === 429 || (status && status >= 500))) {
-          const baseDelay = Math.pow(2, attempt) * 1000;
-          const delay = baseDelay + Math.random() * baseDelay * 0.5;
-          logger.warn(
-            `Google API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${Math.round(delay)}ms`,
-            { status, error: String(error) },
-          );
-          await sleep(delay);
-          continue;
+        try {
+          const response = await client.models.generateContent({
+            model: this.model,
+            contents: prompt,
+            config: {
+              systemInstruction: systemPrompt,
+              temperature: options?.temperature ?? 0,
+              maxOutputTokens: options?.maxTokens ?? 4096,
+              abortSignal: controller.signal,
+            },
+          });
+
+          const finishReason = response.candidates?.[0]?.finishReason;
+          return {
+            text: response.text ?? "",
+            inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
+            outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+            model: this.model,
+            stopReason:
+              finishReason === "STOP"
+                ? "end_turn"
+                : finishReason === "MAX_TOKENS"
+                  ? "max_tokens"
+                  : finishReason?.toLowerCase() ?? "unknown",
+          };
+        } finally {
+          clearTimeout(timeoutId);
         }
-        throw error;
-      }
-    }
-
-    throw new Error("Exhausted retries");
+      },
+      this.maxRetries,
+      "Google API",
+    );
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

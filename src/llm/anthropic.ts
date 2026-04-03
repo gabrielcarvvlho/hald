@@ -1,5 +1,5 @@
 import type { LLMClient, LLMRequestOptions, LLMResponse } from "./types.js";
-import { logger } from "../shared/logger.js";
+import { withRetry } from "./retry.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 
@@ -29,6 +29,8 @@ export class AnthropicClient implements LLMClient {
       const Anthropic = (await import("@anthropic-ai/sdk")).default;
       this.sdk = new Anthropic({
         apiKey: this.apiKey,
+        maxRetries: 0, // We manage retries ourselves — prevent double-retry amplification
+        timeout: 120_000,
         ...(this.baseUrl && { baseURL: this.baseUrl }),
       });
     }
@@ -42,8 +44,8 @@ export class AnthropicClient implements LLMClient {
   ): Promise<LLMResponse> {
     const client = await this.getClient();
 
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      try {
+    return withRetry(
+      async () => {
         const response = await client.messages.create({
           model: this.model,
           max_tokens: options?.maxTokens ?? 4096,
@@ -64,26 +66,9 @@ export class AnthropicClient implements LLMClient {
           model: response.model,
           stopReason: response.stop_reason ?? "unknown",
         };
-      } catch (error: unknown) {
-        const status = (error as { status?: number }).status;
-        if (attempt < this.maxRetries && (status === 429 || (status && status >= 500))) {
-          const baseDelay = Math.pow(2, attempt) * 1000;
-          const delay = baseDelay + Math.random() * baseDelay * 0.5;
-          logger.warn(
-            `Anthropic API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${Math.round(delay)}ms`,
-            { status, error: String(error) },
-          );
-          await sleep(delay);
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    throw new Error("Exhausted retries");
+      },
+      this.maxRetries,
+      "Anthropic API",
+    );
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "git-oracle": {
+      "command": "sh",
+      "args": ["${CURSOR_PLUGIN_ROOT}/bin/start-server.sh"],
+      "env": {
+        "GIT_ORACLE_REPO": "${projectRoot}",
+        "ANTHROPIC_API_KEY": "${env:ANTHROPIC_API_KEY}",
+        "OPENAI_API_KEY": "${env:OPENAI_API_KEY}",
+        "GOOGLE_API_KEY": "${env:GOOGLE_API_KEY}",
+        "GEMINI_API_KEY": "${env:GEMINI_API_KEY}",
+        "GIT_ORACLE_BASE_URL": "${env:GIT_ORACLE_BASE_URL}"
+      }
+    }
+  }
+}

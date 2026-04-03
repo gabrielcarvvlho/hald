@@ -64,21 +64,31 @@ export function globalSearch(
  */
 export function classifyQuery(question: string): "local" | "global" {
   const localPatterns = [
-    /who (knows|owns|maintains|wrote|created|built)/i,
+    /who (knows|owns|maintains|wrote|created|built|works on|is responsible)/i,
+    /who (has been|is|was) (working|contributing|committing)/i,
+    /which (people|developers|engineers|contributors|authors)/i,
     /find.*(expert|owner|author|maintainer)/i,
     /what (does|is) (the|this) .* (module|file|component|service)/i,
     /show.*(coupling|dependencies|imports)/i,
+    /when (did|was|were) .* (added?|created?|introduced?|removed?|changed?)/i,
+    /where is/i,
     /blame/i,
   ];
 
   const globalPatterns = [
     /why did (we|the team|they)/i,
+    /what('s| is| was| were) the .*(strategy|approach|philosophy|policy|convention)/i,
     /what (was|were) the (reason|decision|motivation)/i,
     /how did .* (evolve|change|migrate|grow)/i,
+    /how (does|do|is|are) .* (organized|structured|laid out)/i,
     /history of/i,
     /overview of/i,
-    /tell me about the (architecture|codebase|system)/i,
-    /what are the (main|key|major) (components|modules|areas|patterns)/i,
+    /summarize|summary of|describe the/i,
+    /tell me about the (architecture|codebase|system|project|repo)/i,
+    /what are the (main|key|major|primary) /i,
+    /what(?:'s| is| are)? (?:the |our )?(technologies|tech|tools|stack|frameworks|languages)/i,
+    /what patterns/i,
+    /big picture|bird.?s?.?eye|high.?level/i,
   ];
 
   for (const pattern of localPatterns) {

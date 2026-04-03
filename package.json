@@ -24,9 +24,11 @@
   "license": "MIT",
   "files": [
     "dist",
+    "bin",
     "skills",
     "hooks",
     ".claude-plugin",
+    ".cursor",
     ".cursor-plugin",
     ".opencode",
     ".codex",

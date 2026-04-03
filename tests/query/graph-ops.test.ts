@@ -7,6 +7,7 @@ import {
   getCoupling,
   getPath,
   getEntity,
+  findKnowledgeSilos,
 } from "../../src/query/graph-ops.js";
 
 describe("graph-ops", () => {
@@ -137,6 +138,99 @@ describe("graph-ops", () => {
       );
       expect(result).not.toBeNull();
       expect(result!.length).toBe(0);
+    });
+  });
+
+  describe("findKnowledgeSilos", () => {
+    it("identifies modules with only one active expert as silos", () => {
+      // With a very large inactiveDays, all authors are "active"
+      // billing has only Bob (AUTHORED), payments has Alice + Bob → not a silo
+      const results = findKnowledgeSilos(store, {
+        minFrequency: 1,
+        inactiveDays: 100_000,
+      });
+
+      const billingResult = results.find(
+        (r) => r.module.name === "src/billing",
+      );
+      expect(billingResult).toBeDefined();
+      expect(billingResult!.activeExpertCount).toBe(1);
+      expect(billingResult!.soloExpert?.name).toBe("Bob Martinez");
+
+      // payments has 2 experts (Alice AUTHORED + Bob MODIFIED) → not in results
+      const paymentsResult = results.find(
+        (r) => r.module.name === "src/payments",
+      );
+      expect(paymentsResult).toBeUndefined();
+    });
+
+    it("identifies orphaned modules when all authors are inactive", () => {
+      // With inactiveDays=0, no one is "active" anymore (sample data is from 2024)
+      const results = findKnowledgeSilos(store, {
+        minFrequency: 1,
+        inactiveDays: 0,
+      });
+
+      const orphaned = results.filter((r) => r.activeExpertCount === 0);
+      // All modules with authors should be orphaned since dates are in the past
+      expect(orphaned.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("filters out low-frequency modules", () => {
+      const results = findKnowledgeSilos(store, {
+        minFrequency: 100,
+        inactiveDays: 100_000,
+      });
+
+      // No module has frequency >= 100 in sample data
+      expect(results).toHaveLength(0);
+    });
+
+    it("sorts orphaned modules before silos", () => {
+      // Compute a dynamic inactiveDays so that middleware (Alice lastSeen 2024-05-01)
+      // becomes orphaned, but billing (Bob lastSeen 2024-05-20) stays a silo.
+      // The midpoint between the two dates ensures stability regardless of when the test runs.
+      const now = new Date();
+      const daysSinceMiddlewareAuthor =
+        (now.getTime() - new Date("2024-05-01").getTime()) / 86_400_000;
+      const daysSinceBillingAuthor =
+        (now.getTime() - new Date("2024-05-20").getTime()) / 86_400_000;
+      const inactiveDays = Math.floor(
+        (daysSinceMiddlewareAuthor + daysSinceBillingAuthor) / 2,
+      );
+
+      const results = findKnowledgeSilos(store, {
+        minFrequency: 1,
+        inactiveDays,
+      });
+
+      const orphaned = results.filter((r) => r.activeExpertCount === 0);
+      const silos = results.filter((r) => r.activeExpertCount === 1);
+
+      expect(orphaned.length).toBeGreaterThanOrEqual(1);
+      expect(silos.length).toBeGreaterThanOrEqual(1);
+
+      // Orphaned (0) must all appear before silos (1)
+      const firstSiloIdx = results.findIndex(
+        (r) => r.activeExpertCount === 1,
+      );
+      for (let i = 0; i < firstSiloIdx; i++) {
+        expect(results[i]!.activeExpertCount).toBe(0);
+      }
+    });
+
+    it("includes middleware as a silo (only Alice authored it)", () => {
+      const results = findKnowledgeSilos(store, {
+        minFrequency: 1,
+        inactiveDays: 100_000,
+      });
+
+      const middlewareResult = results.find(
+        (r) => r.module.name === "src/middleware",
+      );
+      expect(middlewareResult).toBeDefined();
+      expect(middlewareResult!.activeExpertCount).toBe(1);
+      expect(middlewareResult!.soloExpert?.name).toBe("Alice Chen");
     });
   });
 
