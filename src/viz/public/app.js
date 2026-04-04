@@ -119,7 +119,7 @@ function buildGraph(data) {
     try {
       graph.addEdge(edge.source, edge.target, {
         size: 0.5 + Math.min(3, Math.log(edge.weight + 1)),
-        color: isCross ? "rgba(203,213,225,0.3)" : "rgba(203,213,225,0.6)",
+        color: isCross ? "rgba(148,163,184,0.45)" : "rgba(100,116,139,0.55)",
         edgeType: edge.type,
       });
     } catch (e) {
@@ -143,7 +143,7 @@ function createRenderer() {
   const container = document.getElementById("graph-container");
   const renderer = new Sigma(state.graph, container, {
     defaultNodeColor: "#94a3b8",
-    defaultEdgeColor: "rgba(203,213,225,0.5)",
+    defaultEdgeColor: "rgba(100,116,139,0.5)",
     labelFont: "system-ui, sans-serif",
     labelColor: { color: "#1e293b" },
     labelSize: 12,
