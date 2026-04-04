@@ -301,6 +301,49 @@ program
   });
 
 // ================================================================
+// graph
+// ================================================================
+
+program
+  .command("graph")
+  .description("Open an interactive graph visualization in the browser")
+  .option("--port <number>", "HTTP server port", (v) => parseInt(v, 10), 3742)
+  .option("--no-open", "Don't auto-open the browser")
+  .action(async (opts) => {
+    try {
+      const config = loadConfig();
+
+      let db;
+      try {
+        db = openDatabase(config.storagePath);
+      } catch {
+        console.error("No index found. Run `git-oracle index` first.");
+        process.exit(1);
+      }
+
+      const store = new Store(db);
+      const stats = store.getStats();
+      if (stats.entities === 0) {
+        console.error("No entities found. Run `git-oracle index` first.");
+        store.close();
+        process.exit(1);
+      }
+
+      const { startVizServer } = await import("./viz/server.js");
+      await startVizServer({
+        store,
+        port: opts.port,
+        open: opts.open,
+      });
+    } catch (err) {
+      console.error(
+        `\nGraph viewer failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      process.exit(1);
+    }
+  });
+
+// ================================================================
 // serve
 // ================================================================
 

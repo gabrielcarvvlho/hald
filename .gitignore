@@ -24,3 +24,6 @@ coverage/
 
 # Progress tracking (local only)
 progress/
+
+# Superpowers brainstorm artifacts
+.superpowers/
