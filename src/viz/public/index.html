@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Git Oracle — Graph Viewer</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header id="header">
+    <div class="header-left">
+      <span class="logo">&#9678; Git Oracle</span>
+    </div>
+    <div class="header-right">
+      <span id="stats-text" class="stats-text">Loading...</span>
+    </div>
+  </header>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <div class="search-wrapper">
+      <input type="text" id="search-input" placeholder="Search entities..." autocomplete="off" />
+    </div>
+    <div id="filter-chips" class="filter-chips">
+      <button class="filter-chip active" data-type="PERSON" style="--chip-color: #3b82f6">Person</button>
+      <button class="filter-chip active" data-type="MODULE" style="--chip-color: #10b981">Module</button>
+      <button class="filter-chip active" data-type="TECHNOLOGY" style="--chip-color: #f59e0b">Technology</button>
+      <button class="filter-chip active" data-type="DECISION" style="--chip-color: #8b5cf6">Decision</button>
+      <button class="filter-chip active" data-type="PATTERN" style="--chip-color: #ec4899">Pattern</button>
+    </div>
+  </div>
+
+  <!-- Graph -->
+  <div id="graph-container">
+    <div id="loading">Loading graph...</div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <button id="sidebar-close">&times;</button>
+    <div id="sidebar-content"></div>
+  </aside>
+
+  <!-- Dependencies: graphology first (peer dep), then sigma -->
+  <script src="https://unpkg.com/graphology@0.25.4/dist/graphology.umd.min.js"></script>
+  <script src="https://unpkg.com/sigma@3/dist/sigma.min.js"></script>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

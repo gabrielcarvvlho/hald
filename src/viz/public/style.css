@@ -1,0 +1,371 @@
+/* ================================================================
+   Reset & Base
+   ================================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #f8fafc;
+  color: #1e293b;
+  overflow: hidden;
+}
+
+/* ================================================================
+   Header
+   ================================================================ */
+
+#header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 20;
+  position: relative;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.stats-text {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ================================================================
+   Toolbar
+   ================================================================ */
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 20;
+  position: relative;
+}
+
+.search-wrapper {
+  flex-shrink: 0;
+}
+
+#search-input {
+  width: 220px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #f8fafc;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+#search-input:focus {
+  border-color: #3b82f6;
+  background: #fff;
+}
+
+#search-input::placeholder {
+  color: #94a3b8;
+}
+
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1.5px solid var(--chip-color);
+  background: var(--chip-color);
+  color: #fff;
+  user-select: none;
+  line-height: 1.4;
+}
+
+.filter-chip:not(.active) {
+  background: transparent;
+  color: var(--chip-color);
+  opacity: 0.55;
+}
+
+.filter-chip:hover {
+  opacity: 1;
+}
+
+/* ================================================================
+   Graph Container
+   ================================================================ */
+
+#graph-container {
+  position: absolute;
+  top: 92px; /* 48 header + 44 toolbar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f8fafc;
+}
+
+#loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #94a3b8;
+  font-size: 15px;
+}
+
+#loading.error {
+  color: #ef4444;
+}
+
+/* ================================================================
+   Sidebar
+   ================================================================ */
+
+#sidebar {
+  position: fixed;
+  top: 92px;
+  right: 0;
+  width: 360px;
+  height: calc(100vh - 92px);
+  background: #fff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  z-index: 15;
+  padding: 20px;
+}
+
+#sidebar.open {
+  transform: translateX(0);
+}
+
+#sidebar-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 6px;
+  font-size: 18px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+#sidebar-close:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* Sidebar content */
+
+.entity-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 2px;
+  padding-right: 32px;
+}
+
+.entity-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.entity-description {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Relations list */
+
+.relation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-size: 13px;
+}
+
+.relation-item:hover {
+  background: #f1f5f9;
+}
+
+.relation-arrow {
+  color: #94a3b8;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.relation-name {
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-type {
+  font-size: 11px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.relation-weight {
+  font-size: 10px;
+  color: #cbd5e1;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Community in sidebar */
+
+.community-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.community-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.community-info {
+  flex: 1;
+}
+
+.community-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.community-summary {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Commits in sidebar */
+
+.commit-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 0;
+}
+
+.commit-hash {
+  font-family: ui-monospace, "SF Mono", monospace;
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.commit-message {
+  color: #475569;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-date {
+  color: #cbd5e1;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+/* Entity timestamps at bottom */
+
+.entity-timestamps {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ================================================================
+   Empty State
+   ================================================================ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #94a3b8;
+  gap: 8px;
+}
+
+.empty-state-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.empty-state-text {
+  font-size: 13px;
+}
