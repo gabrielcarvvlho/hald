@@ -283,6 +283,10 @@ export async function finalizeSession(): Promise<IndexResult> {
       allRelations,
       config.communityResolutions,
       config.minCommunitySize,
+      {
+        parentLinkThreshold: config.parentLinkThreshold,
+        splitWarningThreshold: config.splitWarningThreshold,
+      },
     );
 
     // Store communities (without summaries — agent-mediated skips summarization)

@@ -203,6 +203,10 @@ async function runPipeline(
     allRelations,
     config.communityResolutions,
     config.minCommunitySize,
+    {
+      parentLinkThreshold: config.parentLinkThreshold,
+      splitWarningThreshold: config.splitWarningThreshold,
+    },
   );
   logger.info("orchestrator: clustered", {
     communities: communities.length,
@@ -236,7 +240,8 @@ async function runPipeline(
         }
       }
 
-      if (bestMatch && bestMatch.jaccard > 0.7) {
+      // Reuse summary if community membership is sufficiently similar (lower = fewer LLM calls but staler summaries)
+      if (bestMatch && bestMatch.jaccard > config.summaryReuseThreshold) {
         const old = oldSummaries.get(bestMatch.id);
         if (old && old.summary) {
           c.title = old.title;

@@ -14,6 +14,9 @@ const defaults: GitOracleConfig = {
   entityResolutionThreshold: 0.85,
   communityResolutions: [0.5, 1.0, 2.0],
   minCommunitySize: 3,
+  parentLinkThreshold: 0.3,
+  splitWarningThreshold: 0.7,
+  summaryReuseThreshold: 0.7,
   storagePath: ".git-oracle",
 };
 

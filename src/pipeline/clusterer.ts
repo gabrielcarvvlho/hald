@@ -59,6 +59,7 @@ export function cluster(
   relations: Relation[],
   resolutions: number[],
   minCommunitySize: number,
+  options?: { parentLinkThreshold?: number; splitWarningThreshold?: number },
 ): Community[] {
   if (entities.length === 0) return [];
 
@@ -161,7 +162,7 @@ export function cluster(
   }
 
   // Link parent/child across levels
-  linkHierarchy(allCommunities);
+  linkHierarchy(allCommunities, options?.parentLinkThreshold ?? 0.3, options?.splitWarningThreshold ?? 0.7);
 
   end();
   logger.info("clusterer: done", {
@@ -231,7 +232,7 @@ export function jaccardSimilarity(a: string[], b: string[]): number {
 // Hierarchy linking
 // ================================================================
 
-function linkHierarchy(communities: Community[]): void {
+function linkHierarchy(communities: Community[], parentLinkThreshold: number, splitWarningThreshold: number): void {
   // Group by level
   const byLevel = new Map<number, Community[]>();
   for (const c of communities) {
@@ -266,11 +267,11 @@ function linkHierarchy(communities: Community[]): void {
 
       const overlapRatio = bestOverlap / child.entityIds.length;
 
-      if (bestParent && overlapRatio > 0.3) {
+      if (bestParent && overlapRatio > parentLinkThreshold) {
         child.parentId = bestParent.id;
         bestParent.childIds.push(child.id);
 
-        if (overlapRatio < 0.7) {
+        if (overlapRatio < splitWarningThreshold) {
           logger.debug("clusterer: split community", {
             child: child.id,
             parent: bestParent.id,

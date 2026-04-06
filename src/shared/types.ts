@@ -115,6 +115,12 @@ export interface GitOracleConfig {
   moduleDepth?: number;
   communityResolutions: number[];
   minCommunitySize: number;
+  /** Min Jaccard overlap to link a child community to a parent. Default: 0.3 */
+  parentLinkThreshold: number;
+  /** Jaccard overlap below which a split warning is logged. Default: 0.7 */
+  splitWarningThreshold: number;
+  /** Min Jaccard similarity to reuse an existing community summary. Default: 0.7 */
+  summaryReuseThreshold: number;
 
   storagePath: string;
 }
