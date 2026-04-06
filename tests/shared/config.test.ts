@@ -151,4 +151,62 @@ describe("loadConfig", () => {
       expect(config.commitsPerChunk).toBe(10);
     });
   });
+
+  describe("config validation", () => {
+    it("rejects maxChunkTokens < 100", () => {
+      expect(() => loadConfig({ maxChunkTokens: 50 })).toThrow(
+        "maxChunkTokens must be >= 100",
+      );
+    });
+
+    it("rejects maxConcurrency < 1", () => {
+      expect(() => loadConfig({ maxConcurrency: 0 })).toThrow(
+        "maxConcurrency must be >= 1",
+      );
+    });
+
+    it("rejects minCommunitySize < 1", () => {
+      expect(() => loadConfig({ minCommunitySize: 0 })).toThrow(
+        "minCommunitySize must be >= 1",
+      );
+    });
+
+    it("rejects entityResolutionThreshold out of [0, 1]", () => {
+      expect(() =>
+        loadConfig({ entityResolutionThreshold: -0.1 }),
+      ).toThrow("entityResolutionThreshold must be between 0 and 1");
+
+      expect(() =>
+        loadConfig({ entityResolutionThreshold: 1.5 }),
+      ).toThrow("entityResolutionThreshold must be between 0 and 1");
+    });
+
+    it("rejects empty leidenResolutions", () => {
+      expect(() => loadConfig({ leidenResolutions: [] })).toThrow(
+        "At least one community resolution is required",
+      );
+    });
+
+    it("rejects negative maxRetries", () => {
+      expect(() => loadConfig({ maxRetries: -1 })).toThrow(
+        "maxRetries must be >= 0",
+      );
+    });
+
+    it("accepts valid edge-case values", () => {
+      expect(() =>
+        loadConfig({
+          maxChunkTokens: 100,
+          maxConcurrency: 1,
+          minCommunitySize: 1,
+          entityResolutionThreshold: 0,
+          maxRetries: 0,
+        }),
+      ).not.toThrow();
+
+      expect(() =>
+        loadConfig({ entityResolutionThreshold: 1 }),
+      ).not.toThrow();
+    });
+  });
 });

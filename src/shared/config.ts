@@ -52,7 +52,31 @@ export function loadConfig(
   config.repoPath = resolve(config.repoPath);
   config.storagePath = resolve(config.repoPath, config.storagePath);
 
+  // 7. Validate
+  validateConfig(config);
+
   return config;
+}
+
+function validateConfig(config: GitOracleConfig): void {
+  if (config.maxChunkTokens < 100) {
+    throw new Error("maxChunkTokens must be >= 100");
+  }
+  if (config.maxConcurrency < 1) {
+    throw new Error("maxConcurrency must be >= 1");
+  }
+  if (config.minCommunitySize < 1) {
+    throw new Error("minCommunitySize must be >= 1");
+  }
+  if (config.entityResolutionThreshold < 0 || config.entityResolutionThreshold > 1) {
+    throw new Error("entityResolutionThreshold must be between 0 and 1");
+  }
+  if (!config.leidenResolutions?.length) {
+    throw new Error("At least one community resolution is required");
+  }
+  if (config.maxRetries < 0) {
+    throw new Error("maxRetries must be >= 0");
+  }
 }
 
 function applyEnvOverrides(config: GitOracleConfig): void {
