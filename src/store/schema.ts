@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import { logger } from "../shared/logger.js";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function initSchema(db: Database.Database): void {
   db.exec(`
@@ -226,6 +226,16 @@ const MIGRATIONS: Migration[] = [
           SELECT c.id, je.value
           FROM communities c, json_each(c.entity_ids) je
           WHERE je.value IN (SELECT id FROM entities);
+      `);
+    },
+  },
+  {
+    version: 3,
+    description: "Add composite indexes for relation lookups by entity + type",
+    up: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_relations_source_type ON relations(source_id, type);
+        CREATE INDEX IF NOT EXISTS idx_relations_target_type ON relations(target_id, type);
       `);
     },
   },

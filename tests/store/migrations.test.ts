@@ -30,7 +30,7 @@ describe("Migration framework", () => {
 
     runMigrations(db);
 
-    expect(getVersion(db)).toBe(2);
+    expect(getVersion(db)).toBe(3);
     expect(tableExists(db, "text_unit_entities")).toBe(true);
     expect(tableExists(db, "community_entities")).toBe(true);
     db.close();
@@ -89,6 +89,20 @@ describe("Migration framework", () => {
     ).all();
     expect(ceRows).toHaveLength(2);
 
+    db.close();
+  });
+
+  it("creates composite indexes on relations in v3 migration", () => {
+    const db = createV1Database();
+    runMigrations(db);
+
+    const indexes = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='relations'"
+    ).all() as { name: string }[];
+    const indexNames = indexes.map((i) => i.name);
+
+    expect(indexNames).toContain("idx_relations_source_type");
+    expect(indexNames).toContain("idx_relations_target_type");
     db.close();
   });
 
