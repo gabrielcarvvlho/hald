@@ -95,6 +95,9 @@ program
       const textUnits = chunk(commits, {
         commitsPerChunk: config.commitsPerChunk,
         maxChunkTokens: config.maxChunkTokens,
+        maxDiffLines: config.maxDiffLines,
+        maxFilesShown: config.maxFilesShown,
+        maxMessageChars: config.maxMessageChars,
       });
 
       // Step 3: Show cost estimate

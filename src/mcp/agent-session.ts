@@ -117,6 +117,9 @@ export async function startAgentSession(options: {
   const textUnits = chunk(commits, {
     commitsPerChunk: config.commitsPerChunk,
     maxChunkTokens: config.maxChunkTokens,
+    maxDiffLines: config.maxDiffLines,
+    maxFilesShown: config.maxFilesShown,
+    maxMessageChars: config.maxMessageChars,
   });
 
   if (textUnits.length > MAX_CHUNKS) {

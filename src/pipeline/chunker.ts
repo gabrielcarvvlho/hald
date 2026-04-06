@@ -5,21 +5,21 @@ import type { CommitData, FileChange, TextUnit } from "../shared/types.js";
 // Constants
 // ================================================================
 
-/** Max diff lines per file before truncation. */
-const MAX_DIFF_LINES = 50;
-
-/** Max files listed per commit before truncation. */
-const MAX_FILES_SHOWN = 20;
-
-/** Max commit message characters before truncation. */
-const MAX_MESSAGE_CHARS = 500;
-
 /** How many positions around the target split point to search for natural boundaries. */
 const BOUNDARY_SEARCH_RADIUS = 2;
 
 export interface ChunkerOptions {
   commitsPerChunk: number;
   maxChunkTokens: number;
+  maxDiffLines?: number;
+  maxFilesShown?: number;
+  maxMessageChars?: number;
+}
+
+interface RenderLimits {
+  maxDiffLines: number;
+  maxFilesShown: number;
+  maxMessageChars: number;
 }
 
 /**
@@ -39,6 +39,11 @@ export function chunk(
   options: ChunkerOptions,
 ): TextUnit[] {
   const { commitsPerChunk, maxChunkTokens } = options;
+  const limits: RenderLimits = {
+    maxDiffLines: options.maxDiffLines ?? 50,
+    maxFilesShown: options.maxFilesShown ?? 20,
+    maxMessageChars: options.maxMessageChars ?? 500,
+  };
   const textUnits: TextUnit[] = [];
 
   const prepared = deflateMergeCommits(commits);
@@ -46,11 +51,11 @@ export function chunk(
 
   let start = 0;
   for (const end of boundaries) {
-    splitAndCreate(prepared.slice(start, end), maxChunkTokens, textUnits);
+    splitAndCreate(prepared.slice(start, end), maxChunkTokens, limits, textUnits);
     start = end;
   }
   if (start < prepared.length) {
-    splitAndCreate(prepared.slice(start), maxChunkTokens, textUnits);
+    splitAndCreate(prepared.slice(start), maxChunkTokens, limits, textUnits);
   }
 
   return textUnits;
@@ -149,9 +154,10 @@ function deflateMergeCommits(commits: CommitData[]): CommitData[] {
 function splitAndCreate(
   commits: CommitData[],
   maxTokens: number,
+  limits: RenderLimits,
   out: TextUnit[],
 ): void {
-  const content = renderTextUnit(commits);
+  const content = renderTextUnit(commits, limits);
   const tokens = estimateTokens(content);
 
   if (tokens <= maxTokens || commits.length <= 1) {
@@ -161,28 +167,26 @@ function splitAndCreate(
 
   // Split in half and recurse
   const mid = Math.ceil(commits.length / 2);
-  splitAndCreate(commits.slice(0, mid), maxTokens, out);
-  splitAndCreate(commits.slice(mid), maxTokens, out);
+  splitAndCreate(commits.slice(0, mid), maxTokens, limits, out);
+  splitAndCreate(commits.slice(mid), maxTokens, limits, out);
 }
 
 // ================================================================
 // Rendering
 // ================================================================
 
-function renderTextUnit(commits: CommitData[]): string {
+function renderTextUnit(commits: CommitData[], limits: RenderLimits): string {
   const lines: string[] = [];
 
   for (const commit of commits) {
-    // Compact header: hash, date, author name (no email — LLM ignores it)
     lines.push(
       `[${commit.hash.slice(0, 7)}] ${extractDate(commit.date)} ${commit.authorName}`,
     );
 
-    // Truncate long commit messages (e.g. release notes, squash merge bodies)
-    lines.push(truncateMessage(commit.message));
+    lines.push(truncateMessage(commit.message, limits.maxMessageChars));
 
     if (commit.filesChanged.length > 0) {
-      renderFileChanges(commit.filesChanged, lines);
+      renderFileChanges(commit.filesChanged, lines, limits);
     }
 
     lines.push("");
@@ -197,7 +201,7 @@ function renderTextUnit(commits: CommitData[]): string {
  * - Files WITH diffs get the diff (truncated) — no redundant summary since
  *   the diff header already contains the path
  */
-function renderFileChanges(files: FileChange[], lines: string[]): void {
+function renderFileChanges(files: FileChange[], lines: string[], limits: RenderLimits): void {
   const filesWithDiff: FileChange[] = [];
   const filesWithoutDiff: FileChange[] = [];
 
@@ -209,10 +213,8 @@ function renderFileChanges(files: FileChange[], lines: string[]): void {
     }
   }
 
-  // Shared budget: total files shown per commit is capped at MAX_FILES_SHOWN
-  let budget = MAX_FILES_SHOWN;
+  let budget = limits.maxFilesShown;
 
-  // Compact summary for files without diffs (one per line)
   const totalWithout = filesWithoutDiff.length;
   const shownWithout = filesWithoutDiff.slice(0, budget);
   for (const f of shownWithout) {
@@ -223,29 +225,28 @@ function renderFileChanges(files: FileChange[], lines: string[]): void {
     lines.push(`  ... and ${totalWithout - shownWithout.length} more files`);
   }
 
-  // Diffs with truncation (uses remaining budget)
   const totalWithDiff = filesWithDiff.length;
   const shownWithDiff = filesWithDiff.slice(0, Math.max(budget, 1));
   for (const f of shownWithDiff) {
     lines.push(`--- ${f.path} +${f.additions}-${f.deletions}`);
-    lines.push(truncateDiff(f.diff!));
+    lines.push(truncateDiff(f.diff!, limits.maxDiffLines));
   }
   if (totalWithDiff > shownWithDiff.length) {
     lines.push(`... and ${totalWithDiff - shownWithDiff.length} more diffs`);
   }
 }
 
-function truncateMessage(message: string): string {
-  if (message.length <= MAX_MESSAGE_CHARS) return message;
-  return message.slice(0, MAX_MESSAGE_CHARS) + "...";
+function truncateMessage(message: string, maxChars: number): string {
+  if (message.length <= maxChars) return message;
+  return message.slice(0, maxChars) + "...";
 }
 
-function truncateDiff(diff: string): string {
+function truncateDiff(diff: string, maxLines: number): string {
   const diffLines = diff.split("\n");
-  if (diffLines.length <= MAX_DIFF_LINES) return diff;
+  if (diffLines.length <= maxLines) return diff;
   return (
-    diffLines.slice(0, MAX_DIFF_LINES).join("\n") +
-    `\n... ${diffLines.length - MAX_DIFF_LINES} more lines`
+    diffLines.slice(0, maxLines).join("\n") +
+    `\n... ${diffLines.length - maxLines} more lines`
   );
 }
 

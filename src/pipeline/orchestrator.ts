@@ -101,6 +101,9 @@ async function runPipeline(
   const textUnits = chunk(commits, {
     commitsPerChunk: config.commitsPerChunk,
     maxChunkTokens: config.maxChunkTokens,
+    maxDiffLines: config.maxDiffLines,
+    maxFilesShown: config.maxFilesShown,
+    maxMessageChars: config.maxMessageChars,
   });
   logger.info("orchestrator: chunked", { textUnits: textUnits.length });
 

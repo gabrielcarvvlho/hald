@@ -296,17 +296,17 @@ function parseExtractionXml(text: string): ExtractorResult {
 // Gleaning
 // ================================================================
 
-const DEFAULT_GLEANING_THRESHOLD = {
-  minCommits: 8,
-  maxEntitiesRatio: 0.5, // fewer than 1 entity per 2 commits → glean
-};
-
-function shouldGlean(result: ExtractorResult, textUnit: TextUnit): boolean {
-  if (textUnit.commitHashes.length < DEFAULT_GLEANING_THRESHOLD.minCommits) {
+function shouldGlean(
+  result: ExtractorResult,
+  textUnit: TextUnit,
+  minCommits = 8,
+  maxEntitiesRatio = 0.5,
+): boolean {
+  if (textUnit.commitHashes.length < minCommits) {
     return false;
   }
   const ratio = result.entities.length / textUnit.commitHashes.length;
-  return ratio < DEFAULT_GLEANING_THRESHOLD.maxEntitiesRatio;
+  return ratio < maxEntitiesRatio;
 }
 
 function mergeResults(
@@ -327,7 +327,7 @@ function mergeResults(
 export async function extract(
   textUnit: TextUnit,
   client: LLMClient,
-  options?: { enableGleaning?: boolean },
+  options?: { enableGleaning?: boolean; gleaningMinCommits?: number; gleaningMaxEntitiesRatio?: number },
 ): Promise<ExtractorResult & { inputTokens: number; outputTokens: number }> {
   const prompt = buildUserPrompt(textUnit);
 
@@ -393,7 +393,7 @@ export async function extract(
   }
 
   // Gleaning pass: ask the LLM to review its output and find missed entities
-  if (options?.enableGleaning && shouldGlean(result, textUnit)) {
+  if (options?.enableGleaning && shouldGlean(result, textUnit, options.gleaningMinCommits, options.gleaningMaxEntitiesRatio)) {
     logger.debug("extractor: triggering gleaning pass", {
       textUnitId: textUnit.id,
       commits: textUnit.commitHashes.length,
