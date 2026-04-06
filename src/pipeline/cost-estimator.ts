@@ -125,6 +125,7 @@ export function formatCostEstimate(estimate: CostEstimate): string {
   }
 
   lines.push(`  Estimate includes ~40% buffer for retries and gleaning passes`);
+  lines.push(`  Note: estimates are approximate, based on provider pricing as of April 2026`);
 
   return lines.join("\n");
 }
