@@ -281,12 +281,16 @@ export class Store {
   // ================================================================
 
   getStats(): StoreStats {
-    const count = (table: string) =>
-      (
+    const VALID_TABLES = new Set(["entities", "relations", "text_units", "communities", "commits"]);
+
+    const count = (table: string) => {
+      if (!VALID_TABLES.has(table)) throw new Error(`Invalid table name: ${table}`);
+      return (
         this.db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get() as {
           c: number;
         }
       ).c;
+    };
 
     return {
       entities: count("entities"),
