@@ -38,6 +38,9 @@ import { logger } from "../shared/logger.js";
 // Session state
 // ================================================================
 
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CHUNKS = 500;
+
 export interface AgentIndexSession {
   config: GitOracleConfig;
   store: Store;
@@ -45,11 +48,18 @@ export interface AgentIndexSession {
   commits: CommitData[];
   extractions: Map<TextUnitId, ExtractorResult>;
   nextIndex: number;
+  createdAt: Date;
 }
 
 let activeSession: AgentIndexSession | null = null;
 
 export function getSession(): AgentIndexSession | null {
+  if (activeSession && Date.now() - activeSession.createdAt.getTime() > SESSION_TIMEOUT_MS) {
+    logger.warn("agent-session: auto-clearing stale session", {
+      ageMinutes: Math.round((Date.now() - activeSession.createdAt.getTime()) / 60_000),
+    });
+    clearSession();
+  }
   return activeSession;
 }
 
@@ -109,6 +119,14 @@ export async function startAgentSession(options: {
     maxChunkTokens: config.maxChunkTokens,
   });
 
+  if (textUnits.length > MAX_CHUNKS) {
+    store.close();
+    throw new Error(
+      `Too many chunks (${textUnits.length} > ${MAX_CHUNKS}). ` +
+      `Use --max-commits to limit scope or increase commitsPerChunk.`,
+    );
+  }
+
   logger.info("agent-session: started", {
     commits: commits.length,
     textUnits: textUnits.length,
@@ -121,6 +139,7 @@ export async function startAgentSession(options: {
     commits,
     extractions: new Map(),
     nextIndex: 0,
+    createdAt: new Date(),
   };
 
   return { chunkCount: textUnits.length, commitCount: commits.length };
