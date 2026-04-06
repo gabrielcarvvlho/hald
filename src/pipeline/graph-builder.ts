@@ -141,13 +141,16 @@ function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relati
   for (const commit of commits) {
     // Skip merge commits — their file lists duplicate the merged branch commits
     if (commit.parentHashes.length > 1) continue;
-    const modules = [
-      ...new Set(
-        commit.filesChanged.map((f) =>
-          normalizeModulePath(f.path, moduleDepth),
-        ),
-      ),
-    ];
+
+    // Aggregate lines changed per module (after path normalization)
+    const moduleLinesMap = new Map<string, number>();
+    for (const f of commit.filesChanged) {
+      const mod = normalizeModulePath(f.path, moduleDepth);
+      const lines = (f.additions || 0) + (f.deletions || 0);
+      moduleLinesMap.set(mod, (moduleLinesMap.get(mod) ?? 0) + lines);
+    }
+
+    const modules = [...moduleLinesMap.keys()];
 
     // Create edges for pairs of modules changed in the same commit
     for (let i = 0; i < modules.length; i++) {
@@ -164,12 +167,17 @@ function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relati
           targetId,
         );
 
+        // Weight by min lines changed — proportional to shared commit significance
+        const linesA = moduleLinesMap.get(modules[i]!) ?? 0;
+        const linesB = moduleLinesMap.get(modules[j]!) ?? 0;
+        const weight = Math.min(linesA, linesB) || 1;
+
         relations.push({
           id,
           type: RelationType.CO_CHANGED,
           sourceId,
           targetId,
-          weight: 1,
+          weight,
           description: `Changed together in commit ${commit.hash.slice(0, 7)}`,
           evidence: [],
           firstSeen: commit.date,
