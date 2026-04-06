@@ -610,17 +610,25 @@ interface CommitRow {
   indexed_at: string;
 }
 
+function safeJsonParse<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 function toEntity(row: EntityRow): Entity {
   return {
     id: row.id,
     type: row.type as Entity["type"],
     name: row.name,
-    aliases: JSON.parse(row.aliases),
+    aliases: safeJsonParse<string[]>(row.aliases, []),
     description: row.description,
     firstSeen: row.first_seen,
     lastSeen: row.last_seen,
     frequency: row.frequency,
-    metadata: JSON.parse(row.metadata),
+    metadata: safeJsonParse<Record<string, unknown>>(row.metadata, {}),
   };
 }
 
@@ -632,7 +640,7 @@ function toRelation(row: RelationRow): Relation {
     targetId: row.target_id,
     weight: row.weight,
     description: row.description,
-    evidence: JSON.parse(row.evidence),
+    evidence: safeJsonParse<string[]>(row.evidence, []),
     firstSeen: row.first_seen,
     lastSeen: row.last_seen,
   };
@@ -642,10 +650,10 @@ function toTextUnit(row: TextUnitRow): TextUnit {
   return {
     id: row.id,
     content: row.content,
-    commitHashes: JSON.parse(row.commit_hashes),
+    commitHashes: safeJsonParse<string[]>(row.commit_hashes, []),
     dateRange: { start: row.date_start, end: row.date_end },
-    entityIds: JSON.parse(row.entity_ids),
-    relationIds: JSON.parse(row.relation_ids),
+    entityIds: safeJsonParse<string[]>(row.entity_ids, []),
+    relationIds: safeJsonParse<string[]>(row.relation_ids, []),
   };
 }
 
@@ -655,9 +663,9 @@ function toCommunity(row: CommunityRow): Community {
     level: row.level,
     title: row.title,
     summary: row.summary,
-    entityIds: JSON.parse(row.entity_ids),
+    entityIds: safeJsonParse<string[]>(row.entity_ids, []),
     parentId: row.parent_id ?? undefined,
-    childIds: JSON.parse(row.child_ids),
+    childIds: safeJsonParse<string[]>(row.child_ids, []),
   };
 }
 
@@ -668,7 +676,7 @@ function toCommitData(row: CommitRow): CommitData {
     authorEmail: row.author_email,
     date: row.date,
     message: row.message,
-    filesChanged: JSON.parse(row.files_changed),
-    parentHashes: JSON.parse(row.parent_hashes),
+    filesChanged: safeJsonParse<CommitData["filesChanged"]>(row.files_changed, []),
+    parentHashes: safeJsonParse<string[]>(row.parent_hashes, []),
   };
 }

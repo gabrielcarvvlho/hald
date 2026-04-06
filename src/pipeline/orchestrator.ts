@@ -228,7 +228,8 @@ async function runPipeline(
       let bestMatch: { id: CommunityId; jaccard: number } | null = null;
       for (const [oldId, oldMemberJson] of oldMembership) {
         if (!oldId.startsWith(`comm:${c.level}:`)) continue;
-        const oldMembers: string[] = JSON.parse(oldMemberJson);
+        let oldMembers: string[];
+        try { oldMembers = JSON.parse(oldMemberJson); } catch { oldMembers = []; }
         const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
         if (jaccard > (bestMatch?.jaccard ?? 0)) {
           bestMatch = { id: oldId, jaccard };
