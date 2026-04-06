@@ -14,9 +14,7 @@ export interface GitReaderOptions {
  * Stream commits from a git repository, oldest first.
  * Uses two efficient git log calls for all commits (not N+1).
  */
-export async function* readCommits(
-  options: GitReaderOptions,
-): AsyncIterable<CommitData> {
+export async function* readCommits(options: GitReaderOptions): AsyncIterable<CommitData> {
   const git = simpleGit(options.repoPath);
   const args = buildLogArgs(options);
 
@@ -217,10 +215,7 @@ function resolveNumstatPath(rawPath: string): string {
   return rawPath;
 }
 
-function mergeFileInfo(
-  statusFiles: FileChange[],
-  numstatFiles: NumstatEntry[],
-): FileChange[] {
+function mergeFileInfo(statusFiles: FileChange[], numstatFiles: NumstatEntry[]): FileChange[] {
   const statsMap = new Map<string, NumstatEntry>();
   for (const f of numstatFiles) {
     statsMap.set(f.path, f);

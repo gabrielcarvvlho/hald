@@ -63,18 +63,14 @@ describe("graph-ops", () => {
       const results = getCoupling(store, "src/billing", 1);
 
       expect(results.length).toBeGreaterThanOrEqual(1);
-      const paymentsCoupling = results.find(
-        (r) => r.module.name === "src/payments",
-      );
+      const paymentsCoupling = results.find((r) => r.module.name === "src/payments");
       expect(paymentsCoupling).toBeDefined();
       expect(paymentsCoupling!.coChangeCount).toBeGreaterThanOrEqual(1);
     });
 
     it("includes shared authors", () => {
       const results = getCoupling(store, "src/billing", 1);
-      const paymentsCoupling = results.find(
-        (r) => r.module.name === "src/payments",
-      );
+      const paymentsCoupling = results.find((r) => r.module.name === "src/payments");
       // Both Alice and Bob work on payments; Bob works on billing
       // So Bob should be a shared author
       if (paymentsCoupling) {
@@ -85,20 +81,14 @@ describe("graph-ops", () => {
     it("returns empty for uncoupled module", () => {
       const results = getCoupling(store, "src/middleware", 1);
       // Middleware has no CO_CHANGED relations in our sample data
-      const nonSelf = results.filter(
-        (r) => r.module.name !== "src/middleware",
-      );
+      const nonSelf = results.filter((r) => r.module.name !== "src/middleware");
       expect(nonSelf).toHaveLength(0);
     });
   });
 
   describe("getPath", () => {
     it("finds direct path between connected entities", () => {
-      const result = getPath(
-        store,
-        "person:alice-chen",
-        "module:src/payments",
-      );
+      const result = getPath(store, "person:alice-chen", "module:src/payments");
 
       expect(result).not.toBeNull();
       expect(result!.length).toBe(1);
@@ -108,11 +98,7 @@ describe("graph-ops", () => {
 
     it("finds multi-hop path", () => {
       // Bob → billing → payments → gRPC
-      const result = getPath(
-        store,
-        "person:bob-martinez",
-        "technology:grpc",
-      );
+      const result = getPath(store, "person:bob-martinez", "technology:grpc");
 
       expect(result).not.toBeNull();
       expect(result!.length).toBeGreaterThanOrEqual(2);
@@ -121,21 +107,13 @@ describe("graph-ops", () => {
     it("returns null for disconnected entities", () => {
       // Carlos has no path to middleware in our data (Carlos only has docs)
       // Actually Carlos has no relations at all in sample data, so he IS disconnected
-      const result = getPath(
-        store,
-        "person:carlos-ruiz",
-        "module:src/middleware",
-      );
+      const result = getPath(store, "person:carlos-ruiz", "module:src/middleware");
 
       expect(result).toBeNull();
     });
 
     it("handles same entity", () => {
-      const result = getPath(
-        store,
-        "person:alice-chen",
-        "person:alice-chen",
-      );
+      const result = getPath(store, "person:alice-chen", "person:alice-chen");
       expect(result).not.toBeNull();
       expect(result!.length).toBe(0);
     });
@@ -150,17 +128,13 @@ describe("graph-ops", () => {
         inactiveDays: 100_000,
       });
 
-      const billingResult = results.find(
-        (r) => r.module.name === "src/billing",
-      );
+      const billingResult = results.find((r) => r.module.name === "src/billing");
       expect(billingResult).toBeDefined();
       expect(billingResult!.activeExpertCount).toBe(1);
       expect(billingResult!.soloExpert?.name).toBe("Bob Martinez");
 
       // payments has 2 experts (Alice AUTHORED + Bob MODIFIED) → not in results
-      const paymentsResult = results.find(
-        (r) => r.module.name === "src/payments",
-      );
+      const paymentsResult = results.find((r) => r.module.name === "src/payments");
       expect(paymentsResult).toBeUndefined();
     });
 
@@ -195,9 +169,7 @@ describe("graph-ops", () => {
         (now.getTime() - new Date("2024-05-01").getTime()) / 86_400_000;
       const daysSinceBillingAuthor =
         (now.getTime() - new Date("2024-05-20").getTime()) / 86_400_000;
-      const inactiveDays = Math.floor(
-        (daysSinceMiddlewareAuthor + daysSinceBillingAuthor) / 2,
-      );
+      const inactiveDays = Math.floor((daysSinceMiddlewareAuthor + daysSinceBillingAuthor) / 2);
 
       const results = findKnowledgeSilos(store, {
         minFrequency: 1,
@@ -211,9 +183,7 @@ describe("graph-ops", () => {
       expect(silos.length).toBeGreaterThanOrEqual(1);
 
       // Orphaned (0) must all appear before silos (1)
-      const firstSiloIdx = results.findIndex(
-        (r) => r.activeExpertCount === 1,
-      );
+      const firstSiloIdx = results.findIndex((r) => r.activeExpertCount === 1);
       for (let i = 0; i < firstSiloIdx; i++) {
         expect(results[i]!.activeExpertCount).toBe(0);
       }
@@ -225,9 +195,7 @@ describe("graph-ops", () => {
         inactiveDays: 100_000,
       });
 
-      const middlewareResult = results.find(
-        (r) => r.module.name === "src/middleware",
-      );
+      const middlewareResult = results.find((r) => r.module.name === "src/middleware");
       expect(middlewareResult).toBeDefined();
       expect(middlewareResult!.activeExpertCount).toBe(1);
       expect(middlewareResult!.soloExpert?.name).toBe("Alice Chen");

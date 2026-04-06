@@ -140,7 +140,12 @@ describe("graph-builder", () => {
   it("upserts relations", () => {
     // Need entities first for foreign keys
     store.upsertEntity({ ...alice, firstSeen: "2024-01-01", lastSeen: "2024-01-01", frequency: 1 });
-    store.upsertEntity({ ...billing, firstSeen: "2024-01-01", lastSeen: "2024-01-01", frequency: 1 });
+    store.upsertEntity({
+      ...billing,
+      firstSeen: "2024-01-01",
+      lastSeen: "2024-01-01",
+      frequency: 1,
+    });
 
     const stats = build(store, {
       textUnits: [],
@@ -182,8 +187,18 @@ describe("graph-builder", () => {
 
   it("creates co-change edges between modules", () => {
     // First insert the module entities so co-change edges can reference them
-    store.upsertEntity({ ...billing, firstSeen: "2024-01-01", lastSeen: "2024-01-01", frequency: 1 });
-    store.upsertEntity({ ...payments, firstSeen: "2024-01-01", lastSeen: "2024-01-01", frequency: 1 });
+    store.upsertEntity({
+      ...billing,
+      firstSeen: "2024-01-01",
+      lastSeen: "2024-01-01",
+      frequency: 1,
+    });
+    store.upsertEntity({
+      ...payments,
+      firstSeen: "2024-01-01",
+      lastSeen: "2024-01-01",
+      frequency: 1,
+    });
 
     build(store, {
       textUnits: [],
@@ -193,17 +208,22 @@ describe("graph-builder", () => {
       commits: [commit], // commit touches billing + payments
     });
 
-    // Should have a CO_CHANGED relation
+    // Should have a CO_CHANGED relation weighted by min(linesA, linesB)
     const allRelations = store.getAllRelations();
-    const coChanged = allRelations.filter(
-      (r) => r.type === RelationType.CO_CHANGED,
-    );
+    const coChanged = allRelations.filter((r) => r.type === RelationType.CO_CHANGED);
     expect(coChanged).toHaveLength(1);
+    // billing: 10+5=15 lines, payments: 3+1=4 lines → min(15,4) = 4
+    expect(coChanged[0]!.weight).toBe(4);
   });
 
   it("returns correct edge density", () => {
     store.upsertEntity({ ...alice, firstSeen: "2024-01-01", lastSeen: "2024-01-01", frequency: 1 });
-    store.upsertEntity({ ...billing, firstSeen: "2024-01-01", lastSeen: "2024-01-01", frequency: 1 });
+    store.upsertEntity({
+      ...billing,
+      firstSeen: "2024-01-01",
+      lastSeen: "2024-01-01",
+      frequency: 1,
+    });
 
     const stats = build(store, {
       textUnits: [],

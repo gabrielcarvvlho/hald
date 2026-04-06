@@ -19,17 +19,12 @@ function makeTextUnit(content: string): TextUnit {
 
 describe("estimateCost", () => {
   it("returns higher cost for Anthropic than Google", () => {
-    const textUnits = [
-      makeTextUnit("a".repeat(2000)),
-      makeTextUnit("b".repeat(2000)),
-    ];
+    const textUnits = [makeTextUnit("a".repeat(2000)), makeTextUnit("b".repeat(2000))];
 
     const anthropicCost = estimateCost(textUnits, 3, "anthropic");
     const googleCost = estimateCost(textUnits, 3, "google");
 
-    expect(anthropicCost.estimatedCostUsd).toBeGreaterThan(
-      googleCost.estimatedCostUsd,
-    );
+    expect(anthropicCost.estimatedCostUsd).toBeGreaterThan(googleCost.estimatedCostUsd);
   });
 
   it("returns zero-ish cost for small inputs", () => {
@@ -41,34 +36,36 @@ describe("estimateCost", () => {
   });
 
   it("scales linearly with text units", () => {
-    const small = estimateCost(
-      [makeTextUnit("x".repeat(1000))],
-      1,
-      "anthropic",
-    );
+    const small = estimateCost([makeTextUnit("x".repeat(1000))], 1, "anthropic");
     const large = estimateCost(
       Array.from({ length: 10 }, () => makeTextUnit("x".repeat(1000))),
       5,
       "anthropic",
     );
 
-    expect(large.estimatedCostUsd).toBeGreaterThan(
-      small.estimatedCostUsd * 5,
-    );
+    expect(large.estimatedCostUsd).toBeGreaterThan(small.estimatedCostUsd * 5);
   });
 
   it("includes extraction and summarization breakdown", () => {
-    const cost = estimateCost(
-      [makeTextUnit("test content")],
-      2,
-      "openai",
-    );
+    const cost = estimateCost([makeTextUnit("test content")], 2, "openai");
 
     expect(cost.extractionTokens).toBeGreaterThan(0);
     expect(cost.summarizationTokens).toBeGreaterThan(0);
     expect(cost.breakdown.extraction).toContain("tokens");
     expect(cost.breakdown.summarization).toContain("tokens");
     expect(cost.breakdown.total).toContain("$");
+  });
+
+  it("includes ~40% gleaning buffer in extraction tokens", () => {
+    const textUnits = [makeTextUnit("a".repeat(1000))];
+    const cost = estimateCost(textUnits, 0, "anthropic");
+
+    // Base without gleaning: estimateTokens("a"*1000) + 600 + 500 = ~250 + 600 + 500 = 1350
+    // With 1.4x gleaning multiplier: ~1890
+    // Assert within a tight range to catch both removal and wrong multiplier
+    const baseTokens = 1350;
+    expect(cost.extractionTokens).toBeGreaterThan(baseTokens * 1.3);
+    expect(cost.extractionTokens).toBeLessThan(baseTokens * 1.5);
   });
 
   it("falls back to anthropic rates for unknown provider", () => {

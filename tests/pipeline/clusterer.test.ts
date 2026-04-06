@@ -16,11 +16,7 @@ function makeEntity(id: string): Entity {
   };
 }
 
-function makeRelation(
-  sourceId: string,
-  targetId: string,
-  weight = 1,
-): Relation {
+function makeRelation(sourceId: string, targetId: string, weight = 1): Relation {
   return {
     id: `rel:${sourceId}-${targetId}`,
     type: RelationType.CO_CHANGED,
@@ -75,10 +71,7 @@ describe("clusterer", () => {
 
   it("handles tiny graph with single-resolution fallback", () => {
     const entities = ["a", "b", "c"].map(makeEntity);
-    const relations = [
-      makeRelation("a", "b", 10),
-      makeRelation("b", "c", 10),
-    ];
+    const relations = [makeRelation("a", "b", 10), makeRelation("b", "c", 10)];
 
     const result = cluster(entities, relations, [0.5, 1.0, 2.0], 2);
 
@@ -107,16 +100,26 @@ describe("clusterer", () => {
     const clique2 = ["b1", "b2", "b3", "b4", "b5"].map(makeEntity);
     const entities = [...clique1, ...clique2];
     const relations = [
-      makeRelation("a1", "a2", 10), makeRelation("a1", "a3", 10),
-      makeRelation("a1", "a4", 10), makeRelation("a1", "a5", 10),
-      makeRelation("a2", "a3", 10), makeRelation("a2", "a4", 10),
-      makeRelation("a2", "a5", 10), makeRelation("a3", "a4", 10),
-      makeRelation("a3", "a5", 10), makeRelation("a4", "a5", 10),
-      makeRelation("b1", "b2", 10), makeRelation("b1", "b3", 10),
-      makeRelation("b1", "b4", 10), makeRelation("b1", "b5", 10),
-      makeRelation("b2", "b3", 10), makeRelation("b2", "b4", 10),
-      makeRelation("b2", "b5", 10), makeRelation("b3", "b4", 10),
-      makeRelation("b3", "b5", 10), makeRelation("b4", "b5", 10),
+      makeRelation("a1", "a2", 10),
+      makeRelation("a1", "a3", 10),
+      makeRelation("a1", "a4", 10),
+      makeRelation("a1", "a5", 10),
+      makeRelation("a2", "a3", 10),
+      makeRelation("a2", "a4", 10),
+      makeRelation("a2", "a5", 10),
+      makeRelation("a3", "a4", 10),
+      makeRelation("a3", "a5", 10),
+      makeRelation("a4", "a5", 10),
+      makeRelation("b1", "b2", 10),
+      makeRelation("b1", "b3", 10),
+      makeRelation("b1", "b4", 10),
+      makeRelation("b1", "b5", 10),
+      makeRelation("b2", "b3", 10),
+      makeRelation("b2", "b4", 10),
+      makeRelation("b2", "b5", 10),
+      makeRelation("b3", "b4", 10),
+      makeRelation("b3", "b5", 10),
+      makeRelation("b4", "b5", 10),
     ];
 
     const result = cluster(entities, relations, [1.0], 3);
@@ -194,10 +197,7 @@ describe("clusterer", () => {
 
   it("assigns deterministic community IDs", () => {
     const entities = ["a", "b", "c", "d"].map(makeEntity);
-    const relations = [
-      makeRelation("a", "b", 10),
-      makeRelation("c", "d", 10),
-    ];
+    const relations = [makeRelation("a", "b", 10), makeRelation("c", "d", 10)];
 
     const communities = cluster(entities, relations, [1.0], 2);
 
@@ -273,11 +273,21 @@ describe("clusterer", () => {
   it("marks orphan communities when no parent has sufficient overlap", () => {
     const entities = Array.from({ length: 12 }, (_, i) => makeEntity(`n${i}`));
     const relations = [
-      makeRelation("n0", "n1", 10), makeRelation("n1", "n2", 10), makeRelation("n0", "n2", 10),
-      makeRelation("n3", "n4", 10), makeRelation("n4", "n5", 10), makeRelation("n3", "n5", 10),
-      makeRelation("n6", "n7", 10), makeRelation("n7", "n8", 10), makeRelation("n6", "n8", 10),
-      makeRelation("n9", "n10", 10), makeRelation("n10", "n11", 10), makeRelation("n9", "n11", 10),
-      makeRelation("n2", "n3", 1), makeRelation("n5", "n6", 1), makeRelation("n8", "n9", 1),
+      makeRelation("n0", "n1", 10),
+      makeRelation("n1", "n2", 10),
+      makeRelation("n0", "n2", 10),
+      makeRelation("n3", "n4", 10),
+      makeRelation("n4", "n5", 10),
+      makeRelation("n3", "n5", 10),
+      makeRelation("n6", "n7", 10),
+      makeRelation("n7", "n8", 10),
+      makeRelation("n6", "n8", 10),
+      makeRelation("n9", "n10", 10),
+      makeRelation("n10", "n11", 10),
+      makeRelation("n9", "n11", 10),
+      makeRelation("n2", "n3", 1),
+      makeRelation("n5", "n6", 1),
+      makeRelation("n8", "n9", 1),
     ];
 
     const communities = cluster(entities, relations, [0.5, 2.0], 3);
@@ -297,11 +307,21 @@ describe("clusterer", () => {
   it("does not assign duplicate parents", () => {
     const entities = Array.from({ length: 12 }, (_, i) => makeEntity(`n${i}`));
     const relations = [
-      makeRelation("n0", "n1", 10), makeRelation("n1", "n2", 10), makeRelation("n0", "n2", 10),
-      makeRelation("n3", "n4", 10), makeRelation("n4", "n5", 10), makeRelation("n3", "n5", 10),
-      makeRelation("n6", "n7", 10), makeRelation("n7", "n8", 10), makeRelation("n6", "n8", 10),
-      makeRelation("n9", "n10", 10), makeRelation("n10", "n11", 10), makeRelation("n9", "n11", 10),
-      makeRelation("n2", "n3", 1), makeRelation("n5", "n6", 1), makeRelation("n8", "n9", 1),
+      makeRelation("n0", "n1", 10),
+      makeRelation("n1", "n2", 10),
+      makeRelation("n0", "n2", 10),
+      makeRelation("n3", "n4", 10),
+      makeRelation("n4", "n5", 10),
+      makeRelation("n3", "n5", 10),
+      makeRelation("n6", "n7", 10),
+      makeRelation("n7", "n8", 10),
+      makeRelation("n6", "n8", 10),
+      makeRelation("n9", "n10", 10),
+      makeRelation("n10", "n11", 10),
+      makeRelation("n9", "n11", 10),
+      makeRelation("n2", "n3", 1),
+      makeRelation("n5", "n6", 1),
+      makeRelation("n8", "n9", 1),
     ];
 
     const communities = cluster(entities, relations, [0.5, 1.0, 2.0], 3);
@@ -350,9 +370,7 @@ describe("clusterer", () => {
 
   it("links parent/child across levels", () => {
     // Large enough graph to have hierarchy
-    const entities = Array.from({ length: 12 }, (_, i) =>
-      makeEntity(`node${i}`),
-    );
+    const entities = Array.from({ length: 12 }, (_, i) => makeEntity(`node${i}`));
     const relations = [
       // Cluster A: 0-3
       makeRelation("node0", "node1", 10),
@@ -443,6 +461,6 @@ describe("buildGraph", () => {
     const edge = graph.edge("a", "b")!;
     const weight = graph.getEdgeAttribute(edge, "weight") as number;
     // 1 + ln(10) ≈ 3.30
-    expect(weight).toBeCloseTo(3.30, 1);
+    expect(weight).toBeCloseTo(3.3, 1);
   });
 });

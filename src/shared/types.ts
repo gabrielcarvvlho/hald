@@ -102,6 +102,12 @@ export interface GitOracleConfig {
 
   commitsPerChunk: number;
   maxChunkTokens: number;
+  /** Max diff lines per file before truncation in chunks. Default: 50 */
+  maxDiffLines: number;
+  /** Max files listed per commit in chunks. Default: 20 */
+  maxFilesShown: number;
+  /** Max commit message chars before truncation. Default: 500 */
+  maxMessageChars: number;
 
   provider: "anthropic" | "openai" | "google" | "auto";
   model?: string;
@@ -113,8 +119,18 @@ export interface GitOracleConfig {
   entityResolutionThreshold: number;
   /** Module path normalization depth (number of segments to keep). Default: 2 */
   moduleDepth?: number;
-  leidenResolutions: number[];
+  /** Min text unit size (commits) to trigger gleaning. Default: 8 */
+  gleaningMinCommits: number;
+  /** Entities-per-commit ratio below which gleaning fires. Default: 0.5 */
+  gleaningMaxEntitiesRatio: number;
+  communityResolutions: number[];
   minCommunitySize: number;
+  /** Min Jaccard overlap to link a child community to a parent. Default: 0.3 */
+  parentLinkThreshold: number;
+  /** Jaccard overlap below which a split warning is logged. Default: 0.7 */
+  splitWarningThreshold: number;
+  /** Min Jaccard similarity to reuse an existing community summary. Default: 0.7 */
+  summaryReuseThreshold: number;
 
   storagePath: string;
 }

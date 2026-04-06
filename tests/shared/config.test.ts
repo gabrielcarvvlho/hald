@@ -15,7 +15,7 @@ describe("loadConfig", () => {
     expect(config.maxConcurrency).toBe(5);
     expect(config.maxRetries).toBe(3);
     expect(config.entityResolutionThreshold).toBe(0.85);
-    expect(config.leidenResolutions).toEqual([0.5, 1.0, 2.0]);
+    expect(config.communityResolutions).toEqual([0.5, 1.0, 2.0]);
     expect(config.minCommunitySize).toBe(3);
   });
 
@@ -141,14 +141,134 @@ describe("loadConfig", () => {
     });
 
     it("handles malformed config file gracefully", () => {
-      writeFileSync(
-        join(tmpDir, ".git-oracle", "config.json"),
-        "not valid json {{{",
-      );
+      writeFileSync(join(tmpDir, ".git-oracle", "config.json"), "not valid json {{{");
 
       // Should not throw, just use defaults
       const config = loadConfig({ repoPath: tmpDir });
       expect(config.commitsPerChunk).toBe(10);
+    });
+  });
+
+  describe("config validation", () => {
+    it("rejects maxChunkTokens < 100", () => {
+      expect(() => loadConfig({ maxChunkTokens: 50 })).toThrow("maxChunkTokens must be >= 100");
+    });
+
+    it("rejects maxConcurrency < 1", () => {
+      expect(() => loadConfig({ maxConcurrency: 0 })).toThrow("maxConcurrency must be >= 1");
+    });
+
+    it("rejects minCommunitySize < 1", () => {
+      expect(() => loadConfig({ minCommunitySize: 0 })).toThrow("minCommunitySize must be >= 1");
+    });
+
+    it("rejects entityResolutionThreshold out of [0, 1]", () => {
+      expect(() => loadConfig({ entityResolutionThreshold: -0.1 })).toThrow(
+        "entityResolutionThreshold must be between 0 and 1",
+      );
+
+      expect(() => loadConfig({ entityResolutionThreshold: 1.5 })).toThrow(
+        "entityResolutionThreshold must be between 0 and 1",
+      );
+    });
+
+    it("rejects empty communityResolutions", () => {
+      expect(() => loadConfig({ communityResolutions: [] })).toThrow(
+        "At least one community resolution is required",
+      );
+    });
+
+    it("rejects negative maxRetries", () => {
+      expect(() => loadConfig({ maxRetries: -1 })).toThrow("maxRetries must be >= 0");
+    });
+
+    it("rejects commitsPerChunk < 1", () => {
+      expect(() => loadConfig({ commitsPerChunk: 0 })).toThrow("commitsPerChunk must be >= 1");
+    });
+
+    it("rejects parentLinkThreshold out of [0, 1]", () => {
+      expect(() => loadConfig({ parentLinkThreshold: -0.1 })).toThrow(
+        "parentLinkThreshold must be between 0 and 1",
+      );
+      expect(() => loadConfig({ parentLinkThreshold: 1.5 })).toThrow(
+        "parentLinkThreshold must be between 0 and 1",
+      );
+    });
+
+    it("rejects splitWarningThreshold out of [0, 1]", () => {
+      expect(() => loadConfig({ splitWarningThreshold: -1 })).toThrow(
+        "splitWarningThreshold must be between 0 and 1",
+      );
+      expect(() => loadConfig({ splitWarningThreshold: 2 })).toThrow(
+        "splitWarningThreshold must be between 0 and 1",
+      );
+    });
+
+    it("rejects summaryReuseThreshold out of [0, 1]", () => {
+      expect(() => loadConfig({ summaryReuseThreshold: -0.5 })).toThrow(
+        "summaryReuseThreshold must be between 0 and 1",
+      );
+      expect(() => loadConfig({ summaryReuseThreshold: 99 })).toThrow(
+        "summaryReuseThreshold must be between 0 and 1",
+      );
+    });
+
+    it("rejects maxDiffLines < 1", () => {
+      expect(() => loadConfig({ maxDiffLines: 0 })).toThrow("maxDiffLines must be >= 1");
+    });
+
+    it("rejects maxFilesShown < 1", () => {
+      expect(() => loadConfig({ maxFilesShown: 0 })).toThrow("maxFilesShown must be >= 1");
+    });
+
+    it("rejects maxMessageChars < 1", () => {
+      expect(() => loadConfig({ maxMessageChars: 0 })).toThrow("maxMessageChars must be >= 1");
+    });
+
+    it("rejects gleaningMinCommits < 1", () => {
+      expect(() => loadConfig({ gleaningMinCommits: 0 })).toThrow(
+        "gleaningMinCommits must be >= 1",
+      );
+    });
+
+    it("rejects gleaningMaxEntitiesRatio out of [0, 1]", () => {
+      expect(() => loadConfig({ gleaningMaxEntitiesRatio: -1 })).toThrow(
+        "gleaningMaxEntitiesRatio must be between 0 and 1",
+      );
+      expect(() => loadConfig({ gleaningMaxEntitiesRatio: 5 })).toThrow(
+        "gleaningMaxEntitiesRatio must be between 0 and 1",
+      );
+    });
+
+    it("accepts valid edge-case values for all fields", () => {
+      expect(() =>
+        loadConfig({
+          maxChunkTokens: 100,
+          maxConcurrency: 1,
+          minCommunitySize: 1,
+          entityResolutionThreshold: 0,
+          maxRetries: 0,
+          commitsPerChunk: 1,
+          parentLinkThreshold: 0,
+          splitWarningThreshold: 0,
+          summaryReuseThreshold: 0,
+          maxDiffLines: 1,
+          maxFilesShown: 1,
+          maxMessageChars: 1,
+          gleaningMinCommits: 1,
+          gleaningMaxEntitiesRatio: 0,
+        }),
+      ).not.toThrow();
+
+      expect(() =>
+        loadConfig({
+          entityResolutionThreshold: 1,
+          parentLinkThreshold: 1,
+          splitWarningThreshold: 1,
+          summaryReuseThreshold: 1,
+          gleaningMaxEntitiesRatio: 1,
+        }),
+      ).not.toThrow();
     });
   });
 });

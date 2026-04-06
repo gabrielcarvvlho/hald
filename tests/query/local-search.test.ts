@@ -5,9 +5,9 @@ import { Store } from "../../src/store/queries.js";
 import { initSchema, runMigrations } from "../../src/store/schema.js";
 import { createPopulatedStore } from "../helpers/sample-store.js";
 import { localSearch } from "../../src/query/local-search.js";
-import type { ScoredEntity, AnnotatedRelation } from "../../src/query/local-search.js";
+import type { AnnotatedRelation } from "../../src/query/local-search.js";
 import { EntityType, RelationType } from "../../src/shared/types.js";
-import type { Entity, Relation, TextUnit, Community } from "../../src/shared/types.js";
+import type { Entity, Relation } from "../../src/shared/types.js";
 
 describe("localSearch", () => {
   let db: Database.Database;
@@ -41,9 +41,7 @@ describe("localSearch", () => {
 
     expect(result.textUnits.length).toBeGreaterThan(0);
     // Text unit about gRPC migration should be included
-    const hasGrpcContent = result.textUnits.some((tu) =>
-      tu.content.toLowerCase().includes("grpc"),
-    );
+    const hasGrpcContent = result.textUnits.some((tu) => tu.content.toLowerCase().includes("grpc"));
     expect(hasGrpcContent).toBe(true);
   });
 
@@ -52,9 +50,7 @@ describe("localSearch", () => {
 
     expect(result.communities.length).toBeGreaterThan(0);
     const titles = result.communities.map((c) => c.title);
-    expect(
-      titles.some((t) => t.toLowerCase().includes("payment")),
-    ).toBe(true);
+    expect(titles.some((t) => t.toLowerCase().includes("payment"))).toBe(true);
   });
 
   it("expands 1-hop via relations", () => {
@@ -64,9 +60,7 @@ describe("localSearch", () => {
     const names = result.entities.map((e) => e.name);
     expect(names).toContain("Alice Chen");
     // 1-hop expansion should include modules Alice is connected to
-    expect(
-      names.some((n) => n.includes("payments") || n.includes("middleware")),
-    ).toBe(true);
+    expect(names.some((n) => n.includes("payments") || n.includes("middleware"))).toBe(true);
   });
 
   it("filters by entity type", () => {
@@ -77,9 +71,7 @@ describe("localSearch", () => {
 
     // Seed entities should only be MODULE type
     expect(result.entities.length).toBeGreaterThan(0);
-    const moduleEntities = result.entities.filter(
-      (e) => e.type === EntityType.MODULE,
-    );
+    const moduleEntities = result.entities.filter((e) => e.type === EntityType.MODULE);
     expect(moduleEntities.length).toBeGreaterThan(0);
     expect(moduleEntities[0]!.name).toBe("src/payments");
   });
@@ -209,12 +201,8 @@ describe("localSearch", () => {
       expect(ftsHeavy.entities.length).toBeGreaterThan(0);
 
       // Scores should differ since weights changed
-      const recencyScores = recencyHeavy.entities
-        .filter((e) => e.isSeed)
-        .map((e) => e.score);
-      const ftsScores = ftsHeavy.entities
-        .filter((e) => e.isSeed)
-        .map((e) => e.score);
+      const recencyScores = recencyHeavy.entities.filter((e) => e.isSeed).map((e) => e.score);
+      const ftsScores = ftsHeavy.entities.filter((e) => e.isSeed).map((e) => e.score);
       expect(recencyScores).not.toEqual(ftsScores);
     });
 
@@ -319,9 +307,7 @@ describe("localSearch", () => {
         maxTextUnitTokens: 10000,
       });
 
-      expect(small.textUnits.length).toBeLessThanOrEqual(
-        large.textUnits.length,
-      );
+      expect(small.textUnits.length).toBeLessThanOrEqual(large.textUnits.length);
     });
 
     it("prefers recent text units", () => {
@@ -369,8 +355,7 @@ describe("localSearch", () => {
       // "auth*" should match src/middleware (description: "Auth middleware layer")
       const hasAuthRelated = result.entities.some(
         (e) =>
-          e.description.toLowerCase().includes("auth") ||
-          e.name.toLowerCase().includes("auth"),
+          e.description.toLowerCase().includes("auth") || e.name.toLowerCase().includes("auth"),
       );
       expect(hasAuthRelated).toBe(true);
     });

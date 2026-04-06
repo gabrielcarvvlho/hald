@@ -56,15 +56,15 @@ export function estimateCost(
   provider: string,
 ): CostEstimate {
   // Extraction: ~500 tokens per text unit (input) + ~500 tokens output
-  const extractionInputTokens = textUnits.reduce(
-    (sum, tu) => sum + estimateTokens(tu.content),
-    0,
-  );
+  const extractionInputTokens = textUnits.reduce((sum, tu) => sum + estimateTokens(tu.content), 0);
   // System prompt is ~600 tokens, added per call
   const systemPromptTokens = 600 * textUnits.length;
   const extractionOutputTokens = textUnits.length * 500; // estimated output
-  const extractionTokens =
-    extractionInputTokens + systemPromptTokens + extractionOutputTokens;
+  // Gleaning (secondary extraction pass) + retries add ~40% more token usage
+  const gleaningMultiplier = 1.4;
+  const extractionTokens = Math.round(
+    (extractionInputTokens + systemPromptTokens + extractionOutputTokens) * gleaningMultiplier,
+  );
 
   // Summarization: ~300 tokens per community (input context + output)
   const summarizationTokens = estimatedCommunities * 800; // input + output
@@ -77,8 +77,7 @@ export function estimateCost(
   const inputTokens = totalTokens * 0.6;
   const outputTokens = totalTokens * 0.4;
   const estimatedCostUsd =
-    (inputTokens / 1_000_000) * rates.input +
-    (outputTokens / 1_000_000) * rates.output;
+    (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output;
 
   return {
     provider,
@@ -121,6 +120,9 @@ export function formatCostEstimate(estimate: CostEstimate): string {
     lines.push(`  (Anthropic Claude Sonnet)`);
   }
 
+  lines.push(`  Estimate includes ~40% buffer for retries and gleaning passes`);
+  lines.push(`  Note: estimates are approximate, based on provider pricing as of April 2026`);
+
   return lines.join("\n");
 }
 
@@ -147,14 +149,11 @@ export function calculateActualCost(
   model?: string,
 ): ActualCostResult {
   const resolvedModel = model ?? DEFAULT_MODELS[provider] ?? "unknown";
-  const rates =
-    MODEL_PRICING[resolvedModel] ??
-    COST_PER_1M_TOKENS[provider] ??
-    { input: 0, output: 0 };
+  const rates = MODEL_PRICING[resolvedModel] ??
+    COST_PER_1M_TOKENS[provider] ?? { input: 0, output: 0 };
 
   const costUsd =
-    (inputTokens / 1_000_000) * rates.input +
-    (outputTokens / 1_000_000) * rates.output;
+    (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output;
 
   return {
     provider,

@@ -13,8 +13,16 @@ import type { Store } from "../store/queries.js";
 import type { Entity, Relation } from "../shared/types.js";
 
 const COMMUNITY_COLORS = [
-  "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#ec4899", "#14b8a6", "#f97316", "#06b6d4", "#84cc16",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#06b6d4",
+  "#84cc16",
 ];
 
 // ================================================================
@@ -205,10 +213,7 @@ export interface EntityDetailResponse {
   }>;
 }
 
-export function getEntityDetail(
-  store: Store,
-  entityId: string,
-): EntityDetailResponse | null {
+export function getEntityDetail(store: Store, entityId: string): EntityDetailResponse | null {
   const entity = store.getEntity(entityId);
   if (!entity) return null;
 
@@ -230,7 +235,7 @@ export function getEntityDetail(
       targetType: other?.type ?? "UNKNOWN",
       weight: r.weight,
       description: r.description,
-      direction: isOutgoing ? "outgoing" as const : "incoming" as const,
+      direction: isOutgoing ? ("outgoing" as const) : ("incoming" as const),
     };
   });
 

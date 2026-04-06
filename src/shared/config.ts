@@ -8,18 +8,24 @@ const defaults: GitOracleConfig = {
   branch: "HEAD",
   commitsPerChunk: 10,
   maxChunkTokens: 2000,
+  maxDiffLines: 50,
+  maxFilesShown: 20,
+  maxMessageChars: 500,
   provider: "auto",
   maxConcurrency: 5,
   maxRetries: 3,
   entityResolutionThreshold: 0.85,
-  leidenResolutions: [0.5, 1.0, 2.0],
+  gleaningMinCommits: 8,
+  gleaningMaxEntitiesRatio: 0.5,
+  communityResolutions: [0.5, 1.0, 2.0],
   minCommunitySize: 3,
+  parentLinkThreshold: 0.3,
+  splitWarningThreshold: 0.7,
+  summaryReuseThreshold: 0.7,
   storagePath: ".git-oracle",
 };
 
-export function loadConfig(
-  overrides: Partial<GitOracleConfig> = {},
-): GitOracleConfig {
+export function loadConfig(overrides: Partial<GitOracleConfig> = {}): GitOracleConfig {
   // Priority (highest → lowest): CLI flags > config.json > env vars > defaults
 
   // 1. Start with defaults
@@ -52,7 +58,58 @@ export function loadConfig(
   config.repoPath = resolve(config.repoPath);
   config.storagePath = resolve(config.repoPath, config.storagePath);
 
+  // 7. Validate
+  validateConfig(config);
+
   return config;
+}
+
+function validateConfig(config: GitOracleConfig): void {
+  if (config.maxChunkTokens < 100) {
+    throw new Error("maxChunkTokens must be >= 100");
+  }
+  if (config.maxConcurrency < 1) {
+    throw new Error("maxConcurrency must be >= 1");
+  }
+  if (config.minCommunitySize < 1) {
+    throw new Error("minCommunitySize must be >= 1");
+  }
+  if (config.entityResolutionThreshold < 0 || config.entityResolutionThreshold > 1) {
+    throw new Error("entityResolutionThreshold must be between 0 and 1");
+  }
+  if (!config.communityResolutions?.length) {
+    throw new Error("At least one community resolution is required");
+  }
+  if (config.maxRetries < 0) {
+    throw new Error("maxRetries must be >= 0");
+  }
+  if (config.commitsPerChunk < 1) {
+    throw new Error("commitsPerChunk must be >= 1");
+  }
+  if (config.parentLinkThreshold < 0 || config.parentLinkThreshold > 1) {
+    throw new Error("parentLinkThreshold must be between 0 and 1");
+  }
+  if (config.splitWarningThreshold < 0 || config.splitWarningThreshold > 1) {
+    throw new Error("splitWarningThreshold must be between 0 and 1");
+  }
+  if (config.summaryReuseThreshold < 0 || config.summaryReuseThreshold > 1) {
+    throw new Error("summaryReuseThreshold must be between 0 and 1");
+  }
+  if (config.maxDiffLines < 1) {
+    throw new Error("maxDiffLines must be >= 1");
+  }
+  if (config.maxFilesShown < 1) {
+    throw new Error("maxFilesShown must be >= 1");
+  }
+  if (config.maxMessageChars < 1) {
+    throw new Error("maxMessageChars must be >= 1");
+  }
+  if (config.gleaningMinCommits < 1) {
+    throw new Error("gleaningMinCommits must be >= 1");
+  }
+  if (config.gleaningMaxEntitiesRatio < 0 || config.gleaningMaxEntitiesRatio > 1) {
+    throw new Error("gleaningMaxEntitiesRatio must be between 0 and 1");
+  }
 }
 
 function applyEnvOverrides(config: GitOracleConfig): void {

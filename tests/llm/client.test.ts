@@ -121,12 +121,7 @@ describe("createClient", () => {
   const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    for (const key of [
-      "ANTHROPIC_API_KEY",
-      "OPENAI_API_KEY",
-      "GOOGLE_API_KEY",
-      "GEMINI_API_KEY",
-    ]) {
+    for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"]) {
       savedEnv[key] = process.env[key];
       delete process.env[key];
     }
@@ -143,9 +138,9 @@ describe("createClient", () => {
   });
 
   it("throws NoProviderError when auto and no keys", async () => {
-    await expect(
-      createClient({ provider: "auto", maxRetries: 1 }),
-    ).rejects.toThrow(NoProviderError);
+    await expect(createClient({ provider: "auto", maxRetries: 1 })).rejects.toThrow(
+      NoProviderError,
+    );
   });
 
   it("uses env var API key when provider is explicit but apiKey not passed", async () => {
@@ -161,9 +156,9 @@ describe("createClient", () => {
 
   it("throws when explicit provider has no env var and no apiKey", async () => {
     // No OPENAI_API_KEY set
-    await expect(
-      createClient({ provider: "openai", maxRetries: 1 }),
-    ).rejects.toThrow(NoProviderError);
+    await expect(createClient({ provider: "openai", maxRetries: 1 })).rejects.toThrow(
+      NoProviderError,
+    );
   });
 });
 

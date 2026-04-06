@@ -1,11 +1,5 @@
 import type { Store } from "../store/queries.js";
-import type {
-  Entity,
-  EntityType,
-  Relation,
-  TextUnit,
-  Community,
-} from "../shared/types.js";
+import type { Entity, EntityType, Relation, TextUnit, Community } from "../shared/types.js";
 
 // ================================================================
 // Types
@@ -78,10 +72,7 @@ const HOP2_SCORE_DECAY = 0.25; // Max score for 2-hop neighbors
  * expanding 1-2 hops via budget-aware relation traversal, and returning
  * supporting evidence with token-budgeted text units.
  */
-export function localSearch(
-  store: Store,
-  options: LocalSearchOptions,
-): LocalSearchResult {
+export function localSearch(store: Store, options: LocalSearchOptions): LocalSearchResult {
   const {
     query,
     maxEntities = 10,
@@ -126,16 +117,16 @@ export function localSearch(
   }
 
   // 3. Composite scoring: BM25 × recency × degree centrality
-  const maxDegree = Math.max(
-    ...[...seedRelationsMap.values()].map((r) => r.length),
-    1,
-  );
+  const maxDegree = Math.max(...[...seedRelationsMap.values()].map((r) => r.length), 1);
+
+  // Adaptive BM25 normalization: divide by max absolute score in result set
+  const maxAbsFtsRank = Math.max(...rankedSeeds.map(({ ftsRank }) => Math.abs(ftsRank)), 1);
 
   const seedScored: ScoredEntity[] = rankedSeeds.map(({ entity, ftsRank }) => {
     const degree = seedRelationsMap.get(entity.id)?.length ?? 0;
     return {
       ...entity,
-      score: computeScore(entity, ftsRank, degree, maxDegree, now, weights),
+      score: computeScore(entity, ftsRank, degree, maxDegree, now, weights, maxAbsFtsRank),
       isSeed: true,
       hopDistance: 0,
       degree,
@@ -145,34 +136,17 @@ export function localSearch(
   seedScored.sort((a, b) => b.score - a.score);
 
   // 4. Budget-aware hop expansion (1-hop + selective 2-hop)
-  const expansion = expandHops(
-    store,
-    seedScored,
-    seedRelationsMap,
-    maxRelations,
-  );
+  const expansion = expandHops(store, seedScored, seedRelationsMap, maxRelations);
 
   // 5. Assemble entities: seeds first, then neighbors by connection strength
-  const allEntities = [...seedScored, ...expansion.neighbors].slice(
-    0,
-    maxEntities,
-  );
+  const allEntities = [...seedScored, ...expansion.neighbors].slice(0, maxEntities);
   const entityMap = new Map(allEntities.map((e) => [e.id, e]));
 
   // 6. Annotate relations with human-readable entity names
-  const annotatedRelations = annotateRelations(
-    expansion.relations,
-    entityMap,
-    store,
-  );
+  const annotatedRelations = annotateRelations(expansion.relations, entityMap, store);
 
   // 7. Select text units: round-robin across seeds, recency-sorted, token-budgeted
-  const textUnits = selectTextUnits(
-    store,
-    seedScored,
-    maxTextUnits,
-    maxTextUnitTokens,
-  );
+  const textUnits = selectTextUnits(store, seedScored, maxTextUnits, maxTextUnitTokens);
 
   // 8. Community context for seed entities
   const communityMap = new Map<string, Community>();
@@ -204,30 +178,21 @@ function computeScore(
   maxDegree: number,
   now: Date,
   weights: RankingWeights,
+  maxAbsFtsRank: number,
 ): number {
-  // FTS: normalize BM25 (more negative = better match, clamp to [0, 1])
-  const ftsScore = Math.max(0, Math.min(1, -ftsRank / 20));
+  // FTS: adaptive normalization — divide by max absolute BM25 score in the result set
+  // BM25 scores are negative (more negative = better match), so -rank/maxAbs maps to [0, 1]
+  const ftsScore = maxAbsFtsRank > 0 ? Math.max(0, Math.min(1, -ftsRank / maxAbsFtsRank)) : 0;
 
   // Recency: exponential decay, ~0.5 at 180 days (guard against invalid dates)
-  const daysSince =
-    (now.getTime() - new Date(entity.lastSeen).getTime()) / 86_400_000;
-  const recencyScore = Number.isFinite(daysSince)
-    ? Math.exp(-Math.max(0, daysSince) / 260)
-    : 0;
+  const daysSince = (now.getTime() - new Date(entity.lastSeen).getTime()) / 86_400_000;
+  const recencyScore = Number.isFinite(daysSince) ? Math.exp(-Math.max(0, daysSince) / 260) : 0;
 
   // Degree: log-normalized to dampen hub dominance
   const degreeScore =
-    maxDegree > 1
-      ? Math.log(1 + degree) / Math.log(1 + maxDegree)
-      : degree > 0
-        ? 1
-        : 0;
+    maxDegree > 1 ? Math.log(1 + degree) / Math.log(1 + maxDegree) : degree > 0 ? 1 : 0;
 
-  return (
-    weights.fts * ftsScore +
-    weights.recency * recencyScore +
-    weights.degree * degreeScore
-  );
+  return weights.fts * ftsScore + weights.recency * recencyScore + weights.degree * degreeScore;
 }
 
 // ================================================================
@@ -279,8 +244,7 @@ function expandHops(
       allRelations.push(rel);
       hop1Budget--;
 
-      const neighborId =
-        rel.sourceId === seed.id ? rel.targetId : rel.sourceId;
+      const neighborId = rel.sourceId === seed.id ? rel.targetId : rel.sourceId;
       if (!knownIds.has(neighborId)) {
         knownIds.add(neighborId);
         hop1Pending.push({ neighborId, relWeight: rel.weight });
@@ -323,8 +287,7 @@ function expandHops(
       allRelations.push(rel);
       hop2Budget--;
 
-      const neighborId =
-        rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
+      const neighborId = rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
       if (!knownIds.has(neighborId)) {
         knownIds.add(neighborId);
         hop2Pending.push({ neighborId, relWeight: rel.weight });
@@ -344,15 +307,10 @@ function expandHops(
   }
 
   // Score neighbors: normalize by max relation weight, decay by hop distance
-  const maxWeight = Math.max(
-    ...rawNeighbors.map((n) => n.relWeight),
-    1,
-  );
+  const maxWeight = Math.max(...rawNeighbors.map((n) => n.relWeight), 1);
   const neighbors: ScoredEntity[] = rawNeighbors.map((n) => ({
     ...n.entity,
-    score:
-      (n.relWeight / maxWeight) *
-      (n.hopDistance === 1 ? HOP1_SCORE_DECAY : HOP2_SCORE_DECAY),
+    score: (n.relWeight / maxWeight) * (n.hopDistance === 1 ? HOP1_SCORE_DECAY : HOP2_SCORE_DECAY),
     isSeed: false,
     hopDistance: n.hopDistance,
     degree: 0,
@@ -417,13 +375,9 @@ function annotateRelations(
 ): AnnotatedRelation[] {
   return relations.map((rel) => {
     const sourceName =
-      entityMap.get(rel.sourceId)?.name ??
-      store.getEntity(rel.sourceId)?.name ??
-      rel.sourceId;
+      entityMap.get(rel.sourceId)?.name ?? store.getEntity(rel.sourceId)?.name ?? rel.sourceId;
     const targetName =
-      entityMap.get(rel.targetId)?.name ??
-      store.getEntity(rel.targetId)?.name ??
-      rel.targetId;
+      entityMap.get(rel.targetId)?.name ?? store.getEntity(rel.targetId)?.name ?? rel.targetId;
     return { ...rel, sourceName, targetName };
   });
 }

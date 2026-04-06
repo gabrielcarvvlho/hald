@@ -11,12 +11,7 @@ export class OpenAIClient implements LLMClient {
   private baseUrl?: string;
   private maxRetries: number;
 
-  constructor(
-    apiKey: string,
-    model?: string,
-    baseUrl?: string,
-    maxRetries = 3,
-  ) {
+  constructor(apiKey: string, model?: string, baseUrl?: string, maxRetries = 3) {
     this.apiKey = apiKey;
     this.model = model ?? DEFAULT_MODEL;
     this.baseUrl = baseUrl;
@@ -66,7 +61,7 @@ export class OpenAIClient implements LLMClient {
               ? "end_turn"
               : finishReason === "length"
                 ? "max_tokens"
-                : finishReason ?? "unknown",
+                : (finishReason ?? "unknown"),
         };
       },
       this.maxRetries,

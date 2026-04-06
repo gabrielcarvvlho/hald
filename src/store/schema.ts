@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import { logger } from "../shared/logger.js";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function initSchema(db: Database.Database): void {
   db.exec(`
@@ -111,9 +111,7 @@ export function initSchema(db: Database.Database): void {
   createFtsTriggers(db);
 
   // Set schema version
-  db.prepare(
-    `INSERT OR IGNORE INTO index_meta (key, value) VALUES ('schema_version', '1')`,
-  ).run();
+  db.prepare(`INSERT OR IGNORE INTO index_meta (key, value) VALUES ('schema_version', '1')`).run();
 }
 
 function createFtsTriggers(db: Database.Database): void {
@@ -229,35 +227,45 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    description: "Add composite indexes for relation lookups by entity + type",
+    up: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_relations_source_type ON relations(source_id, type);
+        CREATE INDEX IF NOT EXISTS idx_relations_target_type ON relations(target_id, type);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {
-  const row = db.prepare(
-    "SELECT value FROM index_meta WHERE key = 'schema_version'"
-  ).get() as { value: string } | undefined;
+  const row = db.prepare("SELECT value FROM index_meta WHERE key = 'schema_version'").get() as
+    | { value: string }
+    | undefined;
 
   const currentVersion = row ? Number(row.value) : 1;
 
   if (currentVersion > SCHEMA_VERSION) {
     throw new Error(
       `Database schema version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}. ` +
-      `Please upgrade git-oracle.`
+        `Please upgrade git-oracle.`,
     );
   }
 
   if (currentVersion === SCHEMA_VERSION) return;
 
-  const pending = MIGRATIONS
-    .filter((m) => m.version > currentVersion)
-    .sort((a, b) => a.version - b.version);
+  const pending = MIGRATIONS.filter((m) => m.version > currentVersion).sort(
+    (a, b) => a.version - b.version,
+  );
 
   for (const migration of pending) {
     db.transaction(() => {
       logger.info(`Running migration v${migration.version}: ${migration.description}`);
       migration.up(db);
-      db.prepare(
-        "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('schema_version', ?)"
-      ).run(String(migration.version));
+      db.prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES ('schema_version', ?)").run(
+        String(migration.version),
+      );
     })();
   }
 }

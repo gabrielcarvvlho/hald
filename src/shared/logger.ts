@@ -49,11 +49,7 @@ export class Logger {
     };
   }
 
-  private log(
-    level: LogLevel,
-    message: string,
-    meta?: Record<string, unknown>,
-  ): void {
+  private log(level: LogLevel, message: string, meta?: Record<string, unknown>): void {
     if (level < this.level) return;
 
     const entry: LogEntry = {
@@ -78,6 +74,4 @@ function parseLogLevel(value: string | undefined): LogLevel {
   return LogLevel.INFO;
 }
 
-export const logger = new Logger(
-  parseLogLevel(process.env.GIT_ORACLE_LOG_LEVEL),
-);
+export const logger = new Logger(parseLogLevel(process.env.GIT_ORACLE_LOG_LEVEL));

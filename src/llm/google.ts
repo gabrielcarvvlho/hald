@@ -7,9 +7,7 @@ const DEFAULT_MODEL = "gemini-2.5-flash";
 
 export class GoogleClient implements LLMClient {
   readonly provider = "google" as const;
-  private sdk: InstanceType<
-    typeof import("@google/genai").GoogleGenAI
-  > | null = null;
+  private sdk: InstanceType<typeof import("@google/genai").GoogleGenAI> | null = null;
   private apiKey: string;
   private model: string;
   private maxRetries: number;
@@ -39,10 +37,7 @@ export class GoogleClient implements LLMClient {
       async () => {
         // Google SDK has no constructor-level timeout — use AbortController
         const controller = new AbortController();
-        const timeoutId = setTimeout(
-          () => controller.abort(),
-          REQUEST_TIMEOUT_MS,
-        );
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
         try {
           const response = await client.models.generateContent({
@@ -67,7 +62,7 @@ export class GoogleClient implements LLMClient {
                 ? "end_turn"
                 : finishReason === "MAX_TOKENS"
                   ? "max_tokens"
-                  : finishReason?.toLowerCase() ?? "unknown",
+                  : (finishReason?.toLowerCase() ?? "unknown"),
           };
         } finally {
           clearTimeout(timeoutId);

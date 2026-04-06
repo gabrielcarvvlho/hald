@@ -124,10 +124,7 @@ export function build(store: Store, input: BuildInput): GraphStats {
     entityCount: stats.entities,
     relationCount: stats.relations,
     textUnitCount: stats.textUnits,
-    edgeDensity:
-      stats.entities > 1
-        ? stats.relations / (stats.entities * (stats.entities - 1))
-        : 0,
+    edgeDensity: stats.entities > 1 ? stats.relations / (stats.entities * (stats.entities - 1)) : 0,
   };
 }
 
@@ -141,13 +138,16 @@ function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relati
   for (const commit of commits) {
     // Skip merge commits — their file lists duplicate the merged branch commits
     if (commit.parentHashes.length > 1) continue;
-    const modules = [
-      ...new Set(
-        commit.filesChanged.map((f) =>
-          normalizeModulePath(f.path, moduleDepth),
-        ),
-      ),
-    ];
+
+    // Aggregate lines changed per module (after path normalization)
+    const moduleLinesMap = new Map<string, number>();
+    for (const f of commit.filesChanged) {
+      const mod = normalizeModulePath(f.path, moduleDepth);
+      const lines = (f.additions || 0) + (f.deletions || 0);
+      moduleLinesMap.set(mod, (moduleLinesMap.get(mod) ?? 0) + lines);
+    }
+
+    const modules = [...moduleLinesMap.keys()];
 
     // Create edges for pairs of modules changed in the same commit
     for (let i = 0; i < modules.length; i++) {
@@ -158,18 +158,19 @@ function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relati
         // Skip self-loops (same directory after normalization)
         if (sourceId === targetId) continue;
 
-        const id = generateRelationId(
-          RelationType.CO_CHANGED,
-          sourceId,
-          targetId,
-        );
+        const id = generateRelationId(RelationType.CO_CHANGED, sourceId, targetId);
+
+        // Weight by min lines changed — proportional to shared commit significance
+        const linesA = moduleLinesMap.get(modules[i]!) ?? 0;
+        const linesB = moduleLinesMap.get(modules[j]!) ?? 0;
+        const weight = Math.min(linesA, linesB) || 1;
 
         relations.push({
           id,
           type: RelationType.CO_CHANGED,
           sourceId,
           targetId,
-          weight: 1,
+          weight,
           description: `Changed together in commit ${commit.hash.slice(0, 7)}`,
           evidence: [],
           firstSeen: commit.date,
@@ -186,9 +187,7 @@ function buildCoChangeEdges(commits: CommitData[], moduleDepth?: number): Relati
 // Helpers
 // ================================================================
 
-function buildCommitTextUnitMap(
-  textUnits: TextUnit[],
-): Map<string, string> {
+function buildCommitTextUnitMap(textUnits: TextUnit[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const tu of textUnits) {
     for (const hash of tu.commitHashes) {
@@ -205,9 +204,6 @@ export function generateRelationId(
 ): RelationId {
   // Sort to make id deterministic regardless of direction
   const [a, b] = [sourceId, targetId].sort();
-  const hash = createHash("sha256")
-    .update(`${type}:${a}:${b}`)
-    .digest("hex")
-    .slice(0, 8);
+  const hash = createHash("sha256").update(`${type}:${a}:${b}`).digest("hex").slice(0, 8);
   return `rel:${hash}`;
 }

@@ -1,5 +1,17 @@
-import type { GitOracleConfig, CommitData, Entity, Relation, Community, CommunityId } from "../shared/types.js";
-import type { ExtractedRelation, ExtractorResult, ExtractedEntity, TokenAccumulator } from "./extractor.js";
+import type {
+  GitOracleConfig,
+  CommitData,
+  Entity,
+  Relation,
+  Community,
+  CommunityId,
+} from "../shared/types.js";
+import type {
+  ExtractedRelation,
+  ExtractorResult,
+  ExtractedEntity,
+  TokenAccumulator,
+} from "./extractor.js";
 import { openDatabase } from "../store/db.js";
 import { Store } from "../store/queries.js";
 import { readCommits, getHead } from "./git-reader.js";
@@ -13,6 +25,7 @@ import { summarizeBatch } from "./summarizer.js";
 import { createClient } from "../llm/client.js";
 import { calculateActualCost } from "./cost-estimator.js";
 import { logger } from "../shared/logger.js";
+import { safeJsonParse } from "../shared/utils.js";
 
 export interface IndexOptions {
   full?: boolean;
@@ -100,6 +113,9 @@ async function runPipeline(
   const textUnits = chunk(commits, {
     commitsPerChunk: config.commitsPerChunk,
     maxChunkTokens: config.maxChunkTokens,
+    maxDiffLines: config.maxDiffLines,
+    maxFilesShown: config.maxFilesShown,
+    maxMessageChars: config.maxMessageChars,
   });
   logger.info("orchestrator: chunked", { textUnits: textUnits.length });
 
@@ -124,15 +140,14 @@ async function runPipeline(
   };
   let failedChunks = 0;
 
-  for await (const { textUnitId, result, failed } of extractBatch(
-    textUnits,
-    client,
-    {
-      concurrency: config.maxConcurrency,
-      onProgress: (done, total) => progress("extracting", done, total),
-      tokenUsage,
-    },
-  )) {
+  for await (const { textUnitId, result, failed } of extractBatch(textUnits, client, {
+    concurrency: config.maxConcurrency,
+    enableGleaning: true,
+    gleaningMinCommits: config.gleaningMinCommits,
+    gleaningMaxEntitiesRatio: config.gleaningMaxEntitiesRatio,
+    onProgress: (done, total) => progress("extracting", done, total),
+    tokenUsage,
+  })) {
     if (failed) failedChunks++;
     extractions.set(textUnitId, result);
     allExtractedEntities.push(...result.entities);
@@ -140,9 +155,7 @@ async function runPipeline(
   }
 
   if (failedChunks > 0) {
-    logger.warn(
-      `orchestrator: ${failedChunks}/${textUnits.length} chunks failed extraction`,
-    );
+    logger.warn(`orchestrator: ${failedChunks}/${textUnits.length} chunks failed extraction`);
   }
 
   logger.info("orchestrator: extracted", {
@@ -201,8 +214,12 @@ async function runPipeline(
   const communities = cluster(
     allEntities,
     allRelations,
-    config.leidenResolutions,
+    config.communityResolutions,
     config.minCommunitySize,
+    {
+      parentLinkThreshold: config.parentLinkThreshold,
+      splitWarningThreshold: config.splitWarningThreshold,
+    },
   );
   logger.info("orchestrator: clustered", {
     communities: communities.length,
@@ -228,14 +245,15 @@ async function runPipeline(
       let bestMatch: { id: CommunityId; jaccard: number } | null = null;
       for (const [oldId, oldMemberJson] of oldMembership) {
         if (!oldId.startsWith(`comm:${c.level}:`)) continue;
-        const oldMembers: string[] = JSON.parse(oldMemberJson);
+        const oldMembers: string[] = safeJsonParse(oldMemberJson, []);
         const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
         if (jaccard > (bestMatch?.jaccard ?? 0)) {
           bestMatch = { id: oldId, jaccard };
         }
       }
 
-      if (bestMatch && bestMatch.jaccard > 0.7) {
+      // Reuse summary if community membership is sufficiently similar (lower = fewer LLM calls but staler summaries)
+      if (bestMatch && bestMatch.jaccard > config.summaryReuseThreshold) {
         const old = oldSummaries.get(bestMatch.id);
         if (old && old.summary) {
           c.title = old.title;
@@ -298,10 +316,7 @@ async function runPipeline(
   const lastCommit = commits[commits.length - 1]!;
   store.setMeta("last_indexed_commit", lastCommit.hash);
   store.setMeta("last_indexed_at", new Date().toISOString());
-  store.setMeta(
-    "head_at_index",
-    await getHead(config.repoPath).catch(() => "unknown"),
-  );
+  store.setMeta("head_at_index", await getHead(config.repoPath).catch(() => "unknown"));
   // Calculate actual cost from real token counts
   const cost = calculateActualCost(
     tokenUsage.inputTokens,

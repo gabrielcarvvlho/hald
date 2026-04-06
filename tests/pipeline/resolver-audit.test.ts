@@ -9,7 +9,6 @@ import { EntityType } from "../../src/shared/types.js";
 import type { ExtractedEntity } from "../../src/pipeline/extractor.js";
 
 describe("resolver audit — edge cases", () => {
-
   // === DETERMINISM: same-length description tiebreaker ===
   it("same name + same description length → deterministic description", () => {
     const entities: ExtractedEntity[] = [
@@ -27,15 +26,7 @@ describe("resolver audit — edge cases", () => {
 
   // === DETERMINISM: canonical name tiebreaker ===
   it("canonical name selection is deterministic across input orders", () => {
-    // Two names with same freq (1 each), same length (5)
-    const entities: ExtractedEntity[] = [
-      { name: "Alpha", type: EntityType.TECHNOLOGY, description: "first" },
-      { name: "Bravo", type: EntityType.TECHNOLOGY, description: "second" },
-    ];
-
-    // With threshold 1.0 (impossible to fuzzy merge), they stay separate.
-    // But with lower threshold + similar enough names... let's use exact same name
-    // different cases that happen to have the same length
+    // Two names with exact same name different cases
     const e2: ExtractedEntity[] = [
       { name: "REACT", type: EntityType.TECHNOLOGY, description: "lib" },
       { name: "react", type: EntityType.TECHNOLOGY, description: "lib" },
@@ -101,10 +92,6 @@ describe("resolver audit — edge cases", () => {
     // This tests the greedy single-linkage behavior.
     // With sorted input, the first entity becomes cluster head.
     // Subsequent entities only compare to cluster heads, not all members.
-    const entities: ExtractedEntity[] = [
-      { name: "billing-api", type: EntityType.MODULE, description: "a" },
-      { name: "billing-app", type: EntityType.MODULE, description: "b" },
-    ];
     // These are modules — they get path-normalized first.
     // "billing-api" has no extension, stays as-is.
     // "billing-app" has no extension, stays as-is.
@@ -130,7 +117,7 @@ describe("resolver audit — edge cases", () => {
       [mkEntities()[2]!, mkEntities()[4]!, mkEntities()[0]!, mkEntities()[3]!, mkEntities()[1]!],
     ];
 
-    const results = orders.map(o => {
+    const results = orders.map((o) => {
       const r = resolve(o, 0.85);
       return r.sort((a, b) => a.id.localeCompare(b.id));
     });

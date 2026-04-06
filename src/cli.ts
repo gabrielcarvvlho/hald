@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { join } from "node:path";
 import { Command } from "commander";
 import { loadConfig } from "./shared/config.js";
 import { openDatabase } from "./store/db.js";
@@ -32,11 +33,7 @@ program
   .option("--full", "Force full re-index (ignore previous index)")
   .option("--max-commits <n>", "Limit number of commits to process", parseInt)
   .option("--since <date>", "Only index commits after this ISO date")
-  .option(
-    "--provider <name>",
-    "LLM provider (anthropic|openai|google|auto)",
-    "auto",
-  )
+  .option("--provider <name>", "LLM provider (anthropic|openai|google|auto)", "auto")
   .option("-y, --yes", "Skip cost confirmation prompt")
   .action(async (opts) => {
     try {
@@ -49,17 +46,14 @@ program
       // Detect actual provider for cost estimation
       const detected = detectProvider();
       const providerName =
-        config.provider === "auto"
-          ? detected?.provider ?? "unknown"
-          : config.provider;
+        config.provider === "auto" ? (detected?.provider ?? "unknown") : config.provider;
 
       console.log(
         `\nGit Oracle — Indexing ${config.repoPath}${opts.full ? " (full re-index)" : ""}\n`,
       );
 
       // Step 1: Read commits (fast, no LLM cost)
-      const spinnerText = (text: string) =>
-        process.stderr.write(`\r  ${text}${"".padEnd(20)}`);
+      const spinnerText = (text: string) => process.stderr.write(`\r  ${text}${"".padEnd(20)}`);
 
       spinnerText("Reading commits...");
       let sinceCommit: string | undefined;
@@ -95,6 +89,9 @@ program
       const textUnits = chunk(commits, {
         commitsPerChunk: config.commitsPerChunk,
         maxChunkTokens: config.maxChunkTokens,
+        maxDiffLines: config.maxDiffLines,
+        maxFilesShown: config.maxFilesShown,
+        maxMessageChars: config.maxMessageChars,
       });
 
       // Step 3: Show cost estimate
@@ -134,9 +131,7 @@ program
         full: opts.full,
         onProgress: (stage, done, total) => {
           if (total > 0) {
-            process.stderr.write(
-              `\r  ${stage}: ${done}/${total}${"".padEnd(10)}`,
-            );
+            process.stderr.write(`\r  ${stage}: ${done}/${total}${"".padEnd(10)}`);
           } else {
             process.stderr.write(`\r  ${stage}...${"".padEnd(10)}`);
           }
@@ -151,16 +146,18 @@ program
       console.log(`  Communities:             ${result.communitiesFound}`);
       console.log(`  Communities summarized:  ${result.communitiesSummarized}`);
       if (result.tokenUsage.requests > 0) {
-        console.log(`  LLM requests:            ${result.tokenUsage.requests} (${result.tokenUsage.failures} failed)`);
-        console.log(`  Tokens:                  ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`);
+        console.log(
+          `  LLM requests:            ${result.tokenUsage.requests} (${result.tokenUsage.failures} failed)`,
+        );
+        console.log(
+          `  Tokens:                  ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`,
+        );
         console.log(`  Cost:                    $${result.actualCostUsd.toFixed(4)}`);
       }
       console.log("");
     } catch (err) {
       process.stderr.write("\r");
-      console.error(
-        `\nIndexing failed: ${err instanceof Error ? err.message : String(err)}\n`,
-      );
+      console.error(`\nIndexing failed: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);
     }
   });
@@ -187,8 +184,7 @@ program
         process.exit(1);
       }
 
-      const searchType =
-        opts.type === "auto" ? classifyQuery(question) : opts.type;
+      const searchType = opts.type === "auto" ? classifyQuery(question) : opts.type;
 
       console.log(`Search type: ${searchType}\n`);
 
@@ -244,9 +240,7 @@ program
           if (result.communities.length > 0) {
             console.log("\n### Community Context");
             for (const c of result.communities) {
-              console.log(
-                `  ${c.title}: ${c.summary.slice(0, 200)}...`,
-              );
+              console.log(`  ${c.title}: ${c.summary.slice(0, 200)}...`);
             }
           }
         }
@@ -254,9 +248,7 @@ program
 
       store.close();
     } catch (err) {
-      console.error(
-        `Query failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      console.error(`Query failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   });
@@ -336,11 +328,55 @@ program
         open: opts.open,
       });
     } catch (err) {
-      console.error(
-        `\nGraph viewer failed: ${err instanceof Error ? err.message : String(err)}\n`,
-      );
+      console.error(`\nGraph viewer failed: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);
     }
+  });
+
+// ================================================================
+// reset
+// ================================================================
+
+program
+  .command("reset")
+  .description("Delete the index database and start fresh")
+  .option("-y, --yes", "Skip confirmation prompt")
+  .action(async (opts) => {
+    const config = loadConfig();
+    const { existsSync, unlinkSync } = await import("node:fs");
+    const dbPath = join(config.storagePath, "oracle.db");
+
+    if (!existsSync(dbPath)) {
+      console.log("No index found. Nothing to reset.");
+      return;
+    }
+
+    if (!opts.yes) {
+      const readline = await import("node:readline");
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      const answer = await new Promise<string>((resolve) =>
+        rl.question(`Delete ${dbPath}? [y/N] `, resolve),
+      );
+      rl.close();
+      if (answer.toLowerCase() !== "y") {
+        console.log("Aborted.");
+        return;
+      }
+    }
+
+    unlinkSync(dbPath);
+    // Clean up WAL/SHM journal files (better-sqlite3 uses WAL mode)
+    for (const suffix of ["-wal", "-shm"]) {
+      try {
+        unlinkSync(dbPath + suffix);
+      } catch {
+        // journal file may not exist — that's fine
+      }
+    }
+    console.log(`Deleted ${dbPath}. Index has been reset.`);
   });
 
 // ================================================================

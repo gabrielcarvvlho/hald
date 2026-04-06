@@ -25,8 +25,7 @@ describe("MCP integration", () => {
     registerResources(server, getStore);
 
     // 3. Connect client <-> server via in-memory transport
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
     client = new Client({ name: "test-client", version: "1.0.0" });
     await server.connect(serverTransport);

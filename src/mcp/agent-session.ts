@@ -38,6 +38,9 @@ import { logger } from "../shared/logger.js";
 // Session state
 // ================================================================
 
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CHUNKS = 500;
+
 export interface AgentIndexSession {
   config: GitOracleConfig;
   store: Store;
@@ -45,11 +48,18 @@ export interface AgentIndexSession {
   commits: CommitData[];
   extractions: Map<TextUnitId, ExtractorResult>;
   nextIndex: number;
+  createdAt: Date;
 }
 
 let activeSession: AgentIndexSession | null = null;
 
 export function getSession(): AgentIndexSession | null {
+  if (activeSession && Date.now() - activeSession.createdAt.getTime() > SESSION_TIMEOUT_MS) {
+    logger.warn("agent-session: auto-clearing stale session", {
+      ageMinutes: Math.round((Date.now() - activeSession.createdAt.getTime()) / 60_000),
+    });
+    clearSession();
+  }
   return activeSession;
 }
 
@@ -107,7 +117,18 @@ export async function startAgentSession(options: {
   const textUnits = chunk(commits, {
     commitsPerChunk: config.commitsPerChunk,
     maxChunkTokens: config.maxChunkTokens,
+    maxDiffLines: config.maxDiffLines,
+    maxFilesShown: config.maxFilesShown,
+    maxMessageChars: config.maxMessageChars,
   });
+
+  if (textUnits.length > MAX_CHUNKS) {
+    store.close();
+    throw new Error(
+      `Too many chunks (${textUnits.length} > ${MAX_CHUNKS}). ` +
+        `Use max_commits to limit scope or increase commitsPerChunk in config.`,
+    );
+  }
 
   logger.info("agent-session: started", {
     commits: commits.length,
@@ -121,6 +142,7 @@ export async function startAgentSession(options: {
     commits,
     extractions: new Map(),
     nextIndex: 0,
+    createdAt: new Date(),
   };
 
   return { chunkCount: textUnits.length, commitCount: commits.length };
@@ -262,8 +284,12 @@ export async function finalizeSession(): Promise<IndexResult> {
     const communities = cluster(
       allEntities,
       allRelations,
-      config.leidenResolutions,
+      config.communityResolutions,
       config.minCommunitySize,
+      {
+        parentLinkThreshold: config.parentLinkThreshold,
+        splitWarningThreshold: config.splitWarningThreshold,
+      },
     );
 
     // Store communities (without summaries — agent-mediated skips summarization)
@@ -278,10 +304,7 @@ export async function finalizeSession(): Promise<IndexResult> {
     const lastCommit = commits[commits.length - 1]!;
     store.setMeta("last_indexed_commit", lastCommit.hash);
     store.setMeta("last_indexed_at", new Date().toISOString());
-    store.setMeta(
-      "head_at_index",
-      await getHead(config.repoPath).catch(() => "unknown"),
-    );
+    store.setMeta("head_at_index", await getHead(config.repoPath).catch(() => "unknown"));
     store.setMeta("last_input_tokens", "0");
     store.setMeta("last_output_tokens", "0");
     store.setMeta("last_requests", String(extractions.size));

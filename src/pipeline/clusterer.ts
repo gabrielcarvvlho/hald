@@ -1,6 +1,7 @@
 import graphologyPkg from "graphology";
-const { UndirectedGraph } = graphologyPkg as unknown as { UndirectedGraph: typeof import("graphology").UndirectedGraph };
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { UndirectedGraph } = graphologyPkg as unknown as {
+  UndirectedGraph: typeof import("graphology").UndirectedGraph;
+};
 import louvainModule from "graphology-communities-louvain";
 const louvain = louvainModule as unknown as (
   graph: InstanceType<typeof UndirectedGraph>,
@@ -10,12 +11,7 @@ import graphologyComponentsPkg from "graphology-components";
 const { connectedComponents } = graphologyComponentsPkg as unknown as {
   connectedComponents: (graph: InstanceType<typeof UndirectedGraph>) => string[][];
 };
-import type {
-  Entity,
-  Relation,
-  Community,
-  CommunityId,
-} from "../shared/types.js";
+import type { Entity, Relation, Community, CommunityId } from "../shared/types.js";
 import { createHash } from "crypto";
 import { logger } from "../shared/logger.js";
 
@@ -59,6 +55,7 @@ export function cluster(
   relations: Relation[],
   resolutions: number[],
   minCommunitySize: number,
+  options?: { parentLinkThreshold?: number; splitWarningThreshold?: number },
 ): Community[] {
   if (entities.length === 0) return [];
 
@@ -73,7 +70,10 @@ export function cluster(
     if (entities.length < minCommunitySize) return [];
     return [
       {
-        id: communityId(0, entities.map((e) => e.id)),
+        id: communityId(
+          0,
+          entities.map((e) => e.id),
+        ),
         level: 0,
         title: "",
         summary: "",
@@ -161,7 +161,11 @@ export function cluster(
   }
 
   // Link parent/child across levels
-  linkHierarchy(allCommunities);
+  linkHierarchy(
+    allCommunities,
+    options?.parentLinkThreshold ?? 0.3,
+    options?.splitWarningThreshold ?? 0.7,
+  );
 
   end();
   logger.info("clusterer: done", {
@@ -176,7 +180,7 @@ export function cluster(
 // Graph construction
 // ================================================================
 
-export function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph {
+export function buildGraph(entities: Entity[], relations: Relation[]): InstanceType<typeof UndirectedGraph> {
   const graph = new UndirectedGraph();
 
   for (const entity of entities) {
@@ -186,8 +190,7 @@ export function buildGraph(entities: Entity[], relations: Relation[]): Undirecte
   const nodeSet = new Set(entities.map((e) => e.id));
 
   for (const relation of relations) {
-    if (!nodeSet.has(relation.sourceId) || !nodeSet.has(relation.targetId))
-      continue;
+    if (!nodeSet.has(relation.sourceId) || !nodeSet.has(relation.targetId)) continue;
     if (relation.sourceId === relation.targetId) continue;
 
     if (graph.hasEdge(relation.sourceId, relation.targetId)) {
@@ -231,7 +234,11 @@ export function jaccardSimilarity(a: string[], b: string[]): number {
 // Hierarchy linking
 // ================================================================
 
-function linkHierarchy(communities: Community[]): void {
+function linkHierarchy(
+  communities: Community[],
+  parentLinkThreshold: number,
+  splitWarningThreshold: number,
+): void {
   // Group by level
   const byLevel = new Map<number, Community[]>();
   for (const c of communities) {
@@ -255,9 +262,7 @@ function linkHierarchy(communities: Community[]): void {
       let bestOverlap = 0;
 
       for (const parent of parentLevel) {
-        const overlap = parent.entityIds.filter((id) =>
-          childSet.has(id),
-        ).length;
+        const overlap = parent.entityIds.filter((id) => childSet.has(id)).length;
         if (overlap > bestOverlap) {
           bestOverlap = overlap;
           bestParent = parent;
@@ -266,11 +271,11 @@ function linkHierarchy(communities: Community[]): void {
 
       const overlapRatio = bestOverlap / child.entityIds.length;
 
-      if (bestParent && overlapRatio > 0.3) {
+      if (bestParent && overlapRatio > parentLinkThreshold) {
         child.parentId = bestParent.id;
         bestParent.childIds.push(child.id);
 
-        if (overlapRatio < 0.7) {
+        if (overlapRatio < splitWarningThreshold) {
           logger.debug("clusterer: split community", {
             child: child.id,
             parent: bestParent.id,

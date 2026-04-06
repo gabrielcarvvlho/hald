@@ -1,12 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import pLimit from "p-limit";
 import type { LLMClient } from "../llm/types.js";
-import type {
-  Community,
-  CommunityId,
-  Entity,
-  Relation,
-} from "../shared/types.js";
+import type { Community, CommunityId, Entity, Relation } from "../shared/types.js";
 import type { TokenAccumulator } from "./extractor.js";
 import { logger } from "../shared/logger.js";
 
@@ -106,7 +101,10 @@ function parseSummaryXml(text: string): SummaryResult {
   const xml = extractXmlBlock(text, "community_summary");
   if (!xml) return { title: "", summary: text.trim() };
 
-  const parsed = xmlParser.parse(xml);
+  // Try parsing, with sanitization fallback for bare ampersands
+  const parsed = safeParseXml(xml);
+  if (!parsed) return { title: "", summary: text.trim() };
+
   const cs = parsed?.community_summary;
   if (!cs) return { title: "", summary: text.trim() };
 
@@ -114,6 +112,27 @@ function parseSummaryXml(text: string): SummaryResult {
     title: String(cs.title ?? "").trim(),
     summary: String(cs.summary ?? "").trim(),
   };
+}
+
+/** Attempt XML parse with ampersand sanitization fallback. */
+function safeParseXml(xml: string) {
+  try {
+    return xmlParser.parse(xml);
+  } catch (err) {
+    logger.warn("summarizer: XML parse failed, attempting sanitization", {
+      error: String(err),
+      xmlPreview: xml.slice(0, 200),
+    });
+    const sanitized = xml.replace(/&(?!(?:amp|lt|gt|apos|quot);)/g, "&amp;");
+    try {
+      return xmlParser.parse(sanitized);
+    } catch (retryErr) {
+      logger.error("summarizer: XML parse failed after sanitization", {
+        error: String(retryErr),
+      });
+      return null;
+    }
+  }
 }
 
 // ================================================================
@@ -168,17 +187,11 @@ export async function* summarizeBatch(
 
       const memberEntityIds = new Set(community.entityIds);
       const memberRelations = relations.filter(
-        (r) =>
-          memberEntityIds.has(r.sourceId) || memberEntityIds.has(r.targetId),
+        (r) => memberEntityIds.has(r.sourceId) || memberEntityIds.has(r.targetId),
       );
 
       try {
-        const result = await summarize(
-          community,
-          memberEntities,
-          memberRelations,
-          client,
-        );
+        const result = await summarize(community, memberEntities, memberRelations, client);
         if (options.tokenUsage) {
           options.tokenUsage.inputTokens += result.inputTokens;
           options.tokenUsage.outputTokens += result.outputTokens;
