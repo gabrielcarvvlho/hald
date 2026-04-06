@@ -825,6 +825,81 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
+  // git_oracle_reset
+  // ================================================================
+
+  server.registerTool(
+    "git_oracle_reset",
+    {
+      description:
+        "Delete the Git Oracle index database and start fresh. " +
+        "This is destructive and cannot be undone. " +
+        "Requires confirm=true to execute.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      inputSchema: z.object({
+        confirm: z
+          .boolean()
+          .describe("Must be true to confirm deletion"),
+      }),
+    },
+    async ({ confirm }) => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Reset aborted. Pass confirm=true to delete the index.",
+            },
+          ],
+        };
+      }
+
+      try {
+        const { existsSync, unlinkSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const config = loadConfig();
+        const dbPath = join(config.storagePath, "oracle.db");
+
+        if (!existsSync(dbPath)) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No index found. Nothing to reset.",
+              },
+            ],
+          };
+        }
+
+        unlinkSync(dbPath);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Index deleted: ${dbPath}. Run git_oracle_index to rebuild.`,
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Reset failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ================================================================
   // git_oracle_extract_next (agent-mediated)
   // ================================================================
 

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { join } from "node:path";
 import { Command } from "commander";
 import { loadConfig } from "./shared/config.js";
 import { openDatabase } from "./store/db.js";
@@ -344,6 +345,44 @@ program
       );
       process.exit(1);
     }
+  });
+
+// ================================================================
+// reset
+// ================================================================
+
+program
+  .command("reset")
+  .description("Delete the index database and start fresh")
+  .option("-y, --yes", "Skip confirmation prompt")
+  .action(async (opts) => {
+    const config = loadConfig();
+    const { existsSync, unlinkSync } = await import("node:fs");
+    const dbPath = join(config.storagePath, "oracle.db");
+
+    if (!existsSync(dbPath)) {
+      console.log("No index found. Nothing to reset.");
+      return;
+    }
+
+    if (!opts.yes) {
+      const readline = await import("node:readline");
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      const answer = await new Promise<string>((resolve) =>
+        rl.question(`Delete ${dbPath}? [y/N] `, resolve),
+      );
+      rl.close();
+      if (answer.toLowerCase() !== "y") {
+        console.log("Aborted.");
+        return;
+      }
+    }
+
+    unlinkSync(dbPath);
+    console.log(`Deleted ${dbPath}. Index has been reset.`);
   });
 
 // ================================================================
