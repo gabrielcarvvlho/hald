@@ -201,7 +201,7 @@ async function runPipeline(
   const communities = cluster(
     allEntities,
     allRelations,
-    config.leidenResolutions,
+    config.communityResolutions,
     config.minCommunitySize,
   );
   logger.info("orchestrator: clustered", {

@@ -281,7 +281,7 @@ export async function finalizeSession(): Promise<IndexResult> {
     const communities = cluster(
       allEntities,
       allRelations,
-      config.leidenResolutions,
+      config.communityResolutions,
       config.minCommunitySize,
     );
 

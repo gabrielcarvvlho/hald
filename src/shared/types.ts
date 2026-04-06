@@ -113,7 +113,7 @@ export interface GitOracleConfig {
   entityResolutionThreshold: number;
   /** Module path normalization depth (number of segments to keep). Default: 2 */
   moduleDepth?: number;
-  leidenResolutions: number[];
+  communityResolutions: number[];
   minCommunitySize: number;
 
   storagePath: string;

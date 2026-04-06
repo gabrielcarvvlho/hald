@@ -12,7 +12,7 @@ const defaults: GitOracleConfig = {
   maxConcurrency: 5,
   maxRetries: 3,
   entityResolutionThreshold: 0.85,
-  leidenResolutions: [0.5, 1.0, 2.0],
+  communityResolutions: [0.5, 1.0, 2.0],
   minCommunitySize: 3,
   storagePath: ".git-oracle",
 };
@@ -71,7 +71,7 @@ function validateConfig(config: GitOracleConfig): void {
   if (config.entityResolutionThreshold < 0 || config.entityResolutionThreshold > 1) {
     throw new Error("entityResolutionThreshold must be between 0 and 1");
   }
-  if (!config.leidenResolutions?.length) {
+  if (!config.communityResolutions?.length) {
     throw new Error("At least one community resolution is required");
   }
   if (config.maxRetries < 0) {

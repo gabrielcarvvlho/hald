@@ -15,7 +15,7 @@ describe("loadConfig", () => {
     expect(config.maxConcurrency).toBe(5);
     expect(config.maxRetries).toBe(3);
     expect(config.entityResolutionThreshold).toBe(0.85);
-    expect(config.leidenResolutions).toEqual([0.5, 1.0, 2.0]);
+    expect(config.communityResolutions).toEqual([0.5, 1.0, 2.0]);
     expect(config.minCommunitySize).toBe(3);
   });
 
@@ -181,8 +181,8 @@ describe("loadConfig", () => {
       ).toThrow("entityResolutionThreshold must be between 0 and 1");
     });
 
-    it("rejects empty leidenResolutions", () => {
-      expect(() => loadConfig({ leidenResolutions: [] })).toThrow(
+    it("rejects empty communityResolutions", () => {
+      expect(() => loadConfig({ communityResolutions: [] })).toThrow(
         "At least one community resolution is required",
       );
     });
