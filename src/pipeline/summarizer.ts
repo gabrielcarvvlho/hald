@@ -118,12 +118,18 @@ function parseSummaryXml(text: string): SummaryResult {
 function safeParseXml(xml: string) {
   try {
     return xmlParser.parse(xml);
-  } catch {
-    // Sanitize bare ampersands and retry
+  } catch (err) {
+    logger.warn("summarizer: XML parse failed, attempting sanitization", {
+      error: String(err),
+      xmlPreview: xml.slice(0, 200),
+    });
     const sanitized = xml.replace(/&(?!(?:amp|lt|gt|apos|quot);)/g, "&amp;");
     try {
       return xmlParser.parse(sanitized);
-    } catch {
+    } catch (retryErr) {
+      logger.error("summarizer: XML parse failed after sanitization", {
+        error: String(retryErr),
+      });
       return null;
     }
   }

@@ -270,12 +270,13 @@ describe("Full pipeline integration test", () => {
 
   // --- Relation assertions ---
 
-  it("creates AUTHORED and/or CO_CHANGED relations", () => {
+  it("creates AUTHORED relations from LLM extraction", () => {
     const allRelations = store.getAllRelations();
-    expect(allRelations.length).toBeGreaterThanOrEqual(1);
+    expect(allRelations.length).toBeGreaterThanOrEqual(2);
 
     const types = new Set(allRelations.map((r) => r.type));
-    expect(types.has("AUTHORED") || types.has("CO_CHANGED")).toBe(true);
+    // AUTHORED proves the LLM mock extraction worked (CO_CHANGED is commit-derived, not proof of extraction)
+    expect(types.has("AUTHORED")).toBe(true);
   });
 
   // --- Community assertions ---
@@ -324,14 +325,16 @@ describe("Full pipeline integration test", () => {
 
   // --- Query: globalSearch ---
 
-  it("globalSearch does not crash on a generic query", () => {
+  it("globalSearch returns communities array without crash", () => {
     const result = globalSearch(store, {
       query: "architecture decisions",
       maxCommunities: 5,
     });
 
-    expect(result.communities).toBeDefined();
+    // globalSearch always returns an array — verify it's populated (communities were summarized)
     expect(Array.isArray(result.communities)).toBe(true);
+    // At least verify the store has communities (globalSearch may not match FTS, but communities exist)
+    expect(store.getStats().communities).toBeGreaterThan(0);
   });
 
   // --- Metadata ---

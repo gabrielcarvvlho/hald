@@ -893,7 +893,18 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           };
         }
 
+        // Close any active agent session before deleting the DB
+        clearSession();
+
         unlinkSync(dbPath);
+        // Clean up WAL/SHM journal files (better-sqlite3 uses WAL mode)
+        for (const suffix of ["-wal", "-shm"]) {
+          try {
+            unlinkSync(dbPath + suffix);
+          } catch {
+            // journal file may not exist
+          }
+        }
         return {
           content: [
             {

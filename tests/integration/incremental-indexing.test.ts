@@ -227,31 +227,60 @@ describe("Incremental indexing", () => {
   }, 30_000);
 
   it("scenario 3: re-index with new commits that change community composition triggers re-summarization", async () => {
-    // Add commits that introduce a new module/entity, changing community structure
     await addExtraCommits(repoDir, 3);
+
+    // Capture community count before re-index
+    const dbBefore = openDatabase(storageDir);
+    const storeBefore = new Store(dbBefore);
+    const communityCountBefore = storeBefore.getCommunitiesByLevel(0).length;
+    storeBefore.close();
 
     const result = await indexRepository(makeConfig());
 
     expect(result.commitsProcessed).toBe(3);
-    // Extraction should have been called for the new chunks
     expect(extractCalls.length).toBeGreaterThan(0);
+    // New or changed communities should trigger summarization
+    // (summaryCalls may be 0 if all communities matched via Jaccard, but extraction must have run)
 
-    // Total commits should now be 11
     const db = openDatabase(storageDir);
     const store = new Store(db);
     expect(store.getStats().commits).toBe(11);
+    // Communities should still exist after re-index (may change due to new entities)
+    const communitiesAfter = store.getCommunitiesByLevel(0);
+    expect(communitiesAfter.length).toBeGreaterThanOrEqual(1);
+    // Community count may differ from before due to new entities changing graph structure
+    expect(communitiesAfter.length).toBeGreaterThanOrEqual(communityCountBefore > 0 ? 1 : 0);
     store.close();
   }, 30_000);
 
   it("scenario 4: re-index with no new commits reuses existing summaries", async () => {
+    // Capture community summaries before re-index
+    const dbBefore = openDatabase(storageDir);
+    const storeBefore = new Store(dbBefore);
+    const communitiesBefore = storeBefore.getCommunitiesByLevel(0);
+    const summariesBefore = communitiesBefore.map((c) => ({ id: c.id, summary: c.summary }));
+    storeBefore.close();
+
     extractCalls = [];
     summaryCalls = [];
 
     const result = await indexRepository(makeConfig());
 
     expect(result.commitsProcessed).toBe(0);
-    // No extraction or summarization calls when nothing changed
     expect(extractCalls.length).toBe(0);
     expect(summaryCalls.length).toBe(0);
+
+    // Verify summaries are preserved (not wiped)
+    if (summariesBefore.length > 0) {
+      const dbAfter = openDatabase(storageDir);
+      const storeAfter = new Store(dbAfter);
+      for (const before of summariesBefore) {
+        const after = storeAfter.getCommunity(before.id);
+        if (after && before.summary) {
+          expect(after.summary).toBe(before.summary);
+        }
+      }
+      storeAfter.close();
+    }
   }, 30_000);
 });

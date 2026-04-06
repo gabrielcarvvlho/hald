@@ -81,7 +81,7 @@ git-oracle/
 │   │   ├── extractor.ts         # LLM-based entity/relation extraction
 │   │   ├── resolver.ts          # Entity resolution (fuzzy dedup)
 │   │   ├── graph-builder.ts     # Builds adjacency structure
-│   │   ├── clusterer.ts         # Leiden community detection
+│   │   ├── clusterer.ts         # Louvain community detection
 │   │   └── summarizer.ts        # LLM-based community summaries
 │   ├── store/
 │   │   ├── db.ts                # SQLite + better-sqlite3 setup
@@ -511,7 +511,7 @@ interface GraphStats {
 
 ### 6. Clusterer (`src/pipeline/clusterer.ts`)
 
-Detects communities in the entity graph using Leiden algorithm.
+Detects communities in the entity graph using Louvain algorithm.
 
 ```typescript
 interface Clusterer {
@@ -525,7 +525,7 @@ interface Clusterer {
 ```
 
 **Implementation:**
-- Uses `graphology` + `graphology-communities-louvain` (Louvain as Leiden approximation — pure JS, no native deps).
+- Uses `graphology` + `graphology-communities-louvain` (Louvain — pure JS, no native deps).
 - Runs at each configured resolution to produce a hierarchy.
 - Filters out communities smaller than `minCommunitySize`.
 - Links parent/child communities across levels.

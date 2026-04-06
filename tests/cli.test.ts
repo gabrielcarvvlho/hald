@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openDatabase } from "../src/store/db.js";
 import { Store } from "../src/store/queries.js";
 import { EntityType, RelationType } from "../src/shared/types.js";
+
+const PKG_VERSION = JSON.parse(
+  readFileSync(join(__dirname, "..", "package.json"), "utf-8"),
+).version;
 
 const CLI_PATH = join(__dirname, "..", "src", "cli.ts");
 
@@ -46,7 +50,7 @@ describe("CLI — help and version", () => {
   it("--version shows version", () => {
     const { stdout, exitCode } = runCLI(["--version"]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("0.1.0");
+    expect(stdout).toContain(PKG_VERSION);
   });
 
   it("index --help shows index options", () => {

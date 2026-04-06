@@ -425,6 +425,8 @@ export async function* extractBatch(
   options: {
     concurrency: number;
     enableGleaning?: boolean;
+    gleaningMinCommits?: number;
+    gleaningMaxEntitiesRatio?: number;
     onProgress?: (done: number, total: number) => void;
     tokenUsage?: TokenAccumulator;
   },
@@ -441,6 +443,8 @@ export async function* extractBatch(
       try {
         const result = await extract(tu, client, {
           enableGleaning: options.enableGleaning,
+          gleaningMinCommits: options.gleaningMinCommits,
+          gleaningMaxEntitiesRatio: options.gleaningMaxEntitiesRatio,
         });
         if (options.tokenUsage) {
           options.tokenUsage.inputTokens += result.inputTokens;

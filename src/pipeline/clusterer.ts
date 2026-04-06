@@ -180,7 +180,7 @@ export function cluster(
 // Graph construction
 // ================================================================
 
-export function buildGraph(entities: Entity[], relations: Relation[]): UndirectedGraph {
+export function buildGraph(entities: Entity[], relations: Relation[]): InstanceType<typeof UndirectedGraph> {
   const graph = new UndirectedGraph();
 
   for (const entity of entities) {

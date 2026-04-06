@@ -368,6 +368,14 @@ program
     }
 
     unlinkSync(dbPath);
+    // Clean up WAL/SHM journal files (better-sqlite3 uses WAL mode)
+    for (const suffix of ["-wal", "-shm"]) {
+      try {
+        unlinkSync(dbPath + suffix);
+      } catch {
+        // journal file may not exist — that's fine
+      }
+    }
     console.log(`Deleted ${dbPath}. Index has been reset.`);
   });
 

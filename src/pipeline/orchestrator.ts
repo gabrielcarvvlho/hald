@@ -142,6 +142,9 @@ async function runPipeline(
 
   for await (const { textUnitId, result, failed } of extractBatch(textUnits, client, {
     concurrency: config.maxConcurrency,
+    enableGleaning: true,
+    gleaningMinCommits: config.gleaningMinCommits,
+    gleaningMaxEntitiesRatio: config.gleaningMaxEntitiesRatio,
     onProgress: (done, total) => progress("extracting", done, total),
     tokenUsage,
   })) {

@@ -126,7 +126,7 @@ export async function startAgentSession(options: {
     store.close();
     throw new Error(
       `Too many chunks (${textUnits.length} > ${MAX_CHUNKS}). ` +
-        `Use --max-commits to limit scope or increase commitsPerChunk.`,
+        `Use max_commits to limit scope or increase commitsPerChunk in config.`,
     );
   }
 
