@@ -57,6 +57,19 @@ Hope this helps!`;
   });
 });
 
+describe("summarizer — ampersand sanitization retry", () => {
+  it("handles bare ampersands in XML by sanitizing and retrying", () => {
+    const xml = `<community_summary>
+  <title>Auth & Payments</title>
+  <summary>The auth & payments modules work together for billing & invoicing.</summary>
+</community_summary>`;
+
+    const result = parseSummaryXml(xml);
+    expect(result.title).toBe("Auth & Payments");
+    expect(result.summary).toContain("billing");
+  });
+});
+
 describe("summarizer — XML fallback on parse failure", () => {
   it("returns raw text when XML is malformed", () => {
     const text = "Here is the summary: the payments team handles billing.";

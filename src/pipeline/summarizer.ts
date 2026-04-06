@@ -106,7 +106,10 @@ function parseSummaryXml(text: string): SummaryResult {
   const xml = extractXmlBlock(text, "community_summary");
   if (!xml) return { title: "", summary: text.trim() };
 
-  const parsed = xmlParser.parse(xml);
+  // Try parsing, with sanitization fallback for bare ampersands
+  let parsed = safeParseXml(xml);
+  if (!parsed) return { title: "", summary: text.trim() };
+
   const cs = parsed?.community_summary;
   if (!cs) return { title: "", summary: text.trim() };
 
@@ -114,6 +117,21 @@ function parseSummaryXml(text: string): SummaryResult {
     title: String(cs.title ?? "").trim(),
     summary: String(cs.summary ?? "").trim(),
   };
+}
+
+/** Attempt XML parse with ampersand sanitization fallback. */
+function safeParseXml(xml: string) {
+  try {
+    return xmlParser.parse(xml);
+  } catch {
+    // Sanitize bare ampersands and retry
+    const sanitized = xml.replace(/&(?!(?:amp|lt|gt|apos|quot);)/g, "&amp;");
+    try {
+      return xmlParser.parse(sanitized);
+    } catch {
+      return null;
+    }
+  }
 }
 
 // ================================================================
