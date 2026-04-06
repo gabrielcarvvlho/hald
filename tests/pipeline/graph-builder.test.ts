@@ -193,12 +193,14 @@ describe("graph-builder", () => {
       commits: [commit], // commit touches billing + payments
     });
 
-    // Should have a CO_CHANGED relation
+    // Should have a CO_CHANGED relation weighted by min(linesA, linesB)
     const allRelations = store.getAllRelations();
     const coChanged = allRelations.filter(
       (r) => r.type === RelationType.CO_CHANGED,
     );
     expect(coChanged).toHaveLength(1);
+    // billing: 10+5=15 lines, payments: 3+1=4 lines → min(15,4) = 4
+    expect(coChanged[0]!.weight).toBe(4);
   });
 
   it("returns correct edge density", () => {

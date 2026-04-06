@@ -71,6 +71,20 @@ describe("estimateCost", () => {
     expect(cost.breakdown.total).toContain("$");
   });
 
+  it("includes ~40% gleaning buffer in extraction tokens", () => {
+    const textUnits = [makeTextUnit("a".repeat(1000))];
+    const cost = estimateCost(textUnits, 0, "anthropic");
+
+    // Without gleaning: input + system(600) + output(500) = raw tokens
+    // With 1.4x multiplier: extractionTokens should be ~40% larger than raw
+    // summarizationTokens is 0 (0 communities), so totalTokens ≈ extractionTokens
+    expect(cost.extractionTokens).toBeGreaterThan(0);
+    // The extraction tokens should be roughly 1.4x the base (input + 600 + 500)
+    // Base: estimateTokens("a"*1000) + 600 + 500
+    // With content ~250 tokens (1000/4): base ≈ 1350, with 1.4x ≈ 1890
+    expect(cost.extractionTokens).toBeGreaterThan(1350);
+  });
+
   it("falls back to anthropic rates for unknown provider", () => {
     const cost = estimateCost([makeTextUnit("test")], 1, "ollama");
     expect(cost.estimatedCostUsd).toBeGreaterThan(0);

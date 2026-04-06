@@ -13,6 +13,7 @@ import { summarizeBatch } from "./summarizer.js";
 import { createClient } from "../llm/client.js";
 import { calculateActualCost } from "./cost-estimator.js";
 import { logger } from "../shared/logger.js";
+import { safeJsonParse } from "../shared/utils.js";
 
 export interface IndexOptions {
   full?: boolean;
@@ -232,8 +233,7 @@ async function runPipeline(
       let bestMatch: { id: CommunityId; jaccard: number } | null = null;
       for (const [oldId, oldMemberJson] of oldMembership) {
         if (!oldId.startsWith(`comm:${c.level}:`)) continue;
-        let oldMembers: string[];
-        try { oldMembers = JSON.parse(oldMemberJson); } catch { oldMembers = []; }
+        const oldMembers: string[] = safeJsonParse(oldMemberJson, []);
         const jaccard = jaccardSimilarity(c.entityIds, oldMembers);
         if (jaccard > (bestMatch?.jaccard ?? 0)) {
           bestMatch = { id: oldId, jaccard };

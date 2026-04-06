@@ -225,6 +225,9 @@ describe("Full pipeline integration test", () => {
       entityResolutionThreshold: 0.85,
       communityResolutions: [1.0],
       minCommunitySize: 2,
+      parentLinkThreshold: 0.3,
+      splitWarningThreshold: 0.7,
+      summaryReuseThreshold: 0.7,
       storagePath: storageDir,
     };
 

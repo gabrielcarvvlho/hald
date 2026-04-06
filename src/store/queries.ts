@@ -12,6 +12,7 @@ import type {
   CommitData,
   CommitHash,
 } from "../shared/types.js";
+import { safeJsonParse } from "../shared/utils.js";
 
 export interface StoreStats {
   entities: number;
@@ -608,14 +609,6 @@ interface CommitRow {
   parent_hashes: string;
   text_unit_id: string | null;
   indexed_at: string;
-}
-
-function safeJsonParse<T>(raw: string, fallback: T): T {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
 }
 
 function toEntity(row: EntityRow): Entity {
