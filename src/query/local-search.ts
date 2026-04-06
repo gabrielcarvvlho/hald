@@ -131,11 +131,17 @@ export function localSearch(
     1,
   );
 
+  // Adaptive BM25 normalization: divide by max absolute score in result set
+  const maxAbsFtsRank = Math.max(
+    ...rankedSeeds.map(({ ftsRank }) => Math.abs(ftsRank)),
+    1,
+  );
+
   const seedScored: ScoredEntity[] = rankedSeeds.map(({ entity, ftsRank }) => {
     const degree = seedRelationsMap.get(entity.id)?.length ?? 0;
     return {
       ...entity,
-      score: computeScore(entity, ftsRank, degree, maxDegree, now, weights),
+      score: computeScore(entity, ftsRank, degree, maxDegree, now, weights, maxAbsFtsRank),
       isSeed: true,
       hopDistance: 0,
       degree,
@@ -204,9 +210,13 @@ function computeScore(
   maxDegree: number,
   now: Date,
   weights: RankingWeights,
+  maxAbsFtsRank: number,
 ): number {
-  // FTS: normalize BM25 (more negative = better match, clamp to [0, 1])
-  const ftsScore = Math.max(0, Math.min(1, -ftsRank / 20));
+  // FTS: adaptive normalization — divide by max absolute BM25 score in the result set
+  // BM25 scores are negative (more negative = better match), so -rank/maxAbs maps to [0, 1]
+  const ftsScore = maxAbsFtsRank > 0
+    ? Math.max(0, Math.min(1, -ftsRank / maxAbsFtsRank))
+    : 0;
 
   // Recency: exponential decay, ~0.5 at 180 days (guard against invalid dates)
   const daysSince =
