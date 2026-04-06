@@ -63,8 +63,11 @@ export function estimateCost(
   // System prompt is ~600 tokens, added per call
   const systemPromptTokens = 600 * textUnits.length;
   const extractionOutputTokens = textUnits.length * 500; // estimated output
-  const extractionTokens =
-    extractionInputTokens + systemPromptTokens + extractionOutputTokens;
+  // Gleaning (secondary extraction pass) + retries add ~40% more token usage
+  const gleaningMultiplier = 1.4;
+  const extractionTokens = Math.round(
+    (extractionInputTokens + systemPromptTokens + extractionOutputTokens) * gleaningMultiplier,
+  );
 
   // Summarization: ~300 tokens per community (input context + output)
   const summarizationTokens = estimatedCommunities * 800; // input + output
@@ -120,6 +123,8 @@ export function formatCostEstimate(estimate: CostEstimate): string {
   } else if (estimate.provider === "anthropic") {
     lines.push(`  (Anthropic Claude Sonnet)`);
   }
+
+  lines.push(`  Estimate includes ~40% buffer for retries and gleaning passes`);
 
   return lines.join("\n");
 }
