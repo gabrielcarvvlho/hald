@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  parseExtractionXml,
-  shouldGlean,
-  stripCodeFences,
-} from "../../src/pipeline/extractor.js";
+import { parseExtractionXml, shouldGlean, stripCodeFences } from "../../src/pipeline/extractor.js";
 import { EntityType } from "../../src/shared/types.js";
 import type { TextUnit } from "../../src/shared/types.js";
 
@@ -182,7 +178,7 @@ I hope this helps!`;
 
   it("parses XML wrapped in markdown code fences", () => {
     const text =
-      '```xml\n<extraction>\n  <entities>\n    <entity>\n      <name>Test</name>\n      <type>PERSON</type>\n      <description>dev</description>\n    </entity>\n  </entities>\n  <relations/>\n</extraction>\n```';
+      "```xml\n<extraction>\n  <entities>\n    <entity>\n      <name>Test</name>\n      <type>PERSON</type>\n      <description>dev</description>\n    </entity>\n  </entities>\n  <relations/>\n</extraction>\n```";
 
     const result = parseExtractionXml(text);
     expect(result.entities).toHaveLength(1);
@@ -244,9 +240,7 @@ describe("extractor — stripCodeFences", () => {
   });
 
   it("leaves text without fences unchanged", () => {
-    expect(stripCodeFences("<extraction>test</extraction>")).toBe(
-      "<extraction>test</extraction>",
-    );
+    expect(stripCodeFences("<extraction>test</extraction>")).toBe("<extraction>test</extraction>");
   });
 });
 
@@ -284,8 +278,6 @@ describe("extractor — shouldGlean", () => {
       type: EntityType.PERSON,
       description: "",
     }));
-    expect(shouldGlean({ entities, relations: [] }, makeTextUnit(10))).toBe(
-      false,
-    );
+    expect(shouldGlean({ entities, relations: [] }, makeTextUnit(10))).toBe(false);
   });
 });

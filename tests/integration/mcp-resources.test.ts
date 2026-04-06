@@ -20,8 +20,7 @@ describe("MCP resources — populated index", () => {
     const getStore = () => store;
     registerResources(server, getStore);
 
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
     client = new Client({ name: "test-client", version: "1.0.0" });
     await server.connect(serverTransport);
@@ -75,8 +74,7 @@ describe("MCP resources — empty index", () => {
     const getStore = () => store;
     registerResources(server, getStore);
 
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
     client = new Client({ name: "test-client", version: "1.0.0" });
     await server.connect(serverTransport);

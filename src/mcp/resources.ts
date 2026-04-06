@@ -4,10 +4,7 @@ import { EntityType } from "../shared/types.js";
 
 type GetStore = () => Store;
 
-export function registerResources(
-  server: McpServer,
-  getStore: GetStore,
-): void {
+export function registerResources(server: McpServer, getStore: GetStore): void {
   // ================================================================
   // git-oracle://stats
   // ================================================================
@@ -16,8 +13,7 @@ export function registerResources(
     "stats",
     "git-oracle://stats",
     {
-      description:
-        "Current index stats: entity count, relation count, last indexed commit, etc.",
+      description: "Current index stats: entity count, relation count, last indexed commit, etc.",
       mimeType: "application/json",
     },
     async () => {
@@ -66,8 +62,7 @@ export function registerResources(
     "graph-summary",
     "git-oracle://graph/summary",
     {
-      description:
-        "High-level summary of the knowledge graph structure and top communities.",
+      description: "High-level summary of the knowledge graph structure and top communities.",
       mimeType: "text/plain",
     },
     async () => {

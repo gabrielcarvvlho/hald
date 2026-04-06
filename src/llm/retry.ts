@@ -12,10 +12,7 @@ export function isRetryableError(error: unknown): boolean {
 
   // Network failures — SDK wraps these with no status code
   const name = (error as { name?: string }).name;
-  if (
-    name === "APIConnectionError" ||
-    name === "APIConnectionTimeoutError"
-  ) {
+  if (name === "APIConnectionError" || name === "APIConnectionTimeoutError") {
     return true;
   }
 
@@ -41,10 +38,7 @@ export function isRetryableError(error: unknown): boolean {
  * Read a header value from an error's headers, handling both plain Record
  * (Anthropic/OpenAI SDKs) and fetch Headers objects (Google SDK).
  */
-function getHeader(
-  error: unknown,
-  name: string,
-): string | null | undefined {
+function getHeader(error: unknown, name: string): string | null | undefined {
   const headers = (error as { headers?: unknown }).headers;
   if (!headers) return undefined;
 

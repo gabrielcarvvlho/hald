@@ -194,8 +194,14 @@ describe("summarizer — batch summarization", () => {
 
     const client = createMockClient(
       new Map([
-        ["Alice", "<community_summary><title>Payments Team</title><summary>Alice works on payments.</summary></community_summary>"],
-        ["src/billing", "<community_summary><title>Billing</title><summary>The billing module.</summary></community_summary>"],
+        [
+          "Alice",
+          "<community_summary><title>Payments Team</title><summary>Alice works on payments.</summary></community_summary>",
+        ],
+        [
+          "src/billing",
+          "<community_summary><title>Billing</title><summary>The billing module.</summary></community_summary>",
+        ],
       ]),
     );
 

@@ -126,7 +126,7 @@ export async function startAgentSession(options: {
     store.close();
     throw new Error(
       `Too many chunks (${textUnits.length} > ${MAX_CHUNKS}). ` +
-      `Use --max-commits to limit scope or increase commitsPerChunk.`,
+        `Use --max-commits to limit scope or increase commitsPerChunk.`,
     );
   }
 
@@ -304,10 +304,7 @@ export async function finalizeSession(): Promise<IndexResult> {
     const lastCommit = commits[commits.length - 1]!;
     store.setMeta("last_indexed_commit", lastCommit.hash);
     store.setMeta("last_indexed_at", new Date().toISOString());
-    store.setMeta(
-      "head_at_index",
-      await getHead(config.repoPath).catch(() => "unknown"),
-    );
+    store.setMeta("head_at_index", await getHead(config.repoPath).catch(() => "unknown"));
     store.setMeta("last_input_tokens", "0");
     store.setMeta("last_output_tokens", "0");
     store.setMeta("last_requests", String(extractions.size));

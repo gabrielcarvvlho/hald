@@ -18,15 +18,9 @@ export async function createSampleRepo(dir: string): Promise<void> {
 
   // 1. Initial setup (Alice)
   await setAuthor("Alice Chen", "alice@acme.com");
-  writeFileSync(
-    join(dir, "package.json"),
-    '{"name": "sample-project", "version": "1.0.0"}',
-  );
+  writeFileSync(join(dir, "package.json"), '{"name": "sample-project", "version": "1.0.0"}');
   mkdirSync(join(dir, "src"));
-  writeFileSync(
-    join(dir, "src/index.ts"),
-    'export function main() { console.log("hello"); }',
-  );
+  writeFileSync(join(dir, "src/index.ts"), 'export function main() { console.log("hello"); }');
   await git.add(".");
   await git.commit("chore: initial project setup");
 
@@ -74,7 +68,7 @@ export async function createSampleRepo(dir: string): Promise<void> {
   // 6. Migrate payments REST → gRPC (Alice)
   writeFileSync(
     join(dir, "src/payments/handler.ts"),
-    'export class PaymentsService {\n  async charge(request: any) { return { success: true }; }\n}',
+    "export class PaymentsService {\n  async charge(request: any) { return { success: true }; }\n}",
   );
   mkdirSync(join(dir, "src/proto"), { recursive: true });
   writeFileSync(
@@ -121,14 +115,8 @@ export async function createSampleRepo(dir: string): Promise<void> {
   // 10. Add tests (Alice)
   await setAuthor("Alice Chen", "alice@acme.com");
   mkdirSync(join(dir, "tests"), { recursive: true });
-  writeFileSync(
-    join(dir, "tests/billing.test.ts"),
-    'test("processes invoice", () => {});',
-  );
-  writeFileSync(
-    join(dir, "tests/payments.test.ts"),
-    'test("charges payment", () => {});',
-  );
+  writeFileSync(join(dir, "tests/billing.test.ts"), 'test("processes invoice", () => {});');
+  writeFileSync(join(dir, "tests/payments.test.ts"), 'test("charges payment", () => {});');
   await git.add(".");
   await git.commit("test: add billing and payments test suites");
 }

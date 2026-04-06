@@ -83,18 +83,12 @@ describe("normalizeModulePath", () => {
 
 describe("generateEntityId", () => {
   it("creates id from type and name", () => {
-    expect(generateEntityId(EntityType.PERSON, "Alice Chen")).toBe(
-      "person:alice-chen",
-    );
-    expect(generateEntityId(EntityType.MODULE, "src/billing")).toBe(
-      "module:src/billing",
-    );
+    expect(generateEntityId(EntityType.PERSON, "Alice Chen")).toBe("person:alice-chen");
+    expect(generateEntityId(EntityType.MODULE, "src/billing")).toBe("module:src/billing");
   });
 
   it("normalizes special characters", () => {
-    expect(generateEntityId(EntityType.TECHNOLOGY, "gRPC")).toBe(
-      "technology:grpc",
-    );
+    expect(generateEntityId(EntityType.TECHNOLOGY, "gRPC")).toBe("technology:grpc");
   });
 });
 
@@ -174,7 +168,11 @@ describe("resolve", () => {
 
   it("normalizes module paths before resolving", () => {
     const entities: ExtractedEntity[] = [
-      { name: "src/billing/processor.ts", type: EntityType.MODULE, description: "Billing processor" },
+      {
+        name: "src/billing/processor.ts",
+        type: EntityType.MODULE,
+        description: "Billing processor",
+      },
       { name: "src/billing/types.ts", type: EntityType.MODULE, description: "Billing types" },
     ];
 
@@ -298,7 +296,11 @@ describe("resolve", () => {
     const entities: ExtractedEntity[] = [
       { name: "src/api/routes/auth.ts", type: EntityType.MODULE, description: "Auth routes" },
       { name: "src/api/routes/billing.ts", type: EntityType.MODULE, description: "Billing routes" },
-      { name: "src/api/middleware/cors.ts", type: EntityType.MODULE, description: "CORS middleware" },
+      {
+        name: "src/api/middleware/cors.ts",
+        type: EntityType.MODULE,
+        description: "CORS middleware",
+      },
     ];
 
     // With depth=2: all collapse to "src/api"

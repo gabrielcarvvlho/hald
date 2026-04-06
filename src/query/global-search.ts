@@ -23,10 +23,7 @@ export interface GlobalSearchResult {
  * Answer broad, thematic questions by searching community summaries.
  * Returns ranked communities that the host agent synthesizes into a narrative.
  */
-export function globalSearch(
-  store: Store,
-  options: GlobalSearchOptions,
-): GlobalSearchResult {
+export function globalSearch(store: Store, options: GlobalSearchOptions): GlobalSearchResult {
   const { query, communityLevel, maxCommunities = 5 } = options;
 
   // If a specific level is requested, filter to that level

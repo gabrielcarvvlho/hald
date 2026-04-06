@@ -18,9 +18,7 @@ describe("globalSearch", () => {
 
     expect(result.communities.length).toBeGreaterThan(0);
     const titles = result.communities.map((c) => c.title);
-    expect(
-      titles.some((t) => t.toLowerCase().includes("payment")),
-    ).toBe(true);
+    expect(titles.some((t) => t.toLowerCase().includes("payment"))).toBe(true);
   });
 
   it("returns communities with summaries", () => {
@@ -77,27 +75,19 @@ describe("classifyQuery", () => {
 
   it("classifies 'why did we' as global", () => {
     expect(classifyQuery("why did we migrate to gRPC?")).toBe("global");
-    expect(classifyQuery("why did the team switch frameworks?")).toBe(
-      "global",
-    );
+    expect(classifyQuery("why did the team switch frameworks?")).toBe("global");
   });
 
   it("classifies history/overview as global", () => {
     expect(classifyQuery("history of the payments module")).toBe("global");
     expect(classifyQuery("overview of the architecture")).toBe("global");
-    expect(
-      classifyQuery("tell me about the architecture of this system"),
-    ).toBe("global");
+    expect(classifyQuery("tell me about the architecture of this system")).toBe("global");
     expect(classifyQuery("what are the main components?")).toBe("global");
   });
 
   it("classifies decision questions as global", () => {
-    expect(
-      classifyQuery("what was the reason for the migration?"),
-    ).toBe("global");
-    expect(
-      classifyQuery("how did the payments service evolve?"),
-    ).toBe("global");
+    expect(classifyQuery("what was the reason for the migration?")).toBe("global");
+    expect(classifyQuery("how did the payments service evolve?")).toBe("global");
   });
 
   it("defaults to local for ambiguous queries", () => {

@@ -1,6 +1,7 @@
 import graphologyPkg from "graphology";
-const { UndirectedGraph } = graphologyPkg as unknown as { UndirectedGraph: typeof import("graphology").UndirectedGraph };
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { UndirectedGraph } = graphologyPkg as unknown as {
+  UndirectedGraph: typeof import("graphology").UndirectedGraph;
+};
 import louvainModule from "graphology-communities-louvain";
 const louvain = louvainModule as unknown as (
   graph: InstanceType<typeof UndirectedGraph>,
@@ -10,12 +11,7 @@ import graphologyComponentsPkg from "graphology-components";
 const { connectedComponents } = graphologyComponentsPkg as unknown as {
   connectedComponents: (graph: InstanceType<typeof UndirectedGraph>) => string[][];
 };
-import type {
-  Entity,
-  Relation,
-  Community,
-  CommunityId,
-} from "../shared/types.js";
+import type { Entity, Relation, Community, CommunityId } from "../shared/types.js";
 import { createHash } from "crypto";
 import { logger } from "../shared/logger.js";
 
@@ -74,7 +70,10 @@ export function cluster(
     if (entities.length < minCommunitySize) return [];
     return [
       {
-        id: communityId(0, entities.map((e) => e.id)),
+        id: communityId(
+          0,
+          entities.map((e) => e.id),
+        ),
         level: 0,
         title: "",
         summary: "",
@@ -162,7 +161,11 @@ export function cluster(
   }
 
   // Link parent/child across levels
-  linkHierarchy(allCommunities, options?.parentLinkThreshold ?? 0.3, options?.splitWarningThreshold ?? 0.7);
+  linkHierarchy(
+    allCommunities,
+    options?.parentLinkThreshold ?? 0.3,
+    options?.splitWarningThreshold ?? 0.7,
+  );
 
   end();
   logger.info("clusterer: done", {
@@ -187,8 +190,7 @@ export function buildGraph(entities: Entity[], relations: Relation[]): Undirecte
   const nodeSet = new Set(entities.map((e) => e.id));
 
   for (const relation of relations) {
-    if (!nodeSet.has(relation.sourceId) || !nodeSet.has(relation.targetId))
-      continue;
+    if (!nodeSet.has(relation.sourceId) || !nodeSet.has(relation.targetId)) continue;
     if (relation.sourceId === relation.targetId) continue;
 
     if (graph.hasEdge(relation.sourceId, relation.targetId)) {
@@ -232,7 +234,11 @@ export function jaccardSimilarity(a: string[], b: string[]): number {
 // Hierarchy linking
 // ================================================================
 
-function linkHierarchy(communities: Community[], parentLinkThreshold: number, splitWarningThreshold: number): void {
+function linkHierarchy(
+  communities: Community[],
+  parentLinkThreshold: number,
+  splitWarningThreshold: number,
+): void {
   // Group by level
   const byLevel = new Map<number, Community[]>();
   for (const c of communities) {
@@ -256,9 +262,7 @@ function linkHierarchy(communities: Community[], parentLinkThreshold: number, sp
       let bestOverlap = 0;
 
       for (const parent of parentLevel) {
-        const overlap = parent.entityIds.filter((id) =>
-          childSet.has(id),
-        ).length;
+        const overlap = parent.entityIds.filter((id) => childSet.has(id)).length;
         if (overlap > bestOverlap) {
           bestOverlap = overlap;
           bestParent = parent;

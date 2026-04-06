@@ -25,9 +25,7 @@ const defaults: GitOracleConfig = {
   storagePath: ".git-oracle",
 };
 
-export function loadConfig(
-  overrides: Partial<GitOracleConfig> = {},
-): GitOracleConfig {
+export function loadConfig(overrides: Partial<GitOracleConfig> = {}): GitOracleConfig {
   // Priority (highest → lowest): CLI flags > config.json > env vars > defaults
 
   // 1. Start with defaults

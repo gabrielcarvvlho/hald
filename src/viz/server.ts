@@ -126,8 +126,7 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
   // Auto-open browser
   if (open) {
     const cmd =
-      process.platform === "darwin" ? "open" :
-      process.platform === "win32" ? "start" : "xdg-open";
+      process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
     exec(`${cmd} ${url}`);
   }
 

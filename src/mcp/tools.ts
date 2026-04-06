@@ -12,7 +12,13 @@ import {
   finalizeSession,
   clearSession,
 } from "./agent-session.js";
-import { findExperts, getCoupling, getPath, getEntity as lookupEntity, findKnowledgeSilos } from "../query/graph-ops.js";
+import {
+  findExperts,
+  getCoupling,
+  getPath,
+  getEntity as lookupEntity,
+  findKnowledgeSilos,
+} from "../query/graph-ops.js";
 import { localSearch } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
 import { EntityType } from "../shared/types.js";
@@ -50,16 +56,15 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           .default("auto")
           .describe(
             "Search strategy. 'local' = find specific entities and their relationships (who/what). " +
-            "'global' = search community summaries for themes and patterns (why/how/overview). " +
-            "'auto' = classify automatically based on question phrasing.",
+              "'global' = search community summaries for themes and patterns (why/how/overview). " +
+              "'auto' = classify automatically based on question phrasing.",
           ),
       }),
     },
     async ({ question, search_type }) => {
       try {
         const store = getStore();
-        const searchType =
-          search_type === "auto" ? classifyQuery(question) : search_type;
+        const searchType = search_type === "auto" ? classifyQuery(question) : search_type;
 
         if (searchType === "global") {
           const result = globalSearch(store, { query: question, maxCommunities: 5 });
@@ -122,12 +127,9 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           .string()
           .describe(
             "Module path, directory, or component name (e.g., 'src/payments', 'auth', 'database layer'). " +
-            "Matches against entity names in the knowledge graph.",
+              "Matches against entity names in the knowledge graph.",
           ),
-        top_n: z
-          .number()
-          .default(5)
-          .describe("Number of experts to return (default: 5)"),
+        top_n: z.number().default(5).describe("Number of experts to return (default: 5)"),
       }),
     },
     async ({ module, top_n }) => {
@@ -164,7 +166,12 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Find expert failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Find expert failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -238,7 +245,12 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Trace decision failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Trace decision failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -272,7 +284,9 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         min_co_changes: z
           .number()
           .default(3)
-          .describe("Minimum co-change count to filter noise (default: 3). Lower values show weaker coupling."),
+          .describe(
+            "Minimum co-change count to filter noise (default: 3). Lower values show weaker coupling.",
+          ),
       }),
     },
     async ({ module, min_co_changes }) => {
@@ -306,7 +320,12 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Show coupling failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Show coupling failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -333,18 +352,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       inputSchema: z.object({
         from: z
           .string()
-          .describe(
-            "Source entity ID or name (e.g., 'person:alice-chen' or 'Alice Chen')",
-          ),
+          .describe("Source entity ID or name (e.g., 'person:alice-chen' or 'Alice Chen')"),
         to: z
           .string()
-          .describe(
-            "Target entity ID or name (e.g., 'module:src/payments' or 'src/payments')",
-          ),
-        max_depth: z
-          .number()
-          .default(5)
-          .describe("Maximum traversal depth"),
+          .describe("Target entity ID or name (e.g., 'module:src/payments' or 'src/payments')"),
+        max_depth: z.number().default(5).describe("Maximum traversal depth"),
       }),
     },
     async ({ from, to, max_depth }) => {
@@ -496,8 +508,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         if (rels.length > 0) {
           lines.push("", "### Relationships", "");
           for (const rel of rels.slice(0, 15)) {
-            const otherId =
-              rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
+            const otherId = rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
             const other = store.getEntity(otherId);
             const otherName = other?.name ?? otherId;
             const direction =
@@ -547,11 +558,15 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         min_frequency: z
           .number()
           .default(3)
-          .describe("Minimum change frequency to consider a module — filters trivial/config files (default: 3)"),
+          .describe(
+            "Minimum change frequency to consider a module — filters trivial/config files (default: 3)",
+          ),
         inactive_days: z
           .number()
           .default(180)
-          .describe("Days since last contribution before an author is considered inactive (default: 180)"),
+          .describe(
+            "Days since last contribution before an author is considered inactive (default: 180)",
+          ),
       }),
     },
     async ({ min_frequency, inactive_days }) => {
@@ -635,7 +650,9 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         full: z
           .boolean()
           .default(false)
-          .describe("Force full re-index, ignoring previous progress (default: false = incremental)"),
+          .describe(
+            "Force full re-index, ignoring previous progress (default: false = incremental)",
+          ),
         max_commits: z
           .number()
           .optional()
@@ -657,10 +674,12 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         const progressToken = extra._meta?.progressToken;
         const onProgress = progressToken
           ? (stage: string, done: number, total: number) => {
-              extra.sendNotification({
-                method: "notifications/progress" as const,
-                params: { progressToken, progress: done, total, message: stage },
-              }).catch(() => {}); // fire-and-forget — progress is best-effort
+              extra
+                .sendNotification({
+                  method: "notifications/progress" as const,
+                  params: { progressToken, progress: done, total, message: stage },
+                })
+                .catch(() => {}); // fire-and-forget — progress is best-effort
             }
           : undefined;
 
@@ -842,9 +861,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         openWorldHint: false,
       },
       inputSchema: z.object({
-        confirm: z
-          .boolean()
-          .describe("Must be true to confirm deletion"),
+        confirm: z.boolean().describe("Must be true to confirm deletion"),
       }),
     },
     async ({ confirm }) => {
@@ -1148,9 +1165,7 @@ function formatLocalResult(result: ReturnType<typeof localSearch>): string {
   if (result.textUnits.length > 0) {
     sections.push("\n## Supporting Evidence\n");
     for (const tu of result.textUnits) {
-      sections.push(
-        `### Commits ${tu.dateRange.start} to ${tu.dateRange.end}\n${tu.content}\n`,
-      );
+      sections.push(`### Commits ${tu.dateRange.start} to ${tu.dateRange.end}\n${tu.content}\n`);
     }
   }
 
@@ -1168,9 +1183,7 @@ function formatLocalResult(result: ReturnType<typeof localSearch>): string {
   return sections.join("\n");
 }
 
-function formatGlobalResult(
-  communities: ReturnType<typeof globalSearch>["communities"],
-): string {
+function formatGlobalResult(communities: ReturnType<typeof globalSearch>["communities"]): string {
   if (communities.length === 0) {
     return "No relevant community summaries found for this query.";
   }

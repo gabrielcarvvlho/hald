@@ -7,7 +7,7 @@ export default tseslint.config(
   ...tseslint.configs.strict,
   eslintConfigPrettier,
   {
-    ignores: ["dist/", "node_modules/", "tests/fixtures/", "benchmarks/"],
+    ignores: ["dist/", "node_modules/", "tests/fixtures/", "benchmarks/", "src/viz/public/"],
   },
   {
     rules: {
@@ -20,8 +20,9 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
       // Allow empty catch blocks (used in safeJsonParse, etc.)
-      "no-empty": ["error", { allowEmpty: true }],
+      "no-empty": ["error", { allowEmptyCatch: true }],
       "@typescript-eslint/no-empty-function": "off",
+      "@typescript-eslint/no-dynamic-delete": "off",
     },
   },
 );

@@ -19,17 +19,12 @@ function makeTextUnit(content: string): TextUnit {
 
 describe("estimateCost", () => {
   it("returns higher cost for Anthropic than Google", () => {
-    const textUnits = [
-      makeTextUnit("a".repeat(2000)),
-      makeTextUnit("b".repeat(2000)),
-    ];
+    const textUnits = [makeTextUnit("a".repeat(2000)), makeTextUnit("b".repeat(2000))];
 
     const anthropicCost = estimateCost(textUnits, 3, "anthropic");
     const googleCost = estimateCost(textUnits, 3, "google");
 
-    expect(anthropicCost.estimatedCostUsd).toBeGreaterThan(
-      googleCost.estimatedCostUsd,
-    );
+    expect(anthropicCost.estimatedCostUsd).toBeGreaterThan(googleCost.estimatedCostUsd);
   });
 
   it("returns zero-ish cost for small inputs", () => {
@@ -41,28 +36,18 @@ describe("estimateCost", () => {
   });
 
   it("scales linearly with text units", () => {
-    const small = estimateCost(
-      [makeTextUnit("x".repeat(1000))],
-      1,
-      "anthropic",
-    );
+    const small = estimateCost([makeTextUnit("x".repeat(1000))], 1, "anthropic");
     const large = estimateCost(
       Array.from({ length: 10 }, () => makeTextUnit("x".repeat(1000))),
       5,
       "anthropic",
     );
 
-    expect(large.estimatedCostUsd).toBeGreaterThan(
-      small.estimatedCostUsd * 5,
-    );
+    expect(large.estimatedCostUsd).toBeGreaterThan(small.estimatedCostUsd * 5);
   });
 
   it("includes extraction and summarization breakdown", () => {
-    const cost = estimateCost(
-      [makeTextUnit("test content")],
-      2,
-      "openai",
-    );
+    const cost = estimateCost([makeTextUnit("test content")], 2, "openai");
 
     expect(cost.extractionTokens).toBeGreaterThan(0);
     expect(cost.summarizationTokens).toBeGreaterThan(0);

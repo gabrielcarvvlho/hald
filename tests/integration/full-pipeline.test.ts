@@ -12,10 +12,7 @@ import type { GitOracleConfig } from "../../src/shared/types.js";
 const mockClient: LLMClient = {
   provider: "anthropic" as const,
 
-  async extract(
-    prompt: string,
-    _systemPrompt: string,
-  ): Promise<LLMResponse> {
+  async extract(prompt: string, _systemPrompt: string): Promise<LLMResponse> {
     // Summarization requests contain <community_members>
     if (prompt.includes("<community_members>")) {
       return {

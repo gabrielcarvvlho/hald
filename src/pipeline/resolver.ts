@@ -1,8 +1,4 @@
-import {
-  EntityType,
-  type Entity,
-  type EntityId,
-} from "../shared/types.js";
+import { EntityType, type Entity, type EntityId } from "../shared/types.js";
 import type { ExtractedEntity } from "./extractor.js";
 
 export interface ResolveOptions {
@@ -29,9 +25,7 @@ export function resolve(
   thresholdOrOptions: number | ResolveOptions,
 ): Entity[] {
   const opts: ResolveOptions =
-    typeof thresholdOrOptions === "number"
-      ? { threshold: thresholdOrOptions }
-      : thresholdOrOptions;
+    typeof thresholdOrOptions === "number" ? { threshold: thresholdOrOptions } : thresholdOrOptions;
 
   const byType = groupBy(entities, (e) => e.type as string);
   const resolved: Entity[] = [];
@@ -101,11 +95,7 @@ function isAliasMatch(a: string, b: string): boolean {
 // Group resolution
 // ================================================================
 
-function resolveGroup(
-  entities: ExtractedEntity[],
-  type: EntityType,
-  threshold: number,
-): Entity[] {
+function resolveGroup(entities: ExtractedEntity[], type: EntityType, threshold: number): Entity[] {
   // Sort deterministically: by lowercased name, then by description length (descending),
   // then by description content (code-point order). This guarantees the same input
   // always produces the same clusters regardless of extraction order from concurrent LLM calls.
@@ -195,24 +185,21 @@ function mergeCluster(cluster: ExtractedEntity[], type: EntityType): Entity {
   }
   const canonicalName = [...nameFreq.entries()].sort(
     (a, b) =>
-      b[1] - a[1] ||           // most frequent first
+      b[1] - a[1] || // most frequent first
       b[0].length - a[0].length || // longest first
       (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0), // code-point tiebreaker (locale-independent)
   )[0]![0];
 
   // Collect unique aliases (all name variants except canonical)
   const aliases = [
-    ...new Set(
-      cluster
-        .map((e) => e.name.trim())
-        .filter((n) => n !== canonicalName),
-    ),
+    ...new Set(cluster.map((e) => e.name.trim()).filter((n) => n !== canonicalName)),
   ].sort(); // Sort for determinism
 
   // Pick the longest description; tiebreaker on content for determinism
-  const description = cluster
-    .map((e) => e.description)
-    .sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0))[0] ?? "";
+  const description =
+    cluster
+      .map((e) => e.description)
+      .sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0))[0] ?? "";
 
   const id = generateEntityId(type, canonicalName);
 
@@ -329,10 +316,7 @@ export function jaroWinkler(s1: string, s2: string): number {
   }
 
   const jaro =
-    (matches / s1.length +
-      matches / s2.length +
-      (matches - transpositions / 2) / matches) /
-    3;
+    (matches / s1.length + matches / s2.length + (matches - transpositions / 2) / matches) / 3;
 
   // Winkler modification: boost for common prefix (up to 4 chars)
   let prefixLen = 0;

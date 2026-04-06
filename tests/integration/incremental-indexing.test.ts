@@ -16,10 +16,7 @@ let summaryCalls: string[] = [];
 const mockClient: LLMClient = {
   provider: "anthropic" as const,
 
-  async extract(
-    prompt: string,
-    _systemPrompt: string,
-  ): Promise<LLMResponse> {
+  async extract(prompt: string, _systemPrompt: string): Promise<LLMResponse> {
     if (prompt.includes("<community_members>")) {
       summaryCalls.push(prompt);
       return {
@@ -40,26 +37,40 @@ const mockClient: LLMClient = {
     const relations: string[] = [];
 
     if (prompt.includes("Alice")) {
-      entities.push(`<entity><name>Alice</name><type>PERSON</type><description>Developer</description></entity>`);
+      entities.push(
+        `<entity><name>Alice</name><type>PERSON</type><description>Developer</description></entity>`,
+      );
     }
     if (prompt.includes("Bob")) {
-      entities.push(`<entity><name>Bob</name><type>PERSON</type><description>Developer</description></entity>`);
+      entities.push(
+        `<entity><name>Bob</name><type>PERSON</type><description>Developer</description></entity>`,
+      );
     }
     if (prompt.includes("src/core")) {
-      entities.push(`<entity><name>src/core</name><type>MODULE</type><description>Core module</description></entity>`);
+      entities.push(
+        `<entity><name>src/core</name><type>MODULE</type><description>Core module</description></entity>`,
+      );
     }
     if (prompt.includes("src/api")) {
-      entities.push(`<entity><name>src/api</name><type>MODULE</type><description>API module</description></entity>`);
+      entities.push(
+        `<entity><name>src/api</name><type>MODULE</type><description>API module</description></entity>`,
+      );
     }
     if (prompt.includes("src/extra")) {
-      entities.push(`<entity><name>src/extra</name><type>MODULE</type><description>Extra module</description></entity>`);
+      entities.push(
+        `<entity><name>src/extra</name><type>MODULE</type><description>Extra module</description></entity>`,
+      );
     }
 
     if (prompt.includes("Alice") && prompt.includes("src/core")) {
-      relations.push(`<relation><source>Alice</source><target>src/core</target><type>AUTHORED</type><description>Alice authored core</description><weight>8</weight></relation>`);
+      relations.push(
+        `<relation><source>Alice</source><target>src/core</target><type>AUTHORED</type><description>Alice authored core</description><weight>8</weight></relation>`,
+      );
     }
     if (prompt.includes("Bob") && prompt.includes("src/api")) {
-      relations.push(`<relation><source>Bob</source><target>src/api</target><type>AUTHORED</type><description>Bob authored api</description><weight>7</weight></relation>`);
+      relations.push(
+        `<relation><source>Bob</source><target>src/api</target><type>AUTHORED</type><description>Bob authored api</description><weight>7</weight></relation>`,
+      );
     }
 
     return {
@@ -191,7 +202,6 @@ describe("Incremental indexing", () => {
   }, 30_000);
 
   it("scenario 1 continued: re-index after adding commits processes only new ones", async () => {
-    const initialExtractCalls = extractCalls.length;
     extractCalls = [];
 
     await addMoreCommits(repoDir, 3);

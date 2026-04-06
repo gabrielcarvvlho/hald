@@ -235,15 +235,10 @@ export function createPopulatedStore(): { db: Database.Database; store: Store } 
     },
     {
       id: "tu:003",
-      content:
-        "Bob updated billing processor to use new gRPC payments client instead of REST",
+      content: "Bob updated billing processor to use new gRPC payments client instead of REST",
       commitHashes: ["bbb222"],
       dateRange: { start: "2024-03-15", end: "2024-03-15" },
-      entityIds: [
-        "person:bob-martinez",
-        "module:src/billing",
-        "module:src/payments",
-      ],
+      entityIds: ["person:bob-martinez", "module:src/billing", "module:src/payments"],
       relationIds: ["rel:bob-billing-auth", "rel:bob-payments-mod"],
     },
   ];

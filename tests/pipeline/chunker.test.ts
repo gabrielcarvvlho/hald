@@ -9,9 +9,7 @@ function makeCommit(overrides: Partial<CommitData> = {}): CommitData {
     authorEmail: "alice@co.com",
     date: "2024-03-01T10:00:00Z",
     message: "feat: add thing",
-    filesChanged: [
-      { path: "src/file.ts", status: "modified", additions: 10, deletions: 5 },
-    ],
+    filesChanged: [{ path: "src/file.ts", status: "modified", additions: 10, deletions: 5 }],
     parentHashes: [],
     ...overrides,
   };
@@ -156,9 +154,7 @@ describe("chunker", () => {
       makeCommit({
         hash: "a".repeat(40),
         parentHashes: ["singleparent".padEnd(40, "0")],
-        filesChanged: [
-          { path: "src/foo.ts", status: "modified", additions: 5, deletions: 2 },
-        ],
+        filesChanged: [{ path: "src/foo.ts", status: "modified", additions: 5, deletions: 2 }],
       }),
     ];
 
@@ -395,9 +391,7 @@ describe("chunker", () => {
       makeCommit({
         hash: "k".repeat(40),
         parentHashes: [],
-        filesChanged: [
-          { path: "README.md", status: "added", additions: 10, deletions: 0 },
-        ],
+        filesChanged: [{ path: "README.md", status: "added", additions: 10, deletions: 0 }],
       }),
     ];
 
@@ -412,9 +406,7 @@ describe("chunker", () => {
         date: "2024-03-01T10:00:00Z",
         message: "feat: add payments",
         parentHashes: ["p1".padEnd(40, "0")],
-        filesChanged: [
-          { path: "src/payments.ts", status: "added", additions: 50, deletions: 0 },
-        ],
+        filesChanged: [{ path: "src/payments.ts", status: "added", additions: 50, deletions: 0 }],
       }),
       makeCommit({
         hash: "m".repeat(40),

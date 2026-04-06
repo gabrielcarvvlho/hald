@@ -5,19 +5,13 @@ const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 
 export class AnthropicClient implements LLMClient {
   readonly provider = "anthropic" as const;
-  private sdk: InstanceType<typeof import("@anthropic-ai/sdk").default> | null =
-    null;
+  private sdk: InstanceType<typeof import("@anthropic-ai/sdk").default> | null = null;
   private apiKey: string;
   private model: string;
   private baseUrl?: string;
   private maxRetries: number;
 
-  constructor(
-    apiKey: string,
-    model?: string,
-    baseUrl?: string,
-    maxRetries = 3,
-  ) {
+  constructor(apiKey: string, model?: string, baseUrl?: string, maxRetries = 3) {
     this.apiKey = apiKey;
     this.model = model ?? DEFAULT_MODEL;
     this.baseUrl = baseUrl;
@@ -54,10 +48,7 @@ export class AnthropicClient implements LLMClient {
           messages: [{ role: "user", content: prompt }],
         });
 
-        const text =
-          response.content[0]?.type === "text"
-            ? response.content[0].text
-            : "";
+        const text = response.content[0]?.type === "text" ? response.content[0].text : "";
 
         return {
           text,

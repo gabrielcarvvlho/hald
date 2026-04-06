@@ -1,5 +1,17 @@
-import type { GitOracleConfig, CommitData, Entity, Relation, Community, CommunityId } from "../shared/types.js";
-import type { ExtractedRelation, ExtractorResult, ExtractedEntity, TokenAccumulator } from "./extractor.js";
+import type {
+  GitOracleConfig,
+  CommitData,
+  Entity,
+  Relation,
+  Community,
+  CommunityId,
+} from "../shared/types.js";
+import type {
+  ExtractedRelation,
+  ExtractorResult,
+  ExtractedEntity,
+  TokenAccumulator,
+} from "./extractor.js";
 import { openDatabase } from "../store/db.js";
 import { Store } from "../store/queries.js";
 import { readCommits, getHead } from "./git-reader.js";
@@ -128,15 +140,11 @@ async function runPipeline(
   };
   let failedChunks = 0;
 
-  for await (const { textUnitId, result, failed } of extractBatch(
-    textUnits,
-    client,
-    {
-      concurrency: config.maxConcurrency,
-      onProgress: (done, total) => progress("extracting", done, total),
-      tokenUsage,
-    },
-  )) {
+  for await (const { textUnitId, result, failed } of extractBatch(textUnits, client, {
+    concurrency: config.maxConcurrency,
+    onProgress: (done, total) => progress("extracting", done, total),
+    tokenUsage,
+  })) {
     if (failed) failedChunks++;
     extractions.set(textUnitId, result);
     allExtractedEntities.push(...result.entities);
@@ -144,9 +152,7 @@ async function runPipeline(
   }
 
   if (failedChunks > 0) {
-    logger.warn(
-      `orchestrator: ${failedChunks}/${textUnits.length} chunks failed extraction`,
-    );
+    logger.warn(`orchestrator: ${failedChunks}/${textUnits.length} chunks failed extraction`);
   }
 
   logger.info("orchestrator: extracted", {
@@ -307,10 +313,7 @@ async function runPipeline(
   const lastCommit = commits[commits.length - 1]!;
   store.setMeta("last_indexed_commit", lastCommit.hash);
   store.setMeta("last_indexed_at", new Date().toISOString());
-  store.setMeta(
-    "head_at_index",
-    await getHead(config.repoPath).catch(() => "unknown"),
-  );
+  store.setMeta("head_at_index", await getHead(config.repoPath).catch(() => "unknown"));
   // Calculate actual cost from real token counts
   const cost = calculateActualCost(
     tokenUsage.inputTokens,

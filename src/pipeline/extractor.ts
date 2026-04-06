@@ -9,10 +9,7 @@ const VALID_ENTITY_TYPES = new Set(Object.values(EntityType));
 const VALID_RELATION_TYPES = new Set(Object.values(RelationType));
 
 // Relation type constraints: which entity types are valid for source and target
-const RELATION_CONSTRAINTS: Record<
-  RelationType,
-  { source: EntityType[]; target: EntityType[] }
-> = {
+const RELATION_CONSTRAINTS: Record<RelationType, { source: EntityType[]; target: EntityType[] }> = {
   [RelationType.AUTHORED]: {
     source: [EntityType.PERSON],
     target: [EntityType.MODULE],
@@ -169,10 +166,7 @@ function buildUserPrompt(textUnit: TextUnit): string {
   return `Extract entities and relationships from this git commit history:\n\n<commit_data>\n${textUnit.content}\n</commit_data>`;
 }
 
-function buildGleaningPrompt(
-  textUnit: TextUnit,
-  previousResponse: string,
-): string {
+function buildGleaningPrompt(textUnit: TextUnit, previousResponse: string): string {
   return `${buildUserPrompt(textUnit)}\n\n--- Your previous extraction ---\n${previousResponse}\n\n--- Review ---\n${GLEANING_PROMPT}`;
 }
 
@@ -183,8 +177,7 @@ function buildGleaningPrompt(
 const xmlParser = new XMLParser({
   ignoreAttributes: true,
   isArray: (_name, jpath) =>
-    jpath === "extraction.entities.entity" ||
-    jpath === "extraction.relations.relation",
+    jpath === "extraction.entities.entity" || jpath === "extraction.relations.relation",
   trimValues: true,
 });
 
@@ -266,10 +259,7 @@ function parseExtractionXml(text: string): ExtractorResult {
     const sourceType = entityTypeByName.get(sourceName);
     const targetType = entityTypeByName.get(targetName);
     if (constraint && sourceType && targetType) {
-      if (
-        !constraint.source.includes(sourceType) ||
-        !constraint.target.includes(targetType)
-      ) {
+      if (!constraint.source.includes(sourceType) || !constraint.target.includes(targetType)) {
         logger.warn("extractor: relation type/entity type mismatch, skipping", {
           relation: type,
           source: `${sourceName} (${sourceType})`,
@@ -309,10 +299,7 @@ function shouldGlean(
   return ratio < maxEntitiesRatio;
 }
 
-function mergeResults(
-  base: ExtractorResult,
-  extra: ExtractorResult,
-): ExtractorResult {
+function mergeResults(base: ExtractorResult, extra: ExtractorResult): ExtractorResult {
   return {
     entities: [...base.entities, ...extra.entities],
     relations: [...base.relations, ...extra.relations],
@@ -327,7 +314,11 @@ function mergeResults(
 export async function extract(
   textUnit: TextUnit,
   client: LLMClient,
-  options?: { enableGleaning?: boolean; gleaningMinCommits?: number; gleaningMaxEntitiesRatio?: number },
+  options?: {
+    enableGleaning?: boolean;
+    gleaningMinCommits?: number;
+    gleaningMaxEntitiesRatio?: number;
+  },
 ): Promise<ExtractorResult & { inputTokens: number; outputTokens: number }> {
   const prompt = buildUserPrompt(textUnit);
 
@@ -350,10 +341,9 @@ export async function extract(
 
   // Handle truncated responses — retry with a higher token limit
   if (response.stopReason === "max_tokens") {
-    logger.warn(
-      "extractor: response truncated at max_tokens, retrying with higher limit",
-      { textUnitId: textUnit.id },
-    );
+    logger.warn("extractor: response truncated at max_tokens, retrying with higher limit", {
+      textUnitId: textUnit.id,
+    });
     const retry = await client.extract(prompt, SYSTEM_PROMPT, {
       temperature: 0,
       maxTokens: 8192,
@@ -393,7 +383,10 @@ export async function extract(
   }
 
   // Gleaning pass: ask the LLM to review its output and find missed entities
-  if (options?.enableGleaning && shouldGlean(result, textUnit, options.gleaningMinCommits, options.gleaningMaxEntitiesRatio)) {
+  if (
+    options?.enableGleaning &&
+    shouldGlean(result, textUnit, options.gleaningMinCommits, options.gleaningMaxEntitiesRatio)
+  ) {
     logger.debug("extractor: triggering gleaning pass", {
       textUnitId: textUnit.id,
       commits: textUnit.commitHashes.length,
@@ -488,10 +481,4 @@ export async function* extractBatch(
 }
 
 // Exported for testing
-export {
-  parseExtractionXml,
-  SYSTEM_PROMPT,
-  GLEANING_PROMPT,
-  shouldGlean,
-  stripCodeFences,
-};
+export { parseExtractionXml, SYSTEM_PROMPT, GLEANING_PROMPT, shouldGlean, stripCodeFences };

@@ -5,11 +5,14 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openDatabase } from "../src/store/db.js";
 import { Store } from "../src/store/queries.js";
-import { EntityType, RelationType, type Entity, type Relation, type Community } from "../src/shared/types.js";
+import { EntityType, RelationType } from "../src/shared/types.js";
 
 const CLI_PATH = join(__dirname, "..", "src", "cli.ts");
 
-function runCLI(args: string[], env?: Record<string, string>): { stdout: string; exitCode: number } {
+function runCLI(
+  args: string[],
+  env?: Record<string, string>,
+): { stdout: string; exitCode: number } {
   const cmd = `npx tsx ${CLI_PATH} ${args.map((a) => `'${a}'`).join(" ")}`;
   try {
     const stdout = execSync(cmd, {
@@ -184,19 +187,17 @@ describe("CLI — query", () => {
   it("query on empty index shows error message", () => {
     const emptyDir = join(tmpDir, "empty");
     mkdirSync(emptyDir, { recursive: true });
-    const { stdout, exitCode } = runCLI(
-      ["query", "who knows payments?"],
-      { GIT_ORACLE_REPO: emptyDir },
-    );
+    const { stdout, exitCode } = runCLI(["query", "who knows payments?"], {
+      GIT_ORACLE_REPO: emptyDir,
+    });
     expect(exitCode).toBe(1);
     expect(stdout).toContain("No index found");
   });
 
   it("local query finds entities", () => {
-    const { stdout, exitCode } = runCLI(
-      ["query", "who works on payments?"],
-      { GIT_ORACLE_REPO: tmpDir },
-    );
+    const { stdout, exitCode } = runCLI(["query", "who works on payments?"], {
+      GIT_ORACLE_REPO: tmpDir,
+    });
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain("payments");

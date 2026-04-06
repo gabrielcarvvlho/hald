@@ -34,10 +34,7 @@ interface RenderLimits {
  * because those changes are already present in the merged branch commits.
  * The merge message is preserved (valuable for DECISION extraction).
  */
-export function chunk(
-  commits: CommitData[],
-  options: ChunkerOptions,
-): TextUnit[] {
+export function chunk(commits: CommitData[], options: ChunkerOptions): TextUnit[] {
   const { commitsPerChunk, maxChunkTokens } = options;
   const limits: RenderLimits = {
     maxDiffLines: options.maxDiffLines ?? 50,
@@ -74,10 +71,7 @@ export function chunk(
  * For small target sizes (< 4), uses fixed windows since the
  * variance would be disproportionate.
  */
-function findChunkBoundaries(
-  commits: CommitData[],
-  targetSize: number,
-): number[] {
+function findChunkBoundaries(commits: CommitData[], targetSize: number): number[] {
   if (commits.length === 0) return [];
 
   const boundaries: number[] = [];
@@ -117,10 +111,7 @@ function findChunkBoundaries(
       const distance = Math.abs(i - target);
 
       // Prefer higher score; break ties by closer to target
-      if (
-        score > bestScore ||
-        (score === bestScore && score > 0 && distance < bestDistance)
-      ) {
+      if (score > bestScore || (score === bestScore && score > 0 && distance < bestDistance)) {
         bestSplit = i;
         bestScore = score;
         bestDistance = distance;
@@ -179,9 +170,7 @@ function renderTextUnit(commits: CommitData[], limits: RenderLimits): string {
   const lines: string[] = [];
 
   for (const commit of commits) {
-    lines.push(
-      `[${commit.hash.slice(0, 7)}] ${extractDate(commit.date)} ${commit.authorName}`,
-    );
+    lines.push(`[${commit.hash.slice(0, 7)}] ${extractDate(commit.date)} ${commit.authorName}`);
 
     lines.push(truncateMessage(commit.message, limits.maxMessageChars));
 
@@ -245,8 +234,7 @@ function truncateDiff(diff: string, maxLines: number): string {
   const diffLines = diff.split("\n");
   if (diffLines.length <= maxLines) return diff;
   return (
-    diffLines.slice(0, maxLines).join("\n") +
-    `\n... ${diffLines.length - maxLines} more lines`
+    diffLines.slice(0, maxLines).join("\n") + `\n... ${diffLines.length - maxLines} more lines`
   );
 }
 

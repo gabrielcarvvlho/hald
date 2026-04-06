@@ -1,12 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import pLimit from "p-limit";
 import type { LLMClient } from "../llm/types.js";
-import type {
-  Community,
-  CommunityId,
-  Entity,
-  Relation,
-} from "../shared/types.js";
+import type { Community, CommunityId, Entity, Relation } from "../shared/types.js";
 import type { TokenAccumulator } from "./extractor.js";
 import { logger } from "../shared/logger.js";
 
@@ -107,7 +102,7 @@ function parseSummaryXml(text: string): SummaryResult {
   if (!xml) return { title: "", summary: text.trim() };
 
   // Try parsing, with sanitization fallback for bare ampersands
-  let parsed = safeParseXml(xml);
+  const parsed = safeParseXml(xml);
   if (!parsed) return { title: "", summary: text.trim() };
 
   const cs = parsed?.community_summary;
@@ -186,17 +181,11 @@ export async function* summarizeBatch(
 
       const memberEntityIds = new Set(community.entityIds);
       const memberRelations = relations.filter(
-        (r) =>
-          memberEntityIds.has(r.sourceId) || memberEntityIds.has(r.targetId),
+        (r) => memberEntityIds.has(r.sourceId) || memberEntityIds.has(r.targetId),
       );
 
       try {
-        const result = await summarize(
-          community,
-          memberEntities,
-          memberRelations,
-          client,
-        );
+        const result = await summarize(community, memberEntities, memberRelations, client);
         if (options.tokenUsage) {
           options.tokenUsage.inputTokens += result.inputTokens;
           options.tokenUsage.outputTokens += result.outputTokens;

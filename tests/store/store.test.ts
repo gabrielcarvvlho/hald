@@ -264,10 +264,7 @@ describe("Store — Communities", () => {
     expect(result).not.toBeNull();
     expect(result!.title).toBe("Payments & gRPC Migration");
     expect(result!.level).toBe(0);
-    expect(result!.entityIds).toEqual([
-      "person:alice",
-      "module:src/payments",
-    ]);
+    expect(result!.entityIds).toEqual(["person:alice", "module:src/payments"]);
     expect(result!.parentId).toBeUndefined();
   });
 
@@ -404,7 +401,7 @@ describe("Store — Junction Tables", () => {
 
   beforeEach(() => {
     ({ db, store } = createTestStore());
-    store.upsertEntity(sampleEntity);  // person:alice
+    store.upsertEntity(sampleEntity); // person:alice
     store.upsertEntity(sampleEntity2); // module:src/billing
   });
   afterEach(() => db.close());
@@ -421,9 +418,9 @@ describe("Store — Junction Tables", () => {
 
     store.insertTextUnit(tu);
 
-    const rows = db.prepare(
-      "SELECT entity_id FROM text_unit_entities WHERE text_unit_id = ? ORDER BY entity_id"
-    ).all("tu:test-001") as { entity_id: string }[];
+    const rows = db
+      .prepare("SELECT entity_id FROM text_unit_entities WHERE text_unit_id = ? ORDER BY entity_id")
+      .all("tu:test-001") as { entity_id: string }[];
 
     expect(rows).toHaveLength(2);
     expect(rows[0]!.entity_id).toBe("module:src/billing");
@@ -442,9 +439,9 @@ describe("Store — Junction Tables", () => {
 
     store.upsertCommunity(community);
 
-    const rows = db.prepare(
-      "SELECT entity_id FROM community_entities WHERE community_id = ? ORDER BY entity_id"
-    ).all("comm:0:test") as { entity_id: string }[];
+    const rows = db
+      .prepare("SELECT entity_id FROM community_entities WHERE community_id = ? ORDER BY entity_id")
+      .all("comm:0:test") as { entity_id: string }[];
 
     expect(rows).toHaveLength(2);
     expect(rows[0]!.entity_id).toBe("module:src/billing");
@@ -468,9 +465,9 @@ describe("Store — Junction Tables", () => {
       entityIds: ["person:alice"],
     });
 
-    const rows = db.prepare(
-      "SELECT entity_id FROM community_entities WHERE community_id = ?"
-    ).all("comm:0:test") as { entity_id: string }[];
+    const rows = db
+      .prepare("SELECT entity_id FROM community_entities WHERE community_id = ?")
+      .all("comm:0:test") as { entity_id: string }[];
 
     expect(rows).toHaveLength(1);
     expect(rows[0]!.entity_id).toBe("person:alice");
@@ -551,7 +548,7 @@ describe("Store — Batch Entity Lookup", () => {
 
   beforeEach(() => {
     ({ db, store } = createTestStore());
-    store.upsertEntity(sampleEntity);  // person:alice
+    store.upsertEntity(sampleEntity); // person:alice
     store.upsertEntity(sampleEntity2); // module:src/billing
   });
   afterEach(() => db.close());

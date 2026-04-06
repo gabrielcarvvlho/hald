@@ -76,10 +76,7 @@ export class Store {
     return rows.map(toEntity);
   }
 
-  searchEntitiesRanked(
-    query: string,
-    limit = 10,
-  ): Array<{ entity: Entity; ftsRank: number }> {
+  searchEntitiesRanked(query: string, limit = 10): Array<{ entity: Entity; ftsRank: number }> {
     const safe = sanitizeFtsQuery(query);
     if (!safe) return [];
     const rows = this.stmts.searchEntitiesRanked.all(safe, limit) as (EntityRow & {
@@ -212,19 +209,14 @@ export class Store {
   }
 
   getCommunitiesByLevel(level: number): Community[] {
-    const rows = this.stmts.getCommunitiesByLevel.all(
-      level,
-    ) as CommunityRow[];
+    const rows = this.stmts.getCommunitiesByLevel.all(level) as CommunityRow[];
     return rows.map(toCommunity);
   }
 
   searchCommunities(query: string, limit = 5): Community[] {
     const safe = sanitizeFtsQuery(query);
     if (!safe) return [];
-    const rows = this.stmts.searchCommunities.all(
-      safe,
-      limit,
-    ) as CommunityRow[];
+    const rows = this.stmts.searchCommunities.all(safe, limit) as CommunityRow[];
     return rows.map(toCommunity);
   }
 
@@ -256,9 +248,7 @@ export class Store {
   }
 
   getCommitCount(): number {
-    const row = this.db
-      .prepare("SELECT COUNT(*) as count FROM commits")
-      .get() as { count: number };
+    const row = this.db.prepare("SELECT COUNT(*) as count FROM commits").get() as { count: number };
     return row.count;
   }
 
@@ -271,9 +261,7 @@ export class Store {
   }
 
   getMeta(key: string): string | null {
-    const row = this.stmts.getMeta.get(key) as
-      | { key: string; value: string }
-      | undefined;
+    const row = this.stmts.getMeta.get(key) as { key: string; value: string } | undefined;
     return row?.value ?? null;
   }
 
@@ -308,10 +296,7 @@ export class Store {
 
   /** Get all relations where entity is source OR target. */
   getRelationsForEntity(entityId: EntityId): Relation[] {
-    return [
-      ...this.getRelationsBySource(entityId),
-      ...this.getRelationsByTarget(entityId),
-    ];
+    return [...this.getRelationsBySource(entityId), ...this.getRelationsByTarget(entityId)];
   }
 
   /** Get text units that reference this entity (via JSON array search). */
@@ -322,26 +307,19 @@ export class Store {
 
   /** Get communities that contain this entity (via JSON array search). */
   getCommunitiesForEntity(entityId: EntityId): Community[] {
-    const rows = this.stmts.communitiesForEntity.all(
-      entityId,
-    ) as CommunityRow[];
+    const rows = this.stmts.communitiesForEntity.all(entityId) as CommunityRow[];
     return rows.map(toCommunity);
   }
 
   /** Find MODULE entities matching a path (exact + prefix for sub-modules). */
   findModulesByPath(modulePath: string): Entity[] {
-    const rows = this.stmts.findModulesByPath.all(
-      modulePath,
-      modulePath + "/%",
-    ) as EntityRow[];
+    const rows = this.stmts.findModulesByPath.all(modulePath, modulePath + "/%") as EntityRow[];
     return rows.map(toEntity);
   }
 
   /** Get entity by exact name (case-insensitive). */
   getEntityByName(name: string): Entity | null {
-    const row = this.stmts.getEntityByName.get(name) as
-      | EntityRow
-      | undefined;
+    const row = this.stmts.getEntityByName.get(name) as EntityRow | undefined;
     return row ? toEntity(row) : null;
   }
 
@@ -405,12 +383,8 @@ function prepareStatements(db: Database.Database) {
         last_seen = MAX(relations.last_seen, excluded.last_seen)
     `),
     getRelation: db.prepare("SELECT * FROM relations WHERE id = ?"),
-    getRelationsBySource: db.prepare(
-      "SELECT * FROM relations WHERE source_id = ?",
-    ),
-    getRelationsByTarget: db.prepare(
-      "SELECT * FROM relations WHERE target_id = ?",
-    ),
+    getRelationsBySource: db.prepare("SELECT * FROM relations WHERE source_id = ?"),
+    getRelationsByTarget: db.prepare("SELECT * FROM relations WHERE target_id = ?"),
     getAllRelations: db.prepare("SELECT * FROM relations"),
 
     // --- Text Units ---
@@ -440,9 +414,7 @@ function prepareStatements(db: Database.Database) {
         child_ids = excluded.child_ids
     `),
     getCommunity: db.prepare("SELECT * FROM communities WHERE id = ?"),
-    getCommunitiesByLevel: db.prepare(
-      "SELECT * FROM communities WHERE level = ?",
-    ),
+    getCommunitiesByLevel: db.prepare("SELECT * FROM communities WHERE level = ?"),
     searchCommunities: db.prepare(`
       SELECT communities.* FROM communities_fts
       JOIN communities ON communities.rowid = communities_fts.rowid
@@ -459,20 +431,16 @@ function prepareStatements(db: Database.Database) {
     getCommit: db.prepare("SELECT * FROM commits WHERE hash = ?"),
 
     // --- Meta ---
-    setMeta: db.prepare(
-      "INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)",
-    ),
+    setMeta: db.prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)"),
     getMeta: db.prepare("SELECT * FROM index_meta WHERE key = ?"),
 
     // --- Junction table operations ---
     insertTextUnitEntity: db.prepare(
-      "INSERT OR IGNORE INTO text_unit_entities(text_unit_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)"
+      "INSERT OR IGNORE INTO text_unit_entities(text_unit_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)",
     ),
-    deleteCommunityEntities: db.prepare(
-      "DELETE FROM community_entities WHERE community_id = ?"
-    ),
+    deleteCommunityEntities: db.prepare("DELETE FROM community_entities WHERE community_id = ?"),
     insertCommunityEntity: db.prepare(
-      "INSERT OR IGNORE INTO community_entities(community_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)"
+      "INSERT OR IGNORE INTO community_entities(community_id, entity_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM entities WHERE id = ?)",
     ),
 
     // --- Query helpers ---
@@ -490,9 +458,7 @@ function prepareStatements(db: Database.Database) {
       SELECT * FROM entities
       WHERE type = 'MODULE' AND (name = ? OR name LIKE ?)
     `),
-    getEntityByName: db.prepare(
-      "SELECT * FROM entities WHERE name = ? COLLATE NOCASE",
-    ),
+    getEntityByName: db.prepare("SELECT * FROM entities WHERE name = ? COLLATE NOCASE"),
   };
 }
 
@@ -509,46 +475,96 @@ function prepareStatements(db: Database.Database) {
  * - Stop word removal for conversational filler
  */
 function sanitizeFtsQuery(query: string): string | null {
-  let tokens = query
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((t) => t.length > 0);
+  let tokens = query.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length > 0);
 
   // Split camelCase/PascalCase: "PaymentGateway" → ["PaymentGateway", "Payment", "Gateway"]
   // Keep original alongside splits so "gRPC" → ["gRPC", "g", "RPC"] → after filter → ["gRPC", "RPC"]
   tokens = [
     ...new Set(
       tokens.flatMap((t) => {
-        const parts = t.split(
-          /(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/,
-        );
+        const parts = t.split(/(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/);
         return parts.length > 1 ? [t, ...parts] : parts;
       }),
     ),
   ];
 
-  tokens = tokens
-    .filter((t) => t.length > 1)
-    .filter((t) => !STOP_WORDS.has(t.toLowerCase()));
+  tokens = tokens.filter((t) => t.length > 1).filter((t) => !STOP_WORDS.has(t.toLowerCase()));
 
   if (tokens.length === 0) return null;
 
   // Short tokens get prefix matching (auth → auth*), longer ones get exact match
-  return tokens
-    .map((t) => (t.length < 6 ? `${t}*` : `"${t}"`))
-    .join(" OR ");
+  return tokens.map((t) => (t.length < 6 ? `${t}*` : `"${t}"`)).join(" OR ");
 }
 
 const STOP_WORDS = new Set([
-  "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-  "have", "has", "had", "do", "does", "did", "will", "would", "could",
-  "should", "may", "might", "can", "shall",
-  "i", "me", "my", "we", "our", "you", "your",
-  "he", "she", "it", "they", "them", "their",
-  "this", "that", "these", "those",
-  "who", "what", "where", "when", "why", "how",
-  "not", "no", "nor", "but", "or", "and",
-  "if", "then", "than", "so", "as",
-  "in", "on", "at", "to", "for", "of", "with", "by", "from", "about",
+  "a",
+  "an",
+  "the",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "have",
+  "has",
+  "had",
+  "do",
+  "does",
+  "did",
+  "will",
+  "would",
+  "could",
+  "should",
+  "may",
+  "might",
+  "can",
+  "shall",
+  "i",
+  "me",
+  "my",
+  "we",
+  "our",
+  "you",
+  "your",
+  "he",
+  "she",
+  "it",
+  "they",
+  "them",
+  "their",
+  "this",
+  "that",
+  "these",
+  "those",
+  "who",
+  "what",
+  "where",
+  "when",
+  "why",
+  "how",
+  "not",
+  "no",
+  "nor",
+  "but",
+  "or",
+  "and",
+  "if",
+  "then",
+  "than",
+  "so",
+  "as",
+  "in",
+  "on",
+  "at",
+  "to",
+  "for",
+  "of",
+  "with",
+  "by",
+  "from",
+  "about",
 ]);
 
 // ================================================================

@@ -63,11 +63,7 @@ export interface KnowledgeSiloResult {
  * Scores are NOT normalized by module commit volume — they're comparable within a single
  * findExperts call but not meaningful across calls for different modules.
  */
-export function findExperts(
-  store: Store,
-  modulePath: string,
-  topN = 5,
-): ExpertResult[] {
+export function findExperts(store: Store, modulePath: string, topN = 5): ExpertResult[] {
   // Find all module entities matching the path (exact + prefix sub-modules)
   const modules = store.findModulesByPath(modulePath);
   if (modules.length === 0) return [];
@@ -84,11 +80,7 @@ export function findExperts(
     const relations = store.getRelationsByTarget(moduleId);
 
     for (const rel of relations) {
-      if (
-        rel.type !== RelationType.AUTHORED &&
-        rel.type !== RelationType.MODIFIED
-      )
-        continue;
+      if (rel.type !== RelationType.AUTHORED && rel.type !== RelationType.MODIFIED) continue;
 
       const existing = personScores.get(rel.sourceId) ?? {
         weight: 0,
@@ -139,11 +131,7 @@ export function findExperts(
  * computed as co_change_weight / source_module_frequency.
  * This is asymmetric: getCoupling("A") ≠ getCoupling("B").
  */
-export function getCoupling(
-  store: Store,
-  modulePath: string,
-  minWeight = 2,
-): CouplingResult[] {
+export function getCoupling(store: Store, modulePath: string, minWeight = 2): CouplingResult[] {
   // Find the target module
   const modules = store.findModulesByPath(modulePath);
   if (modules.length === 0) return [];
@@ -159,23 +147,16 @@ export function getCoupling(
     for (const rel of relations) {
       if (rel.type !== RelationType.CO_CHANGED) continue;
 
-      const otherId =
-        rel.sourceId === moduleId ? rel.targetId : rel.sourceId;
+      const otherId = rel.sourceId === moduleId ? rel.targetId : rel.sourceId;
       if (moduleIds.has(otherId)) continue;
 
-      candidateWeights.set(
-        otherId,
-        (candidateWeights.get(otherId) ?? 0) + rel.weight,
-      );
+      candidateWeights.set(otherId, (candidateWeights.get(otherId) ?? 0) + rel.weight);
     }
   }
 
   // Batch fetch all coupled module entities
   const otherEntities = store.getEntitiesByIds([...candidateWeights.keys()]);
-  const couplingMap = new Map<
-    string,
-    { weight: number; moduleEntity: Entity }
-  >();
+  const couplingMap = new Map<string, { weight: number; moduleEntity: Entity }>();
 
   for (const [otherId, weight] of candidateWeights) {
     const otherEntity = otherEntities.get(otherId);
@@ -245,8 +226,7 @@ export function getPath(
       const relations = store.getRelationsForEntity(currentId);
 
       for (const rel of relations) {
-        const neighborId =
-          rel.sourceId === currentId ? rel.targetId : rel.sourceId;
+        const neighborId = rel.sourceId === currentId ? rel.targetId : rel.sourceId;
 
         if (visited.has(neighborId)) continue;
         visited.add(neighborId);
@@ -310,16 +290,11 @@ export function findKnowledgeSilos(
     let lastActivity = "";
 
     for (const rel of rels) {
-      if (
-        rel.type !== RelationType.AUTHORED &&
-        rel.type !== RelationType.MODIFIED
-      )
-        continue;
+      if (rel.type !== RelationType.AUTHORED && rel.type !== RelationType.MODIFIED) continue;
 
       if (rel.lastSeen > lastActivity) lastActivity = rel.lastSeen;
 
-      const daysSince =
-        (now.getTime() - new Date(rel.lastSeen).getTime()) / 86_400_000;
+      const daysSince = (now.getTime() - new Date(rel.lastSeen).getTime()) / 86_400_000;
       if (daysSince <= inactiveDays) {
         activeAuthors.set(rel.sourceId, true);
       }
@@ -327,9 +302,7 @@ export function findKnowledgeSilos(
 
     if (activeAuthors.size <= 1) {
       const soloExpertId = [...activeAuthors.keys()][0];
-      const soloExpert = soloExpertId
-        ? store.getEntity(soloExpertId) ?? null
-        : null;
+      const soloExpert = soloExpertId ? (store.getEntity(soloExpertId) ?? null) : null;
 
       results.push({
         module: mod,
@@ -362,10 +335,7 @@ function getAuthorNames(
   for (const moduleId of moduleIds) {
     const rels = store.getRelationsByTarget(moduleId);
     for (const rel of rels) {
-      if (
-        rel.type === RelationType.AUTHORED ||
-        rel.type === RelationType.MODIFIED
-      ) {
+      if (rel.type === RelationType.AUTHORED || rel.type === RelationType.MODIFIED) {
         const name = resolvePersonName(rel.sourceId);
         if (name) authors.add(name);
       }
@@ -391,9 +361,7 @@ function reconstructPath(
     current = prev.entityId;
   }
 
-  const path = pathIds
-    .map((id) => store.getEntity(id))
-    .filter((e): e is Entity => e !== null);
+  const path = pathIds.map((id) => store.getEntity(id)).filter((e): e is Entity => e !== null);
 
   return { path, relations, length: relations.length };
 }

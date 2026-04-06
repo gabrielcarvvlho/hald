@@ -108,21 +108,11 @@ export async function createClient(config: LLMClientConfig): Promise<LLMClient> 
   switch (provider) {
     case "anthropic": {
       const { AnthropicClient } = await import("./anthropic.js");
-      return new AnthropicClient(
-        apiKey,
-        config.model,
-        config.baseUrl,
-        config.maxRetries,
-      );
+      return new AnthropicClient(apiKey, config.model, config.baseUrl, config.maxRetries);
     }
     case "openai": {
       const { OpenAIClient } = await import("./openai.js");
-      return new OpenAIClient(
-        apiKey,
-        config.model,
-        config.baseUrl,
-        config.maxRetries,
-      );
+      return new OpenAIClient(apiKey, config.model, config.baseUrl, config.maxRetries);
     }
     case "google": {
       const { GoogleClient } = await import("./google.js");

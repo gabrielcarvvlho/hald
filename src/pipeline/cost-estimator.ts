@@ -56,10 +56,7 @@ export function estimateCost(
   provider: string,
 ): CostEstimate {
   // Extraction: ~500 tokens per text unit (input) + ~500 tokens output
-  const extractionInputTokens = textUnits.reduce(
-    (sum, tu) => sum + estimateTokens(tu.content),
-    0,
-  );
+  const extractionInputTokens = textUnits.reduce((sum, tu) => sum + estimateTokens(tu.content), 0);
   // System prompt is ~600 tokens, added per call
   const systemPromptTokens = 600 * textUnits.length;
   const extractionOutputTokens = textUnits.length * 500; // estimated output
@@ -80,8 +77,7 @@ export function estimateCost(
   const inputTokens = totalTokens * 0.6;
   const outputTokens = totalTokens * 0.4;
   const estimatedCostUsd =
-    (inputTokens / 1_000_000) * rates.input +
-    (outputTokens / 1_000_000) * rates.output;
+    (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output;
 
   return {
     provider,
@@ -153,14 +149,11 @@ export function calculateActualCost(
   model?: string,
 ): ActualCostResult {
   const resolvedModel = model ?? DEFAULT_MODELS[provider] ?? "unknown";
-  const rates =
-    MODEL_PRICING[resolvedModel] ??
-    COST_PER_1M_TOKENS[provider] ??
-    { input: 0, output: 0 };
+  const rates = MODEL_PRICING[resolvedModel] ??
+    COST_PER_1M_TOKENS[provider] ?? { input: 0, output: 0 };
 
   const costUsd =
-    (inputTokens / 1_000_000) * rates.input +
-    (outputTokens / 1_000_000) * rates.output;
+    (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output;
 
   return {
     provider,

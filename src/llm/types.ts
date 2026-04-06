@@ -4,11 +4,7 @@ export interface LLMClient {
   readonly provider: LLMProvider;
 
   /** Send an extraction request. Returns the raw text response. */
-  extract(
-    prompt: string,
-    systemPrompt: string,
-    options?: LLMRequestOptions,
-  ): Promise<LLMResponse>;
+  extract(prompt: string, systemPrompt: string, options?: LLMRequestOptions): Promise<LLMResponse>;
 }
 
 export interface LLMRequestOptions {
