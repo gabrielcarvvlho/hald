@@ -1,79 +1,122 @@
-# Git Oracle
+# hald
 
-GraphRAG-powered knowledge graph for git repositories. Extracts entities (people, modules, technologies, decisions, patterns) and relationships from your commit history, builds a community-structured knowledge graph, and exposes it via MCP tools for AI coding agents.
+**Your codebase, held.**
 
-**Zero-cost querying** -- MCP tools return structured graph data from SQLite. Your AI agent synthesizes the narrative using its own tokens.
+GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git history — commits, authors, files, relationships — and lets you query it with natural language. Like having a senior engineer who's read every commit and can answer any question about your codebase instantly.
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/hald"><img src="https://img.shields.io/npm/v/hald?style=flat-square" alt="npm version"></a>
+  <a href="https://github.com/gabrielcarvvlho/hald/actions"><img src="https://img.shields.io/github/actions/workflow/status/gabrielcarvvlho/hald/ci.yml?style=flat-square" alt="CI"></a>
+  <a href="https://github.com/gabrielcarvvlho/hald/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
+</p>
 
 ## Quick Start
 
 ```bash
 # Install
-npm install -g git-oracle
+npm install -g hald
 
-# Index your repository (requires an LLM API key)
+# Scan your repository (requires an LLM API key)
 cd your-repo
-git-oracle index
+hald scan
 
-# Query from CLI
-git-oracle query "who knows the billing module best?"
-git-oracle query "why did we migrate to gRPC?"
-git-oracle stats
+# Ask questions
+hald ask "who knows the billing module best?"
+hald ask "why did we migrate to gRPC?"
+hald ask "what changed most in the last 3 months?"
+hald stats
 ```
 
 ## How It Works
 
-1. **Index** -- Reads your git history, chunks commits into text units, and uses an LLM to extract entities and relationships
-2. **Build** -- Constructs a knowledge graph, detects communities via Louvain clustering, and generates community summaries
-3. **Query** -- MCP tools search the graph (FTS5 + graph traversal) and return structured context to your AI agent
+```
+git log
+   |
+   v
+ Chunker          (commits -> overlapping text units)
+   |
+   v
+LLM Extraction    (entities: people, modules, decisions, patterns)
+   |
+   v
+Entity Resolver   (deduplication + canonical names)
+   |
+   v
+Knowledge Graph   (nodes + weighted edges in SQLite)
+   |
+   v
+Community Detection  (Louvain clustering + LLM summaries)
+   |
+   v
+MCP Tools         (hald_find_expert, hald_trace_decision, ...)
+   |
+   v
+Your AI Agent     (synthesizes answers using its own tokens)
+```
 
-```
-Git History --> Chunker --> LLM Extraction --> Knowledge Graph --> MCP Tools --> AI Agent
-```
+Scanning costs tokens. Querying is always free — tools return structured graph data and your agent does the reasoning.
+
+## What You Can Ask
+
+| Question type | Example | Tool used |
+|---|---|---|
+| Ownership | "Who knows the payments module best?" | `hald_find_expert` |
+| Decisions | "Why did we switch from REST to gRPC?" | `hald_trace_decision` |
+| Coupling | "What breaks when I touch the auth layer?" | `hald_show_coupling` |
+| Silos | "Are there parts of the codebase nobody touches?" | `hald_find_silos` |
+| Relationships | "How are the queue system and billing connected?" | `hald_get_path` |
+| Free-form | "Summarize the architecture of the data pipeline" | `hald_query` |
 
 ## LLM Providers
 
-Git Oracle auto-detects your available API key. Set one of these:
+hald auto-detects your available API key. Set one of these before running `hald scan`:
 
 | Provider | Env Var | Default Model | Cost per 1k commits |
-|----------|---------|---------------|---------------------|
+|---|---|---|---|
 | Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 | ~$0.50-$1.00 |
 | OpenAI | `OPENAI_API_KEY` | gpt-4.1-mini | ~$0.30-$0.60 |
 | Google | `GOOGLE_API_KEY` | gemini-2.5-flash | ~$0.10-$0.30 |
-| Ollama | `OPENAI_API_KEY` + `GIT_ORACLE_BASE_URL` | configurable | $0.00 |
+| Ollama (local) | `OPENAI_API_KEY` + `HALD_BASE_URL` | configurable | $0.00 |
 
-## MCP Tools
-
-Once indexed, these tools are available to your AI agent:
-
-| Tool | Description |
-|------|-------------|
-| `git_oracle_query` | Free-form questions about history, architecture, decisions |
-| `git_oracle_find_expert` | Find who knows a module/file best |
-| `git_oracle_trace_decision` | Trace the history of a technical decision |
-| `git_oracle_show_coupling` | Show modules that change together |
-| `git_oracle_get_path` | Find relationship path between two entities |
-| `git_oracle_get_entity` | Look up entity details by ID, name, or search |
-| `git_oracle_index` | Index or re-index the repository |
-| `git_oracle_stats` | Get index statistics |
+Querying is always free — no LLM calls at query time.
 
 ## Platform Setup
 
 ### Claude Code
 
-Install as a plugin -- Git Oracle auto-registers its MCP server and skills:
-
 ```bash
-claude plugin add /path/to/git-oracle
+claude plugin add hald
+```
+
+Or add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "hald": {
+      "command": "npx",
+      "args": ["hald", "serve"]
+    }
+  }
+}
 ```
 
 ### Cursor
 
-Install as a plugin:
+Add to `.cursor/mcp.json` in your project:
 
-```bash
-# Copy to your project or install globally
-cp -r /path/to/git-oracle/.cursor-plugin .cursor-plugin
-cp /path/to/git-oracle/.mcp.json .mcp.json
+```json
+{
+  "mcpServers": {
+    "hald": {
+      "command": "npx",
+      "args": ["hald", "serve"],
+      "env": {
+        "ANTHROPIC_API_KEY": "${env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
 ```
 
 ### Codex
@@ -82,63 +125,73 @@ See [`.codex/INSTALL.md`](.codex/INSTALL.md) for setup instructions.
 
 ### OpenCode
 
-See [`.opencode/INSTALL.md`](.opencode/INSTALL.md) for setup instructions.
+Copy `.opencode/plugins/hald.js` to your OpenCode plugins directory.
 
 ### Gemini CLI
 
-Add to your Gemini extensions:
-
 ```bash
-cp /path/to/git-oracle/gemini-extension.json ~/.gemini/extensions/git-oracle.json
+cp gemini-extension.json ~/.gemini/extensions/hald.json
 ```
 
 ## CLI Reference
 
 ```
-git-oracle index [options]     Index the repository
-  --full                       Force full re-index
-  --max-commits <n>            Limit commits to process
-  --since <date>               Only index commits after this date
-  --provider <name>            LLM provider (anthropic|openai|google|auto)
-  -y, --yes                    Skip cost confirmation
+hald scan [options]            Build or update the knowledge graph
+  --full                       Force full re-scan (ignore existing index)
+  --max-commits <n>            Limit number of commits to process
+  --since <date>               Only scan commits after this date (YYYY-MM-DD)
+  --provider <name>            LLM provider: anthropic | openai | google | auto
+  -y, --yes                    Skip cost confirmation prompt
 
-git-oracle query <question>    Query the knowledge graph
-  --type <type>                Search type (local|global|auto)
+hald ask <question>            Ask a natural language question
+  --type <type>                Search strategy: local | global | auto
 
-git-oracle stats               Show index statistics
+hald stats                     Show index statistics
 
-git-oracle serve               Start MCP server on stdio
+hald graph                     Open interactive graph visualization in browser
+
+hald reset                     Delete the local index and start fresh
+
+hald serve                     Start the MCP server on stdio
 ```
 
 ## Configuration
 
-Configuration is read in this order (first wins):
+Configuration priority (first wins):
 
 1. CLI flags / MCP tool parameters
-2. `.git-oracle/config.json` in the repo root
-3. Environment variables (`GIT_ORACLE_*`)
+2. `.hald/config.json` in repo root
+3. Environment variables (`HALD_*`)
 4. Defaults
 
 | Env Var | Description | Default |
-|---------|-------------|---------|
-| `GIT_ORACLE_REPO` | Repository path | `.` |
-| `GIT_ORACLE_BRANCH` | Branch to index | `main` |
-| `GIT_ORACLE_MAX_COMMITS` | Max commits to index | `5000` |
-| `GIT_ORACLE_PROVIDER` | LLM provider | `auto` |
-| `GIT_ORACLE_BASE_URL` | Custom LLM endpoint | -- |
+|---|---|---|
+| `HALD_PROVIDER` | LLM provider for scanning | `auto` |
+| `HALD_MODEL` | Override default model | provider default |
+| `HALD_BASE_URL` | Custom endpoint (Ollama, OpenRouter, Azure) | -- |
+| `HALD_MAX_COMMITS` | Max commits to scan | unlimited |
 
 ## Storage
 
-The index is stored in `.git-oracle/oracle.db` (SQLite). Add `.git-oracle/` to your `.gitignore`.
+Index lives in `.hald/` at the repo root. Add to `.gitignore`:
+
+```
+.hald/
+```
+
+Safe to delete — run `hald scan` again to rebuild.
 
 ## Development
 
 ```bash
-npm install          # Install dependencies
-npm run build        # Build with tsup
-npm test             # Run tests
-npm run dev          # Watch mode
+git clone https://github.com/gabrielcarvvlho/hald.git
+cd hald
+npm install
+npm run build
+npm test
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
