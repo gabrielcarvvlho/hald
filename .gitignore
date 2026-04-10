@@ -22,11 +22,7 @@ Thumbs.db
 # Test coverage
 coverage/
 
-# Progress tracking (local only)
+# Local-only directories
 progress/
-
-# Internal docs (not for public repo)
 docs/_internal/
-
-# Superpowers brainstorm artifacts
 .superpowers/
