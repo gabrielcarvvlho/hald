@@ -2,7 +2,7 @@
 
 1. Clone the repository:
    ```
-   git clone https://github.com/gabriel/hald.git ~/.codex/hald
+   git clone https://github.com/gabrielcarvvlho/hald.git ~/.codex/hald
    ```
 
 2. Install dependencies and build:

@@ -795,8 +795,8 @@ fi
   "description": "GraphRAG-powered knowledge graph for your git history. Ask questions about architectural decisions, find domain experts, trace code evolution, and surface hidden coupling.",
   "version": "0.1.0",
   "author": { "name": "Gabriel" },
-  "homepage": "https://github.com/gabriel/hald",
-  "repository": "https://github.com/gabriel/hald",
+  "homepage": "https://github.com/gabrielcarvvlho/hald",
+  "repository": "https://github.com/gabrielcarvvlho/hald",
   "license": "MIT",
   "keywords": ["graphrag", "git", "knowledge-graph", "institutional-knowledge"]
 }
@@ -827,7 +827,7 @@ Note: No API key is hardcoded in `.mcp.json`. The MCP server auto-detects availa
   "name": "hald",
   "description": "GraphRAG-powered knowledge graph for your git history.",
   "version": "0.1.0",
-  "homepage": "https://github.com/gabriel/hald"
+  "homepage": "https://github.com/gabrielcarvvlho/hald"
 }
 ```
 
@@ -841,7 +841,7 @@ Codex requires manual setup. The INSTALL.md is designed to be read by the agent 
 # Installing Hald for Codex
 
 1. Clone the repository:
-   git clone https://github.com/gabriel/hald.git ~/.codex/hald
+   git clone https://github.com/gabrielcarvvlho/hald.git ~/.codex/hald
 
 2. Install dependencies and build:
    cd ~/.codex/hald && npm install && npm run build

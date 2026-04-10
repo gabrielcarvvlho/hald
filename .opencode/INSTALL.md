@@ -2,7 +2,7 @@
 
 1. Clone the repository into your OpenCode plugins directory:
    ```
-   git clone https://github.com/gabriel/hald.git ~/.opencode/plugins/hald
+   git clone https://github.com/gabrielcarvvlho/hald.git ~/.opencode/plugins/hald
    ```
 
 2. Install dependencies and build:
