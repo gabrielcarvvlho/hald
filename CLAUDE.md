@@ -29,7 +29,7 @@ This is a TypeScript monorepo. All source code is in `src/`.
 - `src/mcp/` — MCP server (tools, resources, server setup)
 - `src/llm/` — Provider-agnostic LLM client (Anthropic, OpenAI, Google)
 - `src/shared/` — Types, config, logger
-- `src/cli.ts` — CLI entry point (`npx hald scan`, `npx hald ask`)
+- `src/cli.ts` — CLI entry point (`npx haldy scan`, `npx haldy ask`)
 - `src/index.ts` — MCP server entry point
 
 ### Other
@@ -106,19 +106,19 @@ npm run build
 npm test
 
 # Index current repo
-npx hald scan
+npx haldy scan
 
 # Index with options
-npx hald scan --max-commits 1000 --since 2024-01-01 --provider openai
+npx haldy scan --max-commits 1000 --since 2024-01-01 --provider openai
 
 # Query (CLI mode, for testing)
-npx hald ask "who knows the billing module best?"
+npx haldy ask "who knows the billing module best?"
 
 # Check index status
-npx hald stats
+npx haldy stats
 
 # Start MCP server (for manual testing)
-npx hald serve
+npx haldy serve
 
 # Run MCP inspector
 npx @modelcontextprotocol/inspector node dist/index.js

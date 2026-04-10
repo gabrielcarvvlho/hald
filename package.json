@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "hald": "dist/cli.js"
+    "hald": "dist/cli.js",
+    "haldy": "dist/cli.js"
   },
   "scripts": {
     "build": "tsup",

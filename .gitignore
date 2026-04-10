@@ -25,5 +25,8 @@ coverage/
 # Progress tracking (local only)
 progress/
 
+# Internal docs (not for public repo)
+docs/_internal/
+
 # Superpowers brainstorm artifacts
 .superpowers/

@@ -74,7 +74,7 @@ hald/
 │       └── SKILL.md             # Teaches agent how to trigger indexing
 ├── src/
 │   ├── index.ts                 # MCP server entry point
-│   ├── cli.ts                   # CLI entry point (npx hald scan)
+│   ├── cli.ts                   # CLI entry point (npx haldy scan)
 │   ├── pipeline/
 │   │   ├── git-reader.ts        # Extracts commits, diffs, blame from .git
 │   │   ├── chunker.ts           # Groups commits into TextUnits
@@ -968,8 +968,8 @@ Each provider lives in its own file and implements `LLMClient`:
 | File | Provider | SDK | Env Var | Default Model |
 |------|----------|-----|---------|---------------|
 | `anthropic.ts` | Anthropic | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
-| `openai.ts` | OpenAI-compatible | `openai` | `OPENAI_API_KEY` | `gpt-4.1-mini` |
-| `google.ts` | Google | `@google/genai` | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| `openai.ts` | OpenAI-compatible | `openai` | `OPENAI_API_KEY` | `gpt-5.4-mini` |
+| `google.ts` | Google | `@google/genai` | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | `gemini-3.1-flash-lite-preview` |
 
 The OpenAI provider supports any OpenAI-compatible endpoint via `baseUrl`:
 - **OpenRouter:** `baseUrl: "https://openrouter.ai/api/v1"` — access any model
@@ -1184,4 +1184,4 @@ The following is the recommended build sequence. Each step should be implemented
 27. **Incremental indexing** — Detect new commits, process only delta
 28. **Progress reporting** — CLI spinner + progress bar for indexing
 29. **Cost estimation** — Pre-index token count estimation and cost display per provider
-30. **README + npm publish config** — Documentation, `npx hald` entry point, installation instructions for all 5 platforms
+30. **README + npm publish config** — Documentation, `npx haldy` entry point, installation instructions for all 5 platforms

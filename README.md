@@ -5,7 +5,7 @@
 GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git history — commits, authors, files, relationships — and lets you query it with natural language. Like having a senior engineer who's read every commit and can answer any question about your codebase instantly.
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/hald"><img src="https://img.shields.io/npm/v/hald?style=flat-square" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/haldy"><img src="https://img.shields.io/npm/v/haldy?style=flat-square" alt="npm version"></a>
   <a href="https://github.com/gabrielcarvvlho/hald/actions"><img src="https://img.shields.io/github/actions/workflow/status/gabrielcarvvlho/hald/ci.yml?style=flat-square" alt="CI"></a>
   <a href="https://github.com/gabrielcarvvlho/hald/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
 </p>
@@ -14,7 +14,7 @@ GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git h
 
 ```bash
 # Install
-npm install -g hald
+npm install -g haldy
 
 # Scan your repository (requires an LLM API key)
 cd your-repo
@@ -95,7 +95,7 @@ Or add to your project's `.mcp.json`:
   "mcpServers": {
     "hald": {
       "command": "npx",
-      "args": ["hald", "serve"]
+      "args": ["haldy", "serve"]
     }
   }
 }
@@ -110,7 +110,7 @@ Add to `.cursor/mcp.json` in your project:
   "mcpServers": {
     "hald": {
       "command": "npx",
-      "args": ["hald", "serve"],
+      "args": ["haldy", "serve"],
       "env": {
         "ANTHROPIC_API_KEY": "${env:ANTHROPIC_API_KEY}"
       }
