@@ -25,7 +25,7 @@ if ! command -v node >/dev/null 2>&1; then
   cat >&2 <<'EOF'
 [hald] ERROR: Node.js not found in PATH.
 
-The Git Oracle MCP server requires Node.js >= 20.
+The Hald MCP server requires Node.js >= 20.
 Install it from https://nodejs.org or via a version manager (nvm, fnm, mise).
 
 If Node.js is installed via a version manager, ensure it is activated in your

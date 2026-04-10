@@ -1,4 +1,4 @@
-// MCP server entry point — starts the Git Oracle MCP server on stdio.
+// MCP server entry point — starts the Hald MCP server on stdio.
 import { startServer } from "./mcp/server.js";
 
 startServer().catch((err) => {
