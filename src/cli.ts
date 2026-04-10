@@ -230,7 +230,7 @@ program
 
           if (result.relations.length > 0) {
             console.log("\n### Relations");
-            for (const r of result.relations.slice(0, 10)) {
+            for (const r of result.relations) {
               console.log(
                 `  ${r.sourceName} --[${r.type}]--> ${r.targetName} (weight: ${r.weight})`,
               );
@@ -240,7 +240,7 @@ program
           if (result.communities.length > 0) {
             console.log("\n### Community Context");
             for (const c of result.communities) {
-              console.log(`  ${c.title}: ${c.summary.slice(0, 200)}...`);
+              console.log(`  ${c.title}: ${c.summary}`);
             }
           }
         }

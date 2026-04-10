@@ -92,9 +92,9 @@ describe("calculateActualCost", () => {
 
   it("uses default model when none specified", () => {
     const result = calculateActualCost(1_000_000, 0, "openai");
-    // Default openai model is gpt-4.1-mini: $0.4/1M input
-    expect(result.costUsd).toBeCloseTo(0.4, 4);
-    expect(result.model).toBe("gpt-4.1-mini");
+    // Default openai model is gpt-5.4-mini: $0.75/1M input
+    expect(result.costUsd).toBeCloseTo(0.75, 4);
+    expect(result.model).toBe("gpt-5.4-mini");
   });
 
   it("returns zero cost for zero tokens", () => {

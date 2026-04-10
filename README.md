@@ -74,8 +74,8 @@ hald auto-detects your available API key. Set one of these before running `hald 
 | Provider | Env Var | Default Model | Cost per 1k commits |
 |---|---|---|---|
 | Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 | ~$0.50-$1.00 |
-| OpenAI | `OPENAI_API_KEY` | gpt-4.1-mini | ~$0.30-$0.60 |
-| Google | `GOOGLE_API_KEY` | gemini-2.5-flash | ~$0.10-$0.30 |
+| OpenAI | `OPENAI_API_KEY` | gpt-5.4-mini | ~$0.50-$1.00 |
+| Google | `GOOGLE_API_KEY` | gemini-3.1-flash-lite-preview | ~$0.15-$0.40 |
 | Ollama (local) | `OPENAI_API_KEY` + `HALD_BASE_URL` | configurable | $0.00 |
 
 Querying is always free — no LLM calls at query time.

@@ -77,8 +77,8 @@ export function localSearch(store: Store, options: LocalSearchOptions): LocalSea
     query,
     maxEntities = 10,
     maxRelations = 20,
-    maxTextUnits = 5,
-    maxTextUnitTokens = 2000,
+    maxTextUnits = 20,
+    maxTextUnitTokens = 8000,
     entityTypes,
     rankingWeights,
   } = options;

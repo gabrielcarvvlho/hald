@@ -67,8 +67,8 @@ Follow the 30-step implementation order in ARCHITECTURE.md § "Implementation Or
 | Provider | SDK | Env Var | Default Model | When Used |
 |----------|-----|---------|---------------|-----------|
 | Anthropic | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` | Claude Code users |
-| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4.1-mini` | Codex/Cursor users |
-| Google | `@google/genai` | `GOOGLE_API_KEY` / `GEMINI_API_KEY` | `gemini-2.5-flash` | Gemini CLI users |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-5.4-mini` | Codex/Cursor users |
+| Google | `@google/genai` | `GOOGLE_API_KEY` / `GEMINI_API_KEY` | `gemini-3.1-flash-lite-preview` | Gemini CLI users |
 
 All SDKs are lazy-imported — only the detected provider's SDK loads at runtime.
 
