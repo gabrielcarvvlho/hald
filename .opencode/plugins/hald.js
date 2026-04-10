@@ -2,11 +2,11 @@
 const path = require("path");
 const fs = require("fs");
 
-module.exports = function gitOraclePlugin() {
+module.exports = function haldPlugin() {
   const pluginRoot = path.resolve(__dirname, "../..");
 
   return {
-    name: "git-oracle",
+    name: "hald",
 
     config(config) {
       // Register skills directory for OpenCode's discovery
@@ -18,14 +18,14 @@ module.exports = function gitOraclePlugin() {
     },
 
     "experimental.chat.system.transform"(system) {
-      // Inject git-oracle awareness at session start
+      // Inject hald awareness at session start
       const skillPath = path.join(
         pluginRoot,
-        "skills/git-oracle-query/SKILL.md",
+        "skills/hald-query/SKILL.md",
       );
       try {
         const content = fs.readFileSync(skillPath, "utf-8");
-        return `${system}\n\n<git-oracle-skills>\n${content}\n</git-oracle-skills>`;
+        return `${system}\n\n<hald-skills>\n${content}\n</hald-skills>`;
       } catch {
         return system;
       }

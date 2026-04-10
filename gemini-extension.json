@@ -1,5 +1,5 @@
 {
-  "name": "git-oracle",
-  "description": "GraphRAG-powered knowledge graph for git history",
+  "name": "hald",
+  "description": "Your codebase, held. GraphRAG-powered codebase intelligence for git repositories.",
   "skills_dir": "skills"
 }

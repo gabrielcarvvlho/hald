@@ -74,4 +74,4 @@ function parseLogLevel(value: string | undefined): LogLevel {
   return LogLevel.INFO;
 }
 
-export const logger = new Logger(parseLogLevel(process.env.GIT_ORACLE_LOG_LEVEL));
+export const logger = new Logger(parseLogLevel(process.env.HALD_LOG_LEVEL));

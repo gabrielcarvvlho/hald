@@ -26,7 +26,7 @@ describe("loadConfig", () => {
 
   it("resolves storagePath relative to repoPath", () => {
     const config = loadConfig({ repoPath: "/tmp/test-repo" });
-    expect(config.storagePath).toBe("/tmp/test-repo/.git-oracle");
+    expect(config.storagePath).toBe("/tmp/test-repo/.hald");
   });
 
   it("applies explicit overrides over defaults", () => {
@@ -46,10 +46,10 @@ describe("loadConfig", () => {
 
     beforeEach(() => {
       for (const key of [
-        "GIT_ORACLE_PROVIDER",
-        "GIT_ORACLE_MODEL",
-        "GIT_ORACLE_MAX_COMMITS",
-        "GIT_ORACLE_MAX_CONCURRENCY",
+        "HALD_PROVIDER",
+        "HALD_MODEL",
+        "HALD_MAX_COMMITS",
+        "HALD_MAX_CONCURRENCY",
       ]) {
         savedEnv[key] = process.env[key];
       }
@@ -65,22 +65,22 @@ describe("loadConfig", () => {
       }
     });
 
-    it("reads provider from GIT_ORACLE_PROVIDER", () => {
-      process.env.GIT_ORACLE_PROVIDER = "openai";
+    it("reads provider from HALD_PROVIDER", () => {
+      process.env.HALD_PROVIDER = "openai";
       const config = loadConfig();
       expect(config.provider).toBe("openai");
     });
 
     it("reads numeric values from env", () => {
-      process.env.GIT_ORACLE_MAX_COMMITS = "1000";
-      process.env.GIT_ORACLE_MAX_CONCURRENCY = "8";
+      process.env.HALD_MAX_COMMITS = "1000";
+      process.env.HALD_MAX_CONCURRENCY = "8";
       const config = loadConfig();
       expect(config.maxCommits).toBe(1000);
       expect(config.maxConcurrency).toBe(8);
     });
 
     it("explicit overrides beat env vars", () => {
-      process.env.GIT_ORACLE_PROVIDER = "openai";
+      process.env.HALD_PROVIDER = "openai";
       const config = loadConfig({ provider: "google" });
       expect(config.provider).toBe("google");
     });
@@ -90,17 +90,17 @@ describe("loadConfig", () => {
     let tmpDir: string;
 
     beforeEach(() => {
-      tmpDir = join(tmpdir(), `git-oracle-test-${Date.now()}`);
-      mkdirSync(join(tmpDir, ".git-oracle"), { recursive: true });
+      tmpDir = join(tmpdir(), `hald-test-${Date.now()}`);
+      mkdirSync(join(tmpDir, ".hald"), { recursive: true });
     });
 
     afterEach(() => {
       rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it("loads settings from .git-oracle/config.json", () => {
+    it("loads settings from .hald/config.json", () => {
       writeFileSync(
-        join(tmpDir, ".git-oracle", "config.json"),
+        join(tmpDir, ".hald", "config.json"),
         JSON.stringify({ commitsPerChunk: 20, maxChunkTokens: 3000 }),
       );
 
@@ -111,7 +111,7 @@ describe("loadConfig", () => {
 
     it("explicit overrides beat config file", () => {
       writeFileSync(
-        join(tmpDir, ".git-oracle", "config.json"),
+        join(tmpDir, ".hald", "config.json"),
         JSON.stringify({ commitsPerChunk: 20 }),
       );
 
@@ -121,11 +121,11 @@ describe("loadConfig", () => {
 
     it("config file beats env vars", () => {
       // Save and set env var
-      const saved = process.env.GIT_ORACLE_PROVIDER;
-      process.env.GIT_ORACLE_PROVIDER = "openai";
+      const saved = process.env.HALD_PROVIDER;
+      process.env.HALD_PROVIDER = "openai";
 
       writeFileSync(
-        join(tmpDir, ".git-oracle", "config.json"),
+        join(tmpDir, ".hald", "config.json"),
         JSON.stringify({ provider: "google" }),
       );
 
@@ -134,14 +134,14 @@ describe("loadConfig", () => {
 
       // Restore
       if (saved === undefined) {
-        delete process.env.GIT_ORACLE_PROVIDER;
+        delete process.env.HALD_PROVIDER;
       } else {
-        process.env.GIT_ORACLE_PROVIDER = saved;
+        process.env.HALD_PROVIDER = saved;
       }
     });
 
     it("handles malformed config file gracefully", () => {
-      writeFileSync(join(tmpDir, ".git-oracle", "config.json"), "not valid json {{{");
+      writeFileSync(join(tmpDir, ".hald", "config.json"), "not valid json {{{");
 
       // Should not throw, just use defaults
       const config = loadConfig({ repoPath: tmpDir });

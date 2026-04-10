@@ -1,5 +1,5 @@
 import type {
-  GitOracleConfig,
+  HaldConfig,
   CommitData,
   Entity,
   Relation,
@@ -48,7 +48,7 @@ export interface IndexResult {
  * Smart re-summarization: only summarizes communities whose membership changed.
  */
 export async function indexRepository(
-  config: GitOracleConfig,
+  config: HaldConfig,
   options: IndexOptions = {},
 ): Promise<IndexResult> {
   const end = logger.time("orchestrator: full pipeline");
@@ -67,7 +67,7 @@ export async function indexRepository(
 }
 
 async function runPipeline(
-  config: GitOracleConfig,
+  config: HaldConfig,
   store: Store,
   options: IndexOptions,
   progress: (stage: string, done: number, total: number) => void,

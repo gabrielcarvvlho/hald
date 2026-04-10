@@ -5,14 +5,14 @@
  * two-tool protocol where the host agent performs entity extraction on
  * behalf of the pipeline:
  *
- *   1. git_oracle_index  → detects no key → reads commits, chunks them,
+ *   1. hald_index  → detects no key → reads commits, chunks them,
  *      stores session state, returns instructions.
- *   2. git_oracle_extract_next → returns the next chunk + system prompt.
- *   3. git_oracle_submit_extraction → agent submits XML, server parses
+ *   2. hald_extract_next → returns the next chunk + system prompt.
+ *   3. hald_submit_extraction → agent submits XML, server parses
  *      and stores the result.  Repeat 2-3 until all chunks are done.
- *   4. git_oracle_extract_next returns "all done" → agent calls
- *      git_oracle_finalize_index.
- *   5. git_oracle_finalize_index → runs resolve → build → cluster,
+ *   4. hald_extract_next returns "all done" → agent calls
+ *      hald_finalize_index.
+ *   5. hald_finalize_index → runs resolve → build → cluster,
  *      stores communities (without summaries), returns IndexResult.
  *
  * Summarization is skipped in agent-mediated mode.  Communities are
@@ -20,7 +20,7 @@
  * API key becomes available (incremental re-index).
  */
 
-import type { GitOracleConfig, CommitData, TextUnit, TextUnitId } from "../shared/types.js";
+import type { HaldConfig, CommitData, TextUnit, TextUnitId } from "../shared/types.js";
 import type { ExtractorResult, ExtractedEntity, ExtractedRelation } from "../pipeline/extractor.js";
 import { parseExtractionXml, SYSTEM_PROMPT } from "../pipeline/extractor.js";
 import { Store } from "../store/queries.js";
@@ -42,7 +42,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_CHUNKS = 500;
 
 export interface AgentIndexSession {
-  config: GitOracleConfig;
+  config: HaldConfig;
   store: Store;
   textUnits: TextUnit[];
   commits: CommitData[];

@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LLMClient, LLMResponse } from "../../src/llm/types.js";
-import type { GitOracleConfig } from "../../src/shared/types.js";
+import type { HaldConfig } from "../../src/shared/types.js";
 
 // ================================================================
 // Mock the LLM client module BEFORE importing orchestrator
@@ -201,10 +201,10 @@ describe("Full pipeline integration test", () => {
   let repoDir: string;
   let storageDir: string;
   let store: Store;
-  let config: GitOracleConfig;
+  let config: HaldConfig;
 
   beforeAll(async () => {
-    tmpDir = join(tmpdir(), `git-oracle-e2e-${Date.now()}`);
+    tmpDir = join(tmpdir(), `hald-e2e-${Date.now()}`);
     repoDir = join(tmpDir, "repo");
     storageDir = join(tmpDir, "storage");
     mkdirSync(storageDir, { recursive: true });

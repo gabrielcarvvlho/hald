@@ -1,8 +1,8 @@
-# Git Oracle — Architecture Document
+# Hald — Architecture Document
 
 ## System Overview
 
-Git Oracle is a TypeScript monorepo that implements a purpose-built GraphRAG pipeline for git repositories, exposed as an MCP server and packaged as a multi-platform plugin for AI coding agents (Claude Code, Cursor, OpenCode, Codex, Gemini CLI).
+Hald is a TypeScript monorepo that implements a purpose-built GraphRAG pipeline for git repositories, exposed as an MCP server and packaged as a multi-platform plugin for AI coding agents (Claude Code, Cursor, OpenCode, Codex, Gemini CLI).
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -16,7 +16,7 @@ Git Oracle is a TypeScript monorepo that implements a purpose-built GraphRAG pip
 │   .codex/            │                                    │
 │   gemini-extension)  │                                    │
 ├──────────────────────┴──────────────────────────────────┤
-│                  Git Oracle MCP Server                   │
+│                  Hald MCP Server                   │
 │  ┌──────────┐  ┌───────────┐  ┌──────────────────────┐  │
 │  │  Tools   │  │  Query    │  │   Graph Store        │  │
 │  │  Layer   │──│  Engine   │──│   (SQLite + FTS5)    │  │
@@ -44,7 +44,7 @@ Git Oracle is a TypeScript monorepo that implements a purpose-built GraphRAG pip
 ## Repository Structure
 
 ```
-git-oracle/
+hald/
 ├── package.json                 # Workspace root
 ├── tsconfig.json                # Shared TS config
 │
@@ -59,7 +59,7 @@ git-oracle/
 ├── .opencode/
 │   ├── INSTALL.md               # OpenCode install instructions
 │   └── plugins/
-│       └── git-oracle.js        # OpenCode JS plugin (hook registration)
+│       └── hald.js        # OpenCode JS plugin (hook registration)
 ├── gemini-extension.json        # Gemini CLI extension manifest
 ├── GEMINI.md                    # Gemini CLI context file
 ├── .mcp.json                    # MCP server config (Claude Code + Cursor)
@@ -68,13 +68,13 @@ git-oracle/
 ├── hooks/
 │   └── session-start.sh         # Bootstrap hook (detects platform, injects skills)
 ├── skills/
-│   ├── git-oracle-query/
+│   ├── hald-query/
 │   │   └── SKILL.md             # Teaches agent when/how to use query tools
-│   └── git-oracle-index/
+│   └── hald-index/
 │       └── SKILL.md             # Teaches agent how to trigger indexing
 ├── src/
 │   ├── index.ts                 # MCP server entry point
-│   ├── cli.ts                   # CLI entry point (npx git-oracle index)
+│   ├── cli.ts                   # CLI entry point (npx hald scan)
 │   ├── pipeline/
 │   │   ├── git-reader.ts        # Extracts commits, diffs, blame from .git
 │   │   ├── chunker.ts           # Groups commits into TextUnits
@@ -218,7 +218,7 @@ interface FileChange {
 }
 
 // === Config ===
-interface GitOracleConfig {
+interface HaldConfig {
   // Git
   repoPath: string;
   branch: string;              // Default: current branch
@@ -243,7 +243,7 @@ interface GitOracleConfig {
   minCommunitySize: number;           // Default: 3
 
   // Storage
-  storagePath: string;         // Default: .git-oracle/
+  storagePath: string;         // Default: .hald/
 }
 ```
 
@@ -663,8 +663,8 @@ interface CouplingResult {
 ```typescript
 const tools = [
   {
-    name: "git_oracle_query",
-    description: "Answer a free-form question about the repository's history, architecture, decisions, and team knowledge using the Git Oracle knowledge graph. Returns structured context that you should synthesize into a helpful narrative.",
+    name: "hald_query",
+    description: "Answer a free-form question about the repository's history, architecture, decisions, and team knowledge using the Hald knowledge graph. Returns structured context that you should synthesize into a helpful narrative.",
     inputSchema: {
       type: "object",
       properties: {
@@ -680,7 +680,7 @@ const tools = [
     }
   },
   {
-    name: "git_oracle_find_expert",
+    name: "hald_find_expert",
     description: "Find the people with the most knowledge about a specific module, file, or area of the codebase. Returns ranked experts with their activity details.",
     inputSchema: {
       type: "object",
@@ -692,7 +692,7 @@ const tools = [
     }
   },
   {
-    name: "git_oracle_trace_decision",
+    name: "hald_trace_decision",
     description: "Trace the history of an architectural or technical decision. Returns the timeline of commits, people involved, and context.",
     inputSchema: {
       type: "object",
@@ -703,7 +703,7 @@ const tools = [
     }
   },
   {
-    name: "git_oracle_show_coupling",
+    name: "hald_show_coupling",
     description: "Show which modules/files tend to change together, indicating architectural coupling.",
     inputSchema: {
       type: "object",
@@ -715,7 +715,7 @@ const tools = [
     }
   },
   {
-    name: "git_oracle_index",
+    name: "hald_index",
     description: "Index or re-index the current repository. Run this before querying if the index doesn't exist or is stale.",
     inputSchema: {
       type: "object",
@@ -727,8 +727,8 @@ const tools = [
     }
   },
   {
-    name: "git_oracle_stats",
-    description: "Get statistics about the current Git Oracle index.",
+    name: "hald_stats",
+    description: "Get statistics about the current Hald index.",
     inputSchema: { type: "object", properties: {} }
   }
 ];
@@ -739,13 +739,13 @@ const tools = [
 ```typescript
 const resources = [
   {
-    uri: "git-oracle://stats",
-    name: "Git Oracle Index Statistics",
+    uri: "hald://stats",
+    name: "Hald Index Statistics",
     description: "Current index stats: entity count, relation count, last indexed commit, etc.",
     mimeType: "application/json"
   },
   {
-    uri: "git-oracle://graph/summary",
+    uri: "hald://graph/summary",
     name: "Graph Summary",
     description: "High-level summary of the knowledge graph structure and top communities.",
     mimeType: "text/plain"
@@ -755,11 +755,11 @@ const resources = [
 
 ## Platform Shims
 
-Git Oracle follows the Superpowers pattern: **one set of skills, one MCP server, multiple platform-specific shims.** Each platform has its own mechanism for plugin discovery, but the actual functionality is identical everywhere.
+Hald follows the Superpowers pattern: **one set of skills, one MCP server, multiple platform-specific shims.** Each platform has its own mechanism for plugin discovery, but the actual functionality is identical everywhere.
 
 ### Cross-Platform Bootstrap (`hooks/session-start.sh`)
 
-A POSIX-safe shell script that runs on session start. It detects the platform and injects the git-oracle skills into the agent's context.
+A POSIX-safe shell script that runs on session start. It detects the platform and injects the hald skills into the agent's context.
 
 ```bash
 #!/bin/sh
@@ -776,7 +776,7 @@ else
 fi
 
 # Read the query skill content
-SKILL_CONTENT=$(cat "$PLUGIN_ROOT/skills/git-oracle-query/SKILL.md")
+SKILL_CONTENT=$(cat "$PLUGIN_ROOT/skills/hald-query/SKILL.md")
 
 # Emit platform-appropriate JSON
 # Claude Code uses hookSpecificOutput, Cursor uses additional_context
@@ -791,12 +791,12 @@ fi
 
 ```json
 {
-  "name": "git-oracle",
+  "name": "hald",
   "description": "GraphRAG-powered knowledge graph for your git history. Ask questions about architectural decisions, find domain experts, trace code evolution, and surface hidden coupling.",
   "version": "0.1.0",
   "author": { "name": "Gabriel" },
-  "homepage": "https://github.com/gabriel/git-oracle",
-  "repository": "https://github.com/gabriel/git-oracle",
+  "homepage": "https://github.com/gabriel/hald",
+  "repository": "https://github.com/gabriel/hald",
   "license": "MIT",
   "keywords": ["graphrag", "git", "knowledge-graph", "institutional-knowledge"]
 }
@@ -807,11 +807,11 @@ fi
 ```json
 {
   "mcpServers": {
-    "git-oracle": {
+    "hald": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
       "env": {
-        "GIT_ORACLE_REPO": "${CLAUDE_PROJECT_ROOT}"
+        "HALD_REPO": "${CLAUDE_PROJECT_ROOT}"
       }
     }
   }
@@ -824,10 +824,10 @@ Note: No API key is hardcoded in `.mcp.json`. The MCP server auto-detects availa
 
 ```json
 {
-  "name": "git-oracle",
+  "name": "hald",
   "description": "GraphRAG-powered knowledge graph for your git history.",
   "version": "0.1.0",
-  "homepage": "https://github.com/gabriel/git-oracle"
+  "homepage": "https://github.com/gabriel/hald"
 }
 ```
 
@@ -838,30 +838,30 @@ Cursor uses the same `.mcp.json` and `hooks/` as Claude Code.
 Codex requires manual setup. The INSTALL.md is designed to be read by the agent itself:
 
 ```markdown
-# Installing Git Oracle for Codex
+# Installing Hald for Codex
 
 1. Clone the repository:
-   git clone https://github.com/gabriel/git-oracle.git ~/.codex/git-oracle
+   git clone https://github.com/gabriel/hald.git ~/.codex/hald
 
 2. Install dependencies and build:
-   cd ~/.codex/git-oracle && npm install && npm run build
+   cd ~/.codex/hald && npm install && npm run build
 
 3. Create skills symlink:
-   ln -s ~/.codex/git-oracle/skills ~/.agents/skills/git-oracle
+   ln -s ~/.codex/hald/skills ~/.agents/skills/hald
 
 4. Add MCP server to your Codex config:
    Add this to your MCP servers configuration:
    {
-     "git-oracle": {
+     "hald": {
        "command": "node",
-       "args": ["~/.codex/git-oracle/dist/index.js"]
+       "args": ["~/.codex/hald/dist/index.js"]
      }
    }
 
 5. Restart Codex.
 ```
 
-### OpenCode (`.opencode/plugins/git-oracle.js`)
+### OpenCode (`.opencode/plugins/hald.js`)
 
 A JavaScript plugin that registers skills and the MCP server:
 
@@ -870,11 +870,11 @@ A JavaScript plugin that registers skills and the MCP server:
 const path = require("path");
 const fs = require("fs");
 
-module.exports = function gitOraclePlugin() {
+module.exports = function haldPlugin() {
   const pluginRoot = path.resolve(__dirname, "../..");
 
   return {
-    name: "git-oracle",
+    name: "hald",
 
     config(config) {
       // Register skills directory for OpenCode's discovery
@@ -886,11 +886,11 @@ module.exports = function gitOraclePlugin() {
     },
 
     "experimental.chat.system.transform"(system) {
-      // Inject git-oracle awareness at session start
-      const skillPath = path.join(pluginRoot, "skills/git-oracle-query/SKILL.md");
+      // Inject hald awareness at session start
+      const skillPath = path.join(pluginRoot, "skills/hald-query/SKILL.md");
       try {
         const content = fs.readFileSync(skillPath, "utf-8");
-        return `${system}\n\n<git-oracle-skills>\n${content}\n</git-oracle-skills>`;
+        return `${system}\n\n<hald-skills>\n${content}\n</hald-skills>`;
       } catch {
         return system;
       }
@@ -903,7 +903,7 @@ module.exports = function gitOraclePlugin() {
 
 ```json
 {
-  "name": "git-oracle",
+  "name": "hald",
   "description": "GraphRAG-powered knowledge graph for git history",
   "skills_dir": "skills"
 }
@@ -1020,11 +1020,11 @@ function createClient(config: LLMClientConfig): LLMClient {
 
 ### Agent-Mediated Fallback
 
-When no API key is available, the MCP `git_oracle_index` tool falls back to **agent-mediated mode**: instead of making direct API calls, it returns text unit content to the host agent and asks it to extract entities. This is slower (sequential tool calls, fills context window) but requires zero configuration — the agent's own tokens do all the work.
+When no API key is available, the MCP `hald_index` tool falls back to **agent-mediated mode**: instead of making direct API calls, it returns text unit content to the host agent and asks it to extract entities. This is slower (sequential tool calls, fills context window) but requires zero configuration — the agent's own tokens do all the work.
 
 The tool handler detects this scenario:
 ```typescript
-// In src/mcp/tools.ts — git_oracle_index handler
+// In src/mcp/tools.ts — hald_index handler
 const client = tryCreateClient(config);
 if (client) {
   // Direct mode: batch extraction via API
@@ -1035,7 +1035,7 @@ if (client) {
     content: [{
       type: "text",
       text: `No API key detected. I'll return commit data in chunks for you to extract entities from.
-             Process each chunk and call git_oracle_ingest_entities with the results.\n\n` +
+             Process each chunk and call hald_ingest_entities with the results.\n\n` +
              `Chunk 1/${totalChunks}:\n${firstChunk.content}`
     }]
   };
@@ -1052,13 +1052,13 @@ if (client) {
 
 Configuration is loaded from (in priority order):
 1. CLI flags / tool input parameters
-2. `.git-oracle/config.json` in the repo root
-3. Environment variables (`GIT_ORACLE_*`)
+2. `.hald/config.json` in the repo root
+3. Environment variables (`HALD_*`)
 4. Defaults
 
 ```typescript
 // Default config
-const defaults: GitOracleConfig = {
+const defaults: HaldConfig = {
   repoPath: ".",
   branch: "HEAD",
   commitsPerChunk: 10,
@@ -1070,7 +1070,7 @@ const defaults: GitOracleConfig = {
   entityResolutionThreshold: 0.85,
   communityResolutions: [0.5, 1.0, 2.0],
   minCommunitySize: 3,
-  storagePath: ".git-oracle",
+  storagePath: ".hald",
 };
 ```
 
@@ -1094,16 +1094,16 @@ This means re-indexing after a `git pull` with 50 new commits should take second
 
 ## Shared Storage (Optional Team Sync)
 
-The `.git-oracle/` directory contains:
+The `.hald/` directory contains:
 ```
-.git-oracle/
+.hald/
 ├── config.json       # Index configuration
 ├── oracle.db         # SQLite database
 └── meta.json         # Index metadata (version, last commit, stats)
 ```
 
-**Option A — Commit to repo:** Add `.git-oracle/` to the repo. Team members get a pre-built graph.
-**Option B — .gitignore + export:** Keep `.git-oracle/` in `.gitignore`, provide `git-oracle export` / `git-oracle import` commands for sharing via S3, GCS, or a shared drive.
+**Option A — Commit to repo:** Add `.hald/` to the repo. Team members get a pre-built graph.
+**Option B — .gitignore + export:** Keep `.hald/` in `.gitignore`, provide `hald export` / `hald import` commands for sharing via S3, GCS, or a shared drive.
 **Option C — Re-index locally:** Each developer runs their own index. Fast for small/medium repos.
 
 ## Dependencies
@@ -1176,12 +1176,12 @@ The following is the recommended build sequence. Each step should be implemented
 ### Platform Shims (Steps 22–26)
 22. **Claude Code plugin** — `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/session-start.sh`
 23. **Cursor plugin** — `.cursor-plugin/plugin.json` (shares `.mcp.json` and `hooks/`)
-24. **Skills** — `skills/git-oracle-query/SKILL.md`, `skills/git-oracle-index/SKILL.md`
-25. **OpenCode plugin** — `.opencode/plugins/git-oracle.js`, `.opencode/INSTALL.md`
+24. **Skills** — `skills/hald-query/SKILL.md`, `skills/hald-index/SKILL.md`
+25. **OpenCode plugin** — `.opencode/plugins/hald.js`, `.opencode/INSTALL.md`
 26. **Codex + Gemini** — `.codex/INSTALL.md`, `gemini-extension.json`, `GEMINI.md`
 
 ### Polish (Steps 27–30)
 27. **Incremental indexing** — Detect new commits, process only delta
 28. **Progress reporting** — CLI spinner + progress bar for indexing
 29. **Cost estimation** — Pre-index token count estimation and cost display per provider
-30. **README + npm publish config** — Documentation, `npx git-oracle` entry point, installation instructions for all 5 platforms
+30. **README + npm publish config** — Documentation, `npx hald` entry point, installation instructions for all 5 platforms

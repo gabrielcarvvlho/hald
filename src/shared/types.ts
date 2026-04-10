@@ -94,7 +94,7 @@ export interface FileChange {
 }
 
 // === Config ===
-export interface GitOracleConfig {
+export interface HaldConfig {
   repoPath: string;
   branch: string;
   maxCommits?: number;

@@ -19,8 +19,8 @@ import { detectProvider } from "./llm/client.js";
 const program = new Command();
 
 program
-  .name("git-oracle")
-  .description("GraphRAG-powered knowledge graph for git repositories")
+  .name("hald")
+  .description("Your codebase, held. GraphRAG-powered codebase intelligence for git repositories.")
   .version("0.1.0");
 
 // ================================================================
@@ -28,8 +28,8 @@ program
 // ================================================================
 
 program
-  .command("index")
-  .description("Index the current repository's git history")
+  .command("scan")
+  .description("Scan the current repository's git history")
   .option("--full", "Force full re-index (ignore previous index)")
   .option("--max-commits <n>", "Limit number of commits to process", parseInt)
   .option("--since <date>", "Only index commits after this ISO date")
@@ -49,7 +49,7 @@ program
         config.provider === "auto" ? (detected?.provider ?? "unknown") : config.provider;
 
       console.log(
-        `\nGit Oracle — Indexing ${config.repoPath}${opts.full ? " (full re-index)" : ""}\n`,
+        `\n◉ Hald — Scanning ${config.repoPath}${opts.full ? " (full re-index)" : ""}\n`,
       );
 
       // Step 1: Read commits (fast, no LLM cost)
@@ -167,7 +167,7 @@ program
 // ================================================================
 
 program
-  .command("query <question>")
+  .command("ask <question>")
   .description("Query the knowledge graph")
   .option("--type <type>", "Search type (local|global|auto)", "auto")
   .action(async (question: string, opts) => {
@@ -179,7 +179,7 @@ program
 
       const stats = store.getStats();
       if (stats.entities === 0) {
-        console.error("No index found. Run `git-oracle index` first.");
+        console.error("No index found. Run `hald scan` first.");
         store.close();
         process.exit(1);
       }
@@ -267,7 +267,7 @@ program
     try {
       db = openDatabase(config.storagePath);
     } catch {
-      console.log("No index found. Run `git-oracle index` first.");
+      console.log("No index found. Run `hald scan` first.");
       return;
     }
 
@@ -276,8 +276,8 @@ program
     const lastCommit = store.getMeta("last_indexed_commit");
     const lastIndexed = store.getMeta("last_indexed_at");
 
-    console.log("\nGit Oracle Index Statistics");
-    console.log("==========================");
+    console.log("\n◉ Hald Index Statistics");
+    console.log("======================");
     console.log(`  Entities:    ${stats.entities}`);
     console.log(`  Relations:   ${stats.relations}`);
     console.log(`  Text Units:  ${stats.textUnits}`);
@@ -309,14 +309,14 @@ program
       try {
         db = openDatabase(config.storagePath);
       } catch {
-        console.error("No index found. Run `git-oracle index` first.");
+        console.error("No index found. Run `hald scan` first.");
         process.exit(1);
       }
 
       const store = new Store(db);
       const stats = store.getStats();
       if (stats.entities === 0) {
-        console.error("No entities found. Run `git-oracle index` first.");
+        console.error("No entities found. Run `hald scan` first.");
         store.close();
         process.exit(1);
       }

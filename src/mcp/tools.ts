@@ -27,17 +27,17 @@ type GetStore = () => Store;
 
 export function registerTools(server: McpServer, getStore: GetStore): void {
   // ================================================================
-  // git_oracle_query
+  // hald_query
   // ================================================================
 
   server.registerTool(
-    "git_oracle_query",
+    "hald_query",
     {
       description:
-        "Search the Git Oracle knowledge graph to answer questions about the repository's history, architecture, team, and codebase. " +
+        "Search the Hald knowledge graph to answer questions about the repository's history, architecture, team, and codebase. " +
         "Returns entities, relationships, and evidence for you to synthesize.\n\n" +
-        "For specific lookups, prefer: git_oracle_find_expert (who knows X?), git_oracle_trace_decision (why/when was X decided?), " +
-        "git_oracle_show_coupling (what co-changes with X?), git_oracle_find_silos (bus factor risks). " +
+        "For specific lookups, prefer: hald_find_expert (who knows X?), hald_trace_decision (why/when was X decided?), " +
+        "hald_show_coupling (what co-changes with X?), hald_find_silos (bus factor risks). " +
         "Use this tool for general, thematic, or cross-cutting questions.",
       annotations: {
         readOnlyHint: true,
@@ -95,7 +95,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const hint = /no such table|unable to open|SQLITE_/i.test(msg)
-          ? "\n\nThe index may not exist yet. Run git_oracle_index first."
+          ? "\n\nThe index may not exist yet. Run hald_index first."
           : "";
         return {
           content: [{ type: "text" as const, text: `Query failed: ${msg}${hint}` }],
@@ -106,11 +106,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_find_expert
+  // hald_find_expert
   // ================================================================
 
   server.registerTool(
-    "git_oracle_find_expert",
+    "hald_find_expert",
     {
       description:
         "Find the top contributors for a module, file path, or area of the codebase. " +
@@ -179,17 +179,17 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_trace_decision
+  // hald_trace_decision
   // ================================================================
 
   server.registerTool(
-    "git_oracle_trace_decision",
+    "hald_trace_decision",
     {
       description:
         "Trace the history of a technical or architectural decision through the knowledge graph. " +
         "Returns DECISION entities, the people who made them, related modules, and supporting commit evidence.\n\n" +
         "Use when asked: 'why did we switch to X?', 'when was Y adopted?', 'what motivated the migration to Z?'. " +
-        "For general history questions, use git_oracle_query instead.",
+        "For general history questions, use hald_query instead.",
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -258,11 +258,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_show_coupling
+  // hald_show_coupling
   // ================================================================
 
   server.registerTool(
-    "git_oracle_show_coupling",
+    "hald_show_coupling",
     {
       description:
         "Find modules that frequently change together, revealing architectural coupling. " +
@@ -333,11 +333,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_get_path
+  // hald_get_path
   // ================================================================
 
   server.registerTool(
-    "git_oracle_get_path",
+    "hald_get_path",
     {
       description:
         "Find the shortest relationship path between two entities in the knowledge graph. " +
@@ -447,17 +447,17 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_get_entity
+  // hald_get_entity
   // ================================================================
 
   server.registerTool(
-    "git_oracle_get_entity",
+    "hald_get_entity",
     {
       description:
         "Look up a specific entity by ID, exact name, or fuzzy search. Returns full details including type, " +
         "description, aliases, activity timeline, and up to 15 relationships.\n\n" +
         "Accepts entity IDs ('person:alice-chen'), names ('Alice Chen'), or search terms. " +
-        "For ranked expert lists, use git_oracle_find_expert instead.",
+        "For ranked expert lists, use hald_find_expert instead.",
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -537,11 +537,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_find_silos
+  // hald_find_silos
   // ================================================================
 
   server.registerTool(
-    "git_oracle_find_silos",
+    "hald_find_silos",
     {
       description:
         "Identify knowledge risk areas: modules with bus factor ≤ 1 (single active maintainer) and orphaned modules " +
@@ -628,14 +628,14 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_index
+  // hald_index
   // ================================================================
 
   server.registerTool(
-    "git_oracle_index",
+    "hald_index",
     {
       description:
-        "Build or refresh the Git Oracle knowledge graph for this repository. Reads git history, extracts entities " +
+        "Build or refresh the Hald knowledge graph for this repository. Reads git history, extracts entities " +
         "and relationships via LLM, resolves duplicates, detects communities, and generates summaries.\n\n" +
         "Duration: ~1-2 min per 500 commits. Uses incremental indexing by default (only new commits since last run). " +
         "If no LLM API key is available (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY), falls back to " +
@@ -739,11 +739,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
                     "You will perform entity extraction using your own LLM context.",
                     "Follow this loop:",
                     "",
-                    "1. Call **git_oracle_extract_next** to get the next chunk.",
+                    "1. Call **hald_extract_next** to get the next chunk.",
                     "2. Pass the system prompt and user prompt through your LLM to extract entities.",
-                    "3. Call **git_oracle_submit_extraction** with the resulting XML.",
-                    "4. Repeat until git_oracle_extract_next says all chunks are done.",
-                    "5. Call **git_oracle_finalize_index** to build the knowledge graph.",
+                    "3. Call **hald_submit_extraction** with the resulting XML.",
+                    "4. Repeat until hald_extract_next says all chunks are done.",
+                    "5. Call **hald_finalize_index** to build the knowledge graph.",
                   ].join("\n"),
                 },
               ],
@@ -775,14 +775,14 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_stats
+  // hald_stats
   // ================================================================
 
   server.registerTool(
-    "git_oracle_stats",
+    "hald_stats",
     {
       description:
-        "Get statistics about the current Git Oracle index: entity/relation/community counts, last indexed commit, " +
+        "Get statistics about the current Hald index: entity/relation/community counts, last indexed commit, " +
         "and timestamp. Use this to check whether an index exists and is up-to-date before querying.",
       annotations: {
         readOnlyHint: true,
@@ -804,7 +804,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
             content: [
               {
                 type: "text" as const,
-                text: "The index exists but has never been populated. Run git_oracle_index first.",
+                text: "The index exists but has never been populated. Run hald_index first.",
               },
             ],
           };
@@ -815,7 +815,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
             {
               type: "text" as const,
               text: [
-                "## Git Oracle Index Statistics",
+                "## Hald Index Statistics",
                 "",
                 `- Entities: ${stats.entities}`,
                 `- Relations: ${stats.relations}`,
@@ -834,7 +834,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           content: [
             {
               type: "text" as const,
-              text: "No index found. Run git_oracle_index to build the knowledge graph.",
+              text: "No index found. Run hald_index to build the knowledge graph.",
             },
           ],
           isError: true,
@@ -844,14 +844,14 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_reset
+  // hald_reset
   // ================================================================
 
   server.registerTool(
-    "git_oracle_reset",
+    "hald_reset",
     {
       description:
-        "Delete the Git Oracle index database and start fresh. " +
+        "Delete the Hald index database and start fresh. " +
         "This is destructive and cannot be undone. " +
         "Requires confirm=true to execute.",
       annotations: {
@@ -909,7 +909,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           content: [
             {
               type: "text" as const,
-              text: `Index deleted: ${dbPath}. Run git_oracle_index to rebuild.`,
+              text: `Index deleted: ${dbPath}. Run hald_index to rebuild.`,
             },
           ],
         };
@@ -928,16 +928,16 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_extract_next (agent-mediated)
+  // hald_extract_next (agent-mediated)
   // ================================================================
 
   server.registerTool(
-    "git_oracle_extract_next",
+    "hald_extract_next",
     {
       description:
         "Get the next text unit chunk for agent-mediated entity extraction. " +
         "Returns the system prompt and user prompt to pass through your LLM. " +
-        "Call this after git_oracle_index starts an agent-mediated session.",
+        "Call this after hald_index starts an agent-mediated session.",
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -953,7 +953,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
             content: [
               {
                 type: "text" as const,
-                text: "No active agent-mediated session. Run git_oracle_index first (with no LLM API key set).",
+                text: "No active agent-mediated session. Run hald_index first (with no LLM API key set).",
               },
             ],
             isError: true,
@@ -970,7 +970,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
                 text: [
                   `All ${chunk.total} chunks have been extracted (${chunk.extracted} submitted).`,
                   "",
-                  "Call **git_oracle_finalize_index** to build the knowledge graph.",
+                  "Call **hald_finalize_index** to build the knowledge graph.",
                 ].join("\n"),
               },
             ],
@@ -984,7 +984,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
               text: [
                 `## Chunk ${chunk.index + 1} of ${chunk.total}`,
                 "",
-                "Pass the following system prompt and user prompt to your LLM, then submit the XML output via **git_oracle_submit_extraction**.",
+                "Pass the following system prompt and user prompt to your LLM, then submit the XML output via **hald_submit_extraction**.",
                 "",
                 "### System Prompt",
                 "",
@@ -1012,15 +1012,15 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_submit_extraction (agent-mediated)
+  // hald_submit_extraction (agent-mediated)
   // ================================================================
 
   server.registerTool(
-    "git_oracle_submit_extraction",
+    "hald_submit_extraction",
     {
       description:
         "Submit the XML entity extraction result for the current chunk. " +
-        "Call this after processing the prompt from git_oracle_extract_next.",
+        "Call this after processing the prompt from hald_extract_next.",
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -1055,7 +1055,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
                 `Extraction accepted: ${result.entities} entities, ${result.relations} relations.`,
                 `Progress: ${result.progress}`,
                 "",
-                "Call **git_oracle_extract_next** for the next chunk.",
+                "Call **hald_extract_next** for the next chunk.",
               ].join("\n"),
             },
           ],
@@ -1075,11 +1075,11 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git_oracle_finalize_index (agent-mediated)
+  // hald_finalize_index (agent-mediated)
   // ================================================================
 
   server.registerTool(
-    "git_oracle_finalize_index",
+    "hald_finalize_index",
     {
       description:
         "Finalize the agent-mediated indexing session. Runs entity resolution, " +
@@ -1122,7 +1122,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
                 `- Communities: ${result.communitiesFound}`,
                 "",
                 "Note: Community summaries were skipped (no API key).",
-                "Run git_oracle_index again with an API key to generate summaries.",
+                "Run hald_index again with an API key to generate summaries.",
               ].join("\n"),
             },
           ],

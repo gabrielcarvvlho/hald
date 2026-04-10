@@ -1,5 +1,5 @@
 #!/bin/sh
-# Git Oracle MCP Server — startup wrapper
+# Hald MCP Server — startup wrapper
 # Validates prerequisites before launching the Node.js MCP server.
 # Used by .mcp.json so that host agents get clear error messages on failure.
 
@@ -23,9 +23,9 @@ ENTRY="$PLUGIN_ROOT/dist/index.js"
 
 if ! command -v node >/dev/null 2>&1; then
   cat >&2 <<'EOF'
-[git-oracle] ERROR: Node.js not found in PATH.
+[hald] ERROR: Node.js not found in PATH.
 
-The Git Oracle MCP server requires Node.js >= 20.
+The Hald MCP server requires Node.js >= 20.
 Install it from https://nodejs.org or via a version manager (nvm, fnm, mise).
 
 If Node.js is installed via a version manager, ensure it is activated in your
@@ -39,7 +39,7 @@ fi
 NODE_MAJOR=$(node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
 if [ "$NODE_MAJOR" -lt 20 ] 2>/dev/null; then
   cat >&2 <<EOF
-[git-oracle] ERROR: Node.js v${NODE_MAJOR} is too old (requires >= 20).
+[hald] ERROR: Node.js v${NODE_MAJOR} is too old (requires >= 20).
 
 Current: $(node --version)
 Please upgrade Node.js: https://nodejs.org
@@ -51,13 +51,13 @@ fi
 
 if [ ! -f "$ENTRY" ]; then
   cat >&2 <<EOF
-[git-oracle] ERROR: Built files not found at:
+[hald] ERROR: Built files not found at:
   $ENTRY
 
 Run the following to build:
   cd "$PLUGIN_ROOT" && npm install && npm run build
 
-If you installed git-oracle as a plugin, this step may have been skipped.
+If you installed hald as a plugin, this step may have been skipped.
 EOF
   exit 1
 fi
@@ -66,9 +66,9 @@ fi
 # better-sqlite3 requires a native binary that must match the Node.js version.
 # A quick require() check catches mismatches early with a clear message.
 
-node -e "try { require('$PLUGIN_ROOT/node_modules/better-sqlite3') } catch(e) { process.stderr.write('[git-oracle] ERROR: Native module issue: ' + e.message + '\\nTry: cd \"$PLUGIN_ROOT\" && npm rebuild better-sqlite3\\n'); process.exit(1) }" 2>/dev/null || {
+node -e "try { require('$PLUGIN_ROOT/node_modules/better-sqlite3') } catch(e) { process.stderr.write('[hald] ERROR: Native module issue: ' + e.message + '\\nTry: cd \"$PLUGIN_ROOT\" && npm rebuild better-sqlite3\\n'); process.exit(1) }" 2>/dev/null || {
   cat >&2 <<EOF
-[git-oracle] WARNING: Could not verify native modules. The server may still work.
+[hald] WARNING: Could not verify native modules. The server may still work.
 EOF
 }
 

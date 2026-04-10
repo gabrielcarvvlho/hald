@@ -249,7 +249,7 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion > SCHEMA_VERSION) {
     throw new Error(
       `Database schema version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}. ` +
-        `Please upgrade git-oracle.`,
+        `Please upgrade hald.`,
     );
   }
 

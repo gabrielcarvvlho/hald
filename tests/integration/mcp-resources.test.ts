@@ -16,7 +16,7 @@ describe("MCP resources — populated index", () => {
   beforeAll(async () => {
     ({ db, store } = createPopulatedStore());
 
-    server = new McpServer({ name: "git-oracle-test", version: "0.1.0" });
+    server = new McpServer({ name: "hald-test", version: "0.1.0" });
     const getStore = () => store;
     registerResources(server, getStore);
 
@@ -33,8 +33,8 @@ describe("MCP resources — populated index", () => {
     db.close();
   });
 
-  it("git-oracle://stats returns valid JSON with counts", async () => {
-    const result = await client.readResource({ uri: "git-oracle://stats" });
+  it("hald://stats returns valid JSON with counts", async () => {
+    const result = await client.readResource({ uri: "hald://stats" });
     const text = (result.contents[0] as { text: string }).text;
     const data = JSON.parse(text);
 
@@ -46,9 +46,9 @@ describe("MCP resources — populated index", () => {
     expect(data.lastIndexedAt).toBeTruthy();
   });
 
-  it("git-oracle://graph/summary returns Markdown with headers", async () => {
+  it("hald://graph/summary returns Markdown with headers", async () => {
     const result = await client.readResource({
-      uri: "git-oracle://graph/summary",
+      uri: "hald://graph/summary",
     });
     const text = (result.contents[0] as { text: string }).text;
 
@@ -70,7 +70,7 @@ describe("MCP resources — empty index", () => {
     db = openDatabase(":memory:");
     store = new StoreClass(db);
 
-    server = new McpServer({ name: "git-oracle-test", version: "0.1.0" });
+    server = new McpServer({ name: "hald-test", version: "0.1.0" });
     const getStore = () => store;
     registerResources(server, getStore);
 
@@ -87,8 +87,8 @@ describe("MCP resources — empty index", () => {
     db.close();
   });
 
-  it("git-oracle://stats returns zero counts without crash", async () => {
-    const result = await client.readResource({ uri: "git-oracle://stats" });
+  it("hald://stats returns zero counts without crash", async () => {
+    const result = await client.readResource({ uri: "hald://stats" });
     const text = (result.contents[0] as { text: string }).text;
     const data = JSON.parse(text);
 
@@ -97,9 +97,9 @@ describe("MCP resources — empty index", () => {
     expect(data.communities).toBe(0);
   });
 
-  it("git-oracle://graph/summary returns content without crash", async () => {
+  it("hald://graph/summary returns content without crash", async () => {
     const result = await client.readResource({
-      uri: "git-oracle://graph/summary",
+      uri: "hald://graph/summary",
     });
     const text = (result.contents[0] as { text: string }).text;
 
