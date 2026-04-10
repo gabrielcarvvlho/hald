@@ -1,4 +1,4 @@
-# Git Oracle — LLM Prompts
+# Hald — LLM Prompts
 
 ## Overview
 
@@ -381,7 +381,7 @@ Add `fast-xml-parser` to dependencies:
 
 ## 5. Query Classification Prompt (Runtime)
 
-Used by the `git_oracle_query` tool when `search_type` is `"auto"` to decide between local and global search.
+Used by the `hald_query` tool when `search_type` is `"auto"` to decide between local and global search.
 
 This runs in the MCP tool handler, NOT as a separate LLM call — it's a heuristic:
 

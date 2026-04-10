@@ -1,8 +1,8 @@
-# CLAUDE.md — Git Oracle
+# CLAUDE.md — Hald
 
 ## What is this project?
 
-Git Oracle is a GraphRAG-powered knowledge graph for git repositories. It extracts entities (people, modules, technologies, decisions, patterns) and relationships from git commit history, builds a community-structured knowledge graph, and exposes it via MCP tools that integrate with AI coding agents across 5 platforms: Claude Code, Cursor, OpenCode, Codex, and Gemini CLI.
+Hald is a GraphRAG-powered knowledge graph for git repositories. It extracts entities (people, modules, technologies, decisions, patterns) and relationships from git commit history, builds a community-structured knowledge graph, and exposes it via MCP tools that integrate with AI coding agents across 5 platforms: Claude Code, Cursor, OpenCode, Codex, and Gemini CLI.
 
 **Two-mode token strategy:**
 - **Querying = zero extra cost.** MCP tools return structured graph data from SQLite. The host agent synthesizes the narrative using its own tokens — like Superpowers.
@@ -16,7 +16,7 @@ This is a TypeScript monorepo. All source code is in `src/`.
 - `.claude-plugin/` — Claude Code plugin manifest
 - `.cursor-plugin/` — Cursor plugin manifest
 - `.codex/INSTALL.md` — Codex install instructions (agent reads and follows these)
-- `.opencode/plugins/git-oracle.js` — OpenCode JS plugin hook
+- `.opencode/plugins/hald.js` — OpenCode JS plugin hook
 - `gemini-extension.json` + `GEMINI.md` — Gemini CLI support
 - `.mcp.json` — MCP server config (Claude Code)
 - `.cursor/mcp.json` — MCP server config (Cursor, with explicit env var forwarding)
@@ -29,7 +29,7 @@ This is a TypeScript monorepo. All source code is in `src/`.
 - `src/mcp/` — MCP server (tools, resources, server setup)
 - `src/llm/` — Provider-agnostic LLM client (Anthropic, OpenAI, Google)
 - `src/shared/` — Types, config, logger
-- `src/cli.ts` — CLI entry point (`npx git-oracle index`, `npx git-oracle query`)
+- `src/cli.ts` — CLI entry point (`npx hald scan`, `npx hald ask`)
 - `src/index.ts` — MCP server entry point
 
 ### Other
@@ -53,7 +53,7 @@ Follow the 30-step implementation order in ARCHITECTURE.md § "Implementation Or
 - **TypeScript only** — Single runtime (Node.js), natural for the plugin ecosystem.
 - **Multi-platform** — Follows the Superpowers pattern: one set of skills + one MCP server + platform-specific shims for Claude Code, Cursor, OpenCode, Codex, and Gemini CLI.
 - **Provider-agnostic LLM** — Auto-detects API keys from environment. Supports Anthropic (Claude), OpenAI (GPT + compatible endpoints like Ollama/OpenRouter), and Google (Gemini). Same prompts work across all providers.
-- **SQLite + FTS5** — Zero infrastructure. Database lives in `.git-oracle/oracle.db`.
+- **SQLite + FTS5** — Zero infrastructure. Database lives in `.hald/oracle.db`.
 - **better-sqlite3** — Synchronous SQLite driver. Fast, no native build issues.
 - **graphology** — Pure JS graph library for Louvain community detection.
 - **simple-git** — Git operations wrapper. Streams commits via async iterators.
@@ -72,7 +72,7 @@ Follow the 30-step implementation order in ARCHITECTURE.md § "Implementation Or
 
 All SDKs are lazy-imported — only the detected provider's SDK loads at runtime.
 
-For custom endpoints (Ollama, OpenRouter, Azure), set `GIT_ORACLE_BASE_URL` alongside the appropriate API key.
+For custom endpoints (Ollama, OpenRouter, Azure), set `HALD_BASE_URL` alongside the appropriate API key.
 
 ## Testing Strategy
 
@@ -106,19 +106,19 @@ npm run build
 npm test
 
 # Index current repo
-npx git-oracle index
+npx hald scan
 
 # Index with options
-npx git-oracle index --max-commits 1000 --since 2024-01-01 --provider openai
+npx hald scan --max-commits 1000 --since 2024-01-01 --provider openai
 
 # Query (CLI mode, for testing)
-npx git-oracle query "who knows the billing module best?"
+npx hald ask "who knows the billing module best?"
 
 # Check index status
-npx git-oracle stats
+npx hald stats
 
 # Start MCP server (for manual testing)
-npx git-oracle serve
+npx hald serve
 
 # Run MCP inspector
 npx @modelcontextprotocol/inspector node dist/index.js

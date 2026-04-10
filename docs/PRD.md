@@ -1,8 +1,8 @@
-# Git Oracle — Product Requirements Document
+# Hald — Product Requirements Document
 
 ## Vision
 
-Git Oracle turns a repository's git history into a queryable knowledge graph, surfacing institutional knowledge that would otherwise be lost to team turnover, Slack entropy, and undocumented decisions. It runs as a Claude Code plugin (with standalone MCP server fallback) and piggybacks on the user's existing LLM credits — no separate infrastructure, no SaaS subscription.
+Hald turns a repository's git history into a queryable knowledge graph, surfacing institutional knowledge that would otherwise be lost to team turnover, Slack entropy, and undocumented decisions. It runs as a Claude Code plugin (with standalone MCP server fallback) and piggybacks on the user's existing LLM credits — no separate infrastructure, no SaaS subscription.
 
 ## Problem
 
@@ -25,7 +25,7 @@ Developers and engineering managers using AI coding assistants (Claude Code, Cur
 Developer in Claude Code:
 > "Why did we switch from REST to gRPC in the payments service?"
 
-Claude (via Git Oracle MCP tools):
+Claude (via Hald MCP tools):
 > Based on the git history, the migration happened across 3 PRs between
 > March and May 2024, led by @alice and @bob. The key commits show...
 > [synthesized narrative from community summaries and commit context]
@@ -47,7 +47,7 @@ The user never leaves their coding environment. The query is answered in seconds
 - `query_knowledge(question)` — Free-form question answered via GraphRAG local+global search
 
 **Delivery:** Claude Code plugin + standalone MCP server
-**Storage:** Local SQLite + FTS5, `.git-oracle/` directory in repo
+**Storage:** Local SQLite + FTS5, `.hald/` directory in repo
 
 ### Phase 2 — GitHub Integration
 
@@ -97,4 +97,4 @@ The user never leaves their coding environment. The query is answered in seconds
 | Graphite / Gitstream | PR workflow optimization | No knowledge extraction |
 | Microsoft GraphRAG | General-purpose document GraphRAG | Not designed for git data, heavy infrastructure |
 
-Git Oracle's differentiator: **purpose-built GraphRAG for git history, delivered as a zero-infra plugin for AI coding assistants.**
+Hald's differentiator: **purpose-built GraphRAG for git history, delivered as a zero-infra plugin for AI coding assistants.**
