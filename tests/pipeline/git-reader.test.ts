@@ -9,7 +9,7 @@ describe("git-reader", () => {
   let repoDir: string;
 
   beforeAll(async () => {
-    repoDir = mkdtempSync(join(tmpdir(), "git-oracle-test-"));
+    repoDir = mkdtempSync(join(tmpdir(), "hald-test-"));
     await createSampleRepo(repoDir);
   }, 30_000);
 

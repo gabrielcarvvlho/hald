@@ -6,12 +6,12 @@ type GetStore = () => Store;
 
 export function registerResources(server: McpServer, getStore: GetStore): void {
   // ================================================================
-  // git-oracle://stats
+  // hald://stats
   // ================================================================
 
   server.registerResource(
     "stats",
-    "git-oracle://stats",
+    "hald://stats",
     {
       description: "Current index stats: entity count, relation count, last indexed commit, etc.",
       mimeType: "application/json",
@@ -26,7 +26,7 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         return {
           contents: [
             {
-              uri: "git-oracle://stats",
+              uri: "hald://stats",
               mimeType: "application/json",
               text: JSON.stringify(
                 {
@@ -44,7 +44,7 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         return {
           contents: [
             {
-              uri: "git-oracle://stats",
+              uri: "hald://stats",
               mimeType: "application/json",
               text: JSON.stringify({ error: "No index found" }),
             },
@@ -55,12 +55,12 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git-oracle://graph/summary
+  // hald://graph/summary
   // ================================================================
 
   server.registerResource(
     "graph-summary",
-    "git-oracle://graph/summary",
+    "hald://graph/summary",
     {
       description: "High-level summary of the knowledge graph structure and top communities.",
       mimeType: "text/plain",
@@ -79,7 +79,7 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         }
 
         const lines = [
-          "# Git Oracle Knowledge Graph Summary",
+          "# Hald Knowledge Graph Summary",
           "",
           `Entities: ${stats.entities} | Relations: ${stats.relations} | Communities: ${stats.communities}`,
           "",
@@ -95,7 +95,7 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         return {
           contents: [
             {
-              uri: "git-oracle://graph/summary",
+              uri: "hald://graph/summary",
               mimeType: "text/plain",
               text: lines.join("\n"),
             },
@@ -105,9 +105,9 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         return {
           contents: [
             {
-              uri: "git-oracle://graph/summary",
+              uri: "hald://graph/summary",
               mimeType: "text/plain",
-              text: "No index found. Run git_oracle_index first.",
+              text: "No index found. Run hald_index first.",
             },
           ],
         };
@@ -116,12 +116,12 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
   );
 
   // ================================================================
-  // git-oracle://graph/entity-types
+  // hald://graph/entity-types
   // ================================================================
 
   server.registerResource(
     "entity-types",
-    "git-oracle://graph/entity-types",
+    "hald://graph/entity-types",
     {
       description:
         "Breakdown of entities in the knowledge graph by type (PERSON, MODULE, TECHNOLOGY, DECISION, PATTERN) with counts and examples.",
@@ -146,7 +146,7 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         return {
           contents: [
             {
-              uri: "git-oracle://graph/entity-types",
+              uri: "hald://graph/entity-types",
               mimeType: "application/json",
               text: JSON.stringify(breakdown, null, 2),
             },
@@ -156,7 +156,7 @@ export function registerResources(server: McpServer, getStore: GetStore): void {
         return {
           contents: [
             {
-              uri: "git-oracle://graph/entity-types",
+              uri: "hald://graph/entity-types",
               mimeType: "application/json",
               text: JSON.stringify({ error: "No index found" }),
             },

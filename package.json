@@ -1,11 +1,11 @@
 {
-  "name": "git-oracle",
+  "name": "hald",
   "version": "0.1.0",
-  "description": "GraphRAG-powered knowledge graph for git repositories",
+  "description": "Your codebase, held. GraphRAG-powered codebase intelligence for git repositories.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "git-oracle": "dist/cli.js"
+    "hald": "dist/cli.js"
   },
   "scripts": {
     "build": "tsup",
@@ -44,7 +44,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/ggoc/git-oracle.git"
+    "url": "https://github.com/ggoc/hald.git"
   },
   "engines": {
     "node": ">=20"

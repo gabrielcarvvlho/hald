@@ -41,8 +41,8 @@ describe("CLI — help and version", () => {
   it("--help shows all commands", () => {
     const { stdout, exitCode } = runCLI(["--help"]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("index");
-    expect(stdout).toContain("query");
+    expect(stdout).toContain("scan");
+    expect(stdout).toContain("ask");
     expect(stdout).toContain("stats");
     expect(stdout).toContain("serve");
   });
@@ -53,8 +53,8 @@ describe("CLI — help and version", () => {
     expect(stdout).toContain(PKG_VERSION);
   });
 
-  it("index --help shows index options", () => {
-    const { stdout, exitCode } = runCLI(["index", "--help"]);
+  it("scan --help shows scan options", () => {
+    const { stdout, exitCode } = runCLI(["scan", "--help"]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain("--full");
     expect(stdout).toContain("--max-commits");
@@ -75,8 +75,8 @@ describe("CLI — stats", () => {
   let storageDir: string;
 
   beforeAll(() => {
-    tmpDir = join(tmpdir(), `git-oracle-cli-test-${Date.now()}`);
-    storageDir = join(tmpDir, ".git-oracle");
+    tmpDir = join(tmpdir(), `hald-cli-test-${Date.now()}`);
+    storageDir = join(tmpDir, ".hald");
     mkdirSync(storageDir, { recursive: true });
   });
 
@@ -88,7 +88,7 @@ describe("CLI — stats", () => {
     const emptyDir = join(tmpDir, "empty");
     mkdirSync(emptyDir, { recursive: true });
     const { stdout, exitCode } = runCLI(["stats"], {
-      GIT_ORACLE_REPO: emptyDir,
+      HALD_REPO: emptyDir,
     });
     expect(exitCode).toBe(0);
     // Should show stats with zero counts rather than crash
@@ -118,7 +118,7 @@ describe("CLI — stats", () => {
     store.close();
 
     const { stdout, exitCode } = runCLI(["stats"], {
-      GIT_ORACLE_REPO: tmpDir,
+      HALD_REPO: tmpDir,
     });
 
     expect(exitCode).toBe(0);
@@ -127,13 +127,13 @@ describe("CLI — stats", () => {
   });
 });
 
-describe("CLI — query", () => {
+describe("CLI — ask", () => {
   let tmpDir: string;
   let storageDir: string;
 
   beforeAll(() => {
-    tmpDir = join(tmpdir(), `git-oracle-cli-query-${Date.now()}`);
-    storageDir = join(tmpDir, ".git-oracle");
+    tmpDir = join(tmpdir(), `hald-cli-query-${Date.now()}`);
+    storageDir = join(tmpDir, ".hald");
     mkdirSync(storageDir, { recursive: true });
 
     const db = openDatabase(storageDir);
@@ -188,19 +188,19 @@ describe("CLI — query", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("query on empty index shows error message", () => {
+  it("ask on empty index shows error message", () => {
     const emptyDir = join(tmpDir, "empty");
     mkdirSync(emptyDir, { recursive: true });
-    const { stdout, exitCode } = runCLI(["query", "who knows payments?"], {
-      GIT_ORACLE_REPO: emptyDir,
+    const { stdout, exitCode } = runCLI(["ask", "who knows payments?"], {
+      HALD_REPO: emptyDir,
     });
     expect(exitCode).toBe(1);
     expect(stdout).toContain("No index found");
   });
 
   it("local query finds entities", () => {
-    const { stdout, exitCode } = runCLI(["query", "who works on payments?"], {
-      GIT_ORACLE_REPO: tmpDir,
+    const { stdout, exitCode } = runCLI(["ask", "who works on payments?"], {
+      HALD_REPO: tmpDir,
     });
 
     expect(exitCode).toBe(0);
@@ -209,8 +209,8 @@ describe("CLI — query", () => {
 
   it("global query does not crash", () => {
     const { stdout, exitCode } = runCLI(
-      ["query", "what are the main architectural decisions?", "--type", "global"],
-      { GIT_ORACLE_REPO: tmpDir },
+      ["ask", "what are the main architectural decisions?", "--type", "global"],
+      { HALD_REPO: tmpDir },
     );
 
     expect(exitCode).toBe(0);

@@ -19,7 +19,7 @@ describe("MCP integration", () => {
     ({ db, store } = createPopulatedStore());
 
     // 2. Create MCP server and register tools/resources
-    server = new McpServer({ name: "git-oracle-test", version: "0.1.0" });
+    server = new McpServer({ name: "hald-test", version: "0.1.0" });
     const getStore = () => store;
     registerTools(server, getStore);
     registerResources(server, getStore);
@@ -42,20 +42,20 @@ describe("MCP integration", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
 
-    expect(names).toContain("git_oracle_query");
-    expect(names).toContain("git_oracle_find_expert");
-    expect(names).toContain("git_oracle_trace_decision");
-    expect(names).toContain("git_oracle_show_coupling");
-    expect(names).toContain("git_oracle_get_path");
-    expect(names).toContain("git_oracle_get_entity");
-    expect(names).toContain("git_oracle_find_silos");
-    expect(names).toContain("git_oracle_index");
-    expect(names).toContain("git_oracle_stats");
+    expect(names).toContain("hald_query");
+    expect(names).toContain("hald_find_expert");
+    expect(names).toContain("hald_trace_decision");
+    expect(names).toContain("hald_show_coupling");
+    expect(names).toContain("hald_get_path");
+    expect(names).toContain("hald_get_entity");
+    expect(names).toContain("hald_find_silos");
+    expect(names).toContain("hald_index");
+    expect(names).toContain("hald_stats");
   });
 
-  it("git_oracle_stats returns index statistics", async () => {
+  it("hald_stats returns index statistics", async () => {
     const result = await client.callTool({
-      name: "git_oracle_stats",
+      name: "hald_stats",
       arguments: {},
     });
 
@@ -66,9 +66,9 @@ describe("MCP integration", () => {
     expect(text).toContain("Communities:");
   });
 
-  it("git_oracle_find_expert finds Alice for payments", async () => {
+  it("hald_find_expert finds Alice for payments", async () => {
     const result = await client.callTool({
-      name: "git_oracle_find_expert",
+      name: "hald_find_expert",
       arguments: { module: "src/payments", top_n: 5 },
     });
 
@@ -77,9 +77,9 @@ describe("MCP integration", () => {
     expect(text).toContain("Alice Chen");
   });
 
-  it("git_oracle_find_expert returns message for unknown module", async () => {
+  it("hald_find_expert returns message for unknown module", async () => {
     const result = await client.callTool({
-      name: "git_oracle_find_expert",
+      name: "hald_find_expert",
       arguments: { module: "src/nonexistent" },
     });
 
@@ -88,9 +88,9 @@ describe("MCP integration", () => {
     expect(text).toContain("No experts found");
   });
 
-  it("git_oracle_query returns entities for a local query", async () => {
+  it("hald_query returns entities for a local query", async () => {
     const result = await client.callTool({
-      name: "git_oracle_query",
+      name: "hald_query",
       arguments: { question: "who works on payments?", search_type: "local" },
     });
 
@@ -99,9 +99,9 @@ describe("MCP integration", () => {
     expect(text).toContain("payments");
   });
 
-  it("git_oracle_query handles global search", async () => {
+  it("hald_query handles global search", async () => {
     const result = await client.callTool({
-      name: "git_oracle_query",
+      name: "hald_query",
       arguments: {
         question: "what are the main architectural decisions?",
         search_type: "global",
@@ -113,9 +113,9 @@ describe("MCP integration", () => {
     expect(typeof text).toBe("string");
   });
 
-  it("git_oracle_show_coupling finds billing-payments coupling", async () => {
+  it("hald_show_coupling finds billing-payments coupling", async () => {
     const result = await client.callTool({
-      name: "git_oracle_show_coupling",
+      name: "hald_show_coupling",
       arguments: { module: "src/billing", min_co_changes: 1 },
     });
 
@@ -124,9 +124,9 @@ describe("MCP integration", () => {
     expect(text).toContain("src/payments");
   });
 
-  it("git_oracle_trace_decision traces gRPC migration", async () => {
+  it("hald_trace_decision traces gRPC migration", async () => {
     const result = await client.callTool({
-      name: "git_oracle_trace_decision",
+      name: "hald_trace_decision",
       arguments: { topic: "gRPC migration" },
     });
 
@@ -135,9 +135,9 @@ describe("MCP integration", () => {
     expect(text.length).toBeGreaterThan(0);
   });
 
-  it("git_oracle_get_path finds path between Alice and gRPC", async () => {
+  it("hald_get_path finds path between Alice and gRPC", async () => {
     const result = await client.callTool({
-      name: "git_oracle_get_path",
+      name: "hald_get_path",
       arguments: { from: "person:alice-chen", to: "technology:grpc" },
     });
 
@@ -147,9 +147,9 @@ describe("MCP integration", () => {
     expect(text).toContain("gRPC");
   });
 
-  it("git_oracle_get_path returns not-found for missing entity", async () => {
+  it("hald_get_path returns not-found for missing entity", async () => {
     const result = await client.callTool({
-      name: "git_oracle_get_path",
+      name: "hald_get_path",
       arguments: { from: "person:nobody", to: "technology:grpc" },
     });
 
@@ -158,9 +158,9 @@ describe("MCP integration", () => {
     expect(text).toContain("not found");
   });
 
-  it("git_oracle_get_entity looks up Alice by name", async () => {
+  it("hald_get_entity looks up Alice by name", async () => {
     const result = await client.callTool({
-      name: "git_oracle_get_entity",
+      name: "hald_get_entity",
       arguments: { query: "Alice Chen" },
     });
 
@@ -171,9 +171,9 @@ describe("MCP integration", () => {
     expect(text).toContain("Relationships");
   });
 
-  it("git_oracle_get_entity returns not-found message", async () => {
+  it("hald_get_entity returns not-found message", async () => {
     const result = await client.callTool({
-      name: "git_oracle_get_entity",
+      name: "hald_get_entity",
       arguments: { query: "zzz-nonexistent-xyz" },
     });
 
@@ -182,9 +182,9 @@ describe("MCP integration", () => {
     expect(text).toContain("No entity found");
   });
 
-  it("git_oracle_find_silos identifies knowledge risks", async () => {
+  it("hald_find_silos identifies knowledge risks", async () => {
     const result = await client.callTool({
-      name: "git_oracle_find_silos",
+      name: "hald_find_silos",
       arguments: { min_frequency: 1, inactive_days: 100_000 },
     });
 
@@ -199,12 +199,12 @@ describe("MCP integration", () => {
     const { resources } = await client.listResources();
     const uris = resources.map((r) => r.uri);
 
-    expect(uris).toContain("git-oracle://stats");
-    expect(uris).toContain("git-oracle://graph/summary");
+    expect(uris).toContain("hald://stats");
+    expect(uris).toContain("hald://graph/summary");
   });
 
   it("reads stats resource", async () => {
-    const result = await client.readResource({ uri: "git-oracle://stats" });
+    const result = await client.readResource({ uri: "hald://stats" });
     const text = (result.contents[0] as { text: string }).text;
     const data = JSON.parse(text);
 
@@ -215,7 +215,7 @@ describe("MCP integration", () => {
 
   it("reads graph summary resource", async () => {
     const result = await client.readResource({
-      uri: "git-oracle://graph/summary",
+      uri: "hald://graph/summary",
     });
     const text = (result.contents[0] as { text: string }).text;
 

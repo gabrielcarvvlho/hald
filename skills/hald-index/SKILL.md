@@ -1,19 +1,19 @@
 ---
-name: git-oracle-index
-description: Use when the user asks to index, re-index, or set up Git Oracle for their repository, when a query tool returns an error indicating no index exists, when the user asks about index status or freshness, or when they mention "git oracle" in the context of setup or configuration.
+name: hald-index
+description: Use when the user asks to index, re-index, or set up Hald for their repository, when a query tool returns an error indicating no index exists, when the user asks about index status or freshness, or when they mention "hald" in the context of setup or configuration.
 ---
 
-# Git Oracle Index
+# Hald Index
 
 ## MCP Tools
 
-### `git_oracle_index`
+### `hald_index`
 Triggers indexing of the current repository. Parameters:
 - `full`: Set to `true` to force a complete re-index. Default is incremental (only new commits).
 - `max_commits`: Limit the number of commits to process. Useful for testing or cost control.
 - `since_date`: Only index commits after this ISO date (e.g., "2024-01-01").
 
-### `git_oracle_stats`
+### `hald_stats`
 Check the current index status — whether it exists, how many entities/relations it has, and which commit was last indexed.
 
 ## Guidance
@@ -30,15 +30,15 @@ Check the current index status — whether it exists, how many entities/relation
 ### Troubleshooting
 - If indexing fails with an API key error, the user needs one of: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY` in their environment.
 - If indexing is slow, suggest reducing `max_commits` or increasing the date filter.
-- The index lives in `.git-oracle/` in the repo root. It can be deleted and rebuilt at any time.
+- The index lives in `.hald/` in the repo root. It can be deleted and rebuilt at any time.
 
 ## Example Interactions
 
-**User:** "Set up git oracle for this repo"
-**You:** First call `git_oracle_stats` to check if an index already exists. If not, explain what indexing does (extracts knowledge from git history, costs ~$0.50-1.00 per 1k commits) and call `git_oracle_index` with a reasonable default.
+**User:** "Set up hald for this repo"
+**You:** First call `hald_stats` to check if an index already exists. If not, explain what indexing does (extracts knowledge from git history, costs ~$0.50-1.00 per 1k commits) and call `hald_index` with a reasonable default.
 
 **User:** "Re-index the repo, something seems off"
-**You:** Call `git_oracle_index` with `full: true`. Explain that this rebuilds the entire knowledge graph from scratch.
+**You:** Call `hald_index` with `full: true`. Explain that this rebuilds the entire knowledge graph from scratch.
 
-**User:** "How fresh is the git oracle index?"
-**You:** Call `git_oracle_stats` and report the last indexed commit, entity/relation counts, and when it was last updated.
+**User:** "How fresh is the hald index?"
+**You:** Call `hald_stats` and report the last indexed commit, entity/relation counts, and when it was last updated.

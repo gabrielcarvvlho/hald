@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import type { LLMClient, LLMResponse } from "../../src/llm/types.js";
-import type { GitOracleConfig } from "../../src/shared/types.js";
+import type { HaldConfig } from "../../src/shared/types.js";
 
 // ================================================================
 // Mock LLM client with call tracking
@@ -150,7 +150,7 @@ describe("Incremental indexing", () => {
   let repoDir: string;
   let storageDir: string;
 
-  function makeConfig(): GitOracleConfig {
+  function makeConfig(): HaldConfig {
     return {
       repoPath: repoDir,
       branch: "HEAD",
@@ -170,7 +170,7 @@ describe("Incremental indexing", () => {
   }
 
   beforeAll(() => {
-    tmpDir = join(tmpdir(), `git-oracle-incr-${Date.now()}`);
+    tmpDir = join(tmpdir(), `hald-incr-${Date.now()}`);
     repoDir = join(tmpDir, "repo");
     storageDir = join(tmpDir, "storage");
     mkdirSync(storageDir, { recursive: true });

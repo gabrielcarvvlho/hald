@@ -1,15 +1,15 @@
 {
   "mcpServers": {
-    "git-oracle": {
+    "hald": {
       "command": "sh",
       "args": ["${CLAUDE_PLUGIN_ROOT}/bin/start-server.sh"],
       "env": {
-        "GIT_ORACLE_REPO": "${CLAUDE_PROJECT_ROOT}",
+        "HALD_REPO": "${CLAUDE_PROJECT_ROOT}",
         "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
         "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
         "GEMINI_API_KEY": "${GEMINI_API_KEY}",
-        "GIT_ORACLE_BASE_URL": "${GIT_ORACLE_BASE_URL}"
+        "HALD_BASE_URL": "${HALD_BASE_URL}"
       }
     }
   }

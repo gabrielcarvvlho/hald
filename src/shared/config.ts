@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { GitOracleConfig } from "./types.js";
+import type { HaldConfig } from "./types.js";
 import { logger } from "./logger.js";
 
-const defaults: GitOracleConfig = {
+const defaults: HaldConfig = {
   repoPath: ".",
   branch: "HEAD",
   commitsPerChunk: 10,
@@ -22,10 +22,10 @@ const defaults: GitOracleConfig = {
   parentLinkThreshold: 0.3,
   splitWarningThreshold: 0.7,
   summaryReuseThreshold: 0.7,
-  storagePath: ".git-oracle",
+  storagePath: ".hald",
 };
 
-export function loadConfig(overrides: Partial<GitOracleConfig> = {}): GitOracleConfig {
+export function loadConfig(overrides: Partial<HaldConfig> = {}): HaldConfig {
   // Priority (highest → lowest): CLI flags > config.json > env vars > defaults
 
   // 1. Start with defaults
@@ -39,13 +39,13 @@ export function loadConfig(overrides: Partial<GitOracleConfig> = {}): GitOracleC
   const repoPath = resolve(overrides.repoPath ?? config.repoPath);
 
   // 4. Load config.json (beats env vars)
-  const configFilePath = resolve(repoPath, ".git-oracle", "config.json");
+  const configFilePath = resolve(repoPath, ".hald", "config.json");
   if (existsSync(configFilePath)) {
     try {
       const fileConfig = JSON.parse(readFileSync(configFilePath, "utf-8"));
       config = { ...config, ...fileConfig };
     } catch (err) {
-      logger.warn("Failed to parse .git-oracle/config.json, using defaults", {
+      logger.warn("Failed to parse .hald/config.json, using defaults", {
         error: String(err),
       });
     }
@@ -64,7 +64,7 @@ export function loadConfig(overrides: Partial<GitOracleConfig> = {}): GitOracleC
   return config;
 }
 
-function validateConfig(config: GitOracleConfig): void {
+function validateConfig(config: HaldConfig): void {
   if (config.maxChunkTokens < 100) {
     throw new Error("maxChunkTokens must be >= 100");
   }
@@ -112,22 +112,22 @@ function validateConfig(config: GitOracleConfig): void {
   }
 }
 
-function applyEnvOverrides(config: GitOracleConfig): void {
+function applyEnvOverrides(config: HaldConfig): void {
   const env = process.env;
 
-  if (env.GIT_ORACLE_REPO) config.repoPath = env.GIT_ORACLE_REPO;
-  if (env.GIT_ORACLE_BRANCH) config.branch = env.GIT_ORACLE_BRANCH;
-  if (env.GIT_ORACLE_PROVIDER) {
-    config.provider = env.GIT_ORACLE_PROVIDER as GitOracleConfig["provider"];
+  if (env.HALD_REPO) config.repoPath = env.HALD_REPO;
+  if (env.HALD_BRANCH) config.branch = env.HALD_BRANCH;
+  if (env.HALD_PROVIDER) {
+    config.provider = env.HALD_PROVIDER as HaldConfig["provider"];
   }
-  if (env.GIT_ORACLE_MODEL) config.model = env.GIT_ORACLE_MODEL;
-  if (env.GIT_ORACLE_BASE_URL) config.baseUrl = env.GIT_ORACLE_BASE_URL;
-  if (env.GIT_ORACLE_STORAGE) config.storagePath = env.GIT_ORACLE_STORAGE;
-  if (env.GIT_ORACLE_MAX_COMMITS) {
-    config.maxCommits = parseInt(env.GIT_ORACLE_MAX_COMMITS, 10);
+  if (env.HALD_MODEL) config.model = env.HALD_MODEL;
+  if (env.HALD_BASE_URL) config.baseUrl = env.HALD_BASE_URL;
+  if (env.HALD_STORAGE) config.storagePath = env.HALD_STORAGE;
+  if (env.HALD_MAX_COMMITS) {
+    config.maxCommits = parseInt(env.HALD_MAX_COMMITS, 10);
   }
-  if (env.GIT_ORACLE_MAX_CONCURRENCY) {
-    config.maxConcurrency = parseInt(env.GIT_ORACLE_MAX_CONCURRENCY, 10);
+  if (env.HALD_MAX_CONCURRENCY) {
+    config.maxConcurrency = parseInt(env.HALD_MAX_CONCURRENCY, 10);
   }
 }
 

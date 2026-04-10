@@ -13,7 +13,7 @@ import { registerResources } from "./resources.js";
  */
 export function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: "git-oracle",
+    name: "hald",
     version: "0.1.0",
   });
 

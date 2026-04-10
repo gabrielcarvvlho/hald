@@ -119,7 +119,7 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
   }
 
   const url = `http://localhost:${port}`;
-  console.log(`\n  Git Oracle Graph Viewer`);
+  console.log(`\n  Hald Graph Viewer`);
   console.log(`  ${url}`);
   console.log(`  Press Ctrl+C to stop\n`);
 

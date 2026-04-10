@@ -41,7 +41,7 @@ async function init() {
     if (graphData.nodes.length === 0) {
       loadingEl.innerHTML =
         '<div class="empty-state"><div class="empty-state-title">No entities found</div>' +
-        '<div class="empty-state-text">Try indexing more commits with <code>git-oracle index</code></div></div>';
+        '<div class="empty-state-text">Try indexing more commits with <code>hald scan</code></div></div>';
       return;
     }
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Git Oracle — Cross-platform session bootstrap
+# Hald — Cross-platform session bootstrap
 # Detects the hosting platform and injects skills into the agent's context.
 #
 # Outputs a JSON object with the skill content, using jq for robust escaping
@@ -22,7 +22,7 @@ fi
 
 # ---------- Read skill content ----------
 
-SKILL_FILE="$PLUGIN_ROOT/skills/git-oracle-query/SKILL.md"
+SKILL_FILE="$PLUGIN_ROOT/skills/hald-query/SKILL.md"
 if [ ! -f "$SKILL_FILE" ]; then
   exit 0
 fi
