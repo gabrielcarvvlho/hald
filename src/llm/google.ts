@@ -3,7 +3,7 @@ import { withRetry } from "./retry.js";
 
 const REQUEST_TIMEOUT_MS = 120_000;
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite-preview";
 
 export class GoogleClient implements LLMClient {
   readonly provider = "google" as const;

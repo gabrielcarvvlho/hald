@@ -1,7 +1,7 @@
 import type { LLMClient, LLMRequestOptions, LLMResponse } from "./types.js";
 import { withRetry } from "./retry.js";
 
-const DEFAULT_MODEL = "gpt-4.1-mini";
+const DEFAULT_MODEL = "gpt-5.4-mini";
 
 export class OpenAIClient implements LLMClient {
   readonly provider = "openai" as const;

@@ -67,7 +67,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         const searchType = search_type === "auto" ? classifyQuery(question) : search_type;
 
         if (searchType === "global") {
-          const result = globalSearch(store, { query: question, maxCommunities: 5 });
+          const result = globalSearch(store, { query: question, maxCommunities: 10 });
           return {
             content: [
               {
@@ -80,9 +80,9 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
 
         const result = localSearch(store, {
           query: question,
-          maxEntities: 10,
-          maxRelations: 20,
-          maxTextUnits: 5,
+          maxEntities: 15,
+          maxRelations: 50,
+          maxTextUnits: 20,
         });
         return {
           content: [
@@ -148,19 +148,27 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           };
         }
 
+        const topScore = results[0]?.score ?? 1;
         const lines = results.map((r, i) => {
           const modules = r.modules.map((m) => {
             const entity = store.getEntity(m);
             return entity?.name ?? m;
           });
-          return `${i + 1}. **${r.person.name}** — score: ${r.score}, weight: ${r.commitCount}, last active: ${r.lastActive}, modules: ${modules.join(", ")}`;
+          const pct = topScore > 0 ? Math.round((r.score / topScore) * 100) : 0;
+          const bar = makeBar(pct);
+          const lastActive = r.lastActive.split("T")[0] ?? r.lastActive;
+          return [
+            `${i + 1}. **${r.person.name}** ${bar} ${pct}%`,
+            `   Commits: ${r.commitCount} | Last active: ${lastActive}`,
+            `   Modules: ${modules.join(", ")}`,
+          ].join("\n");
         });
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `## Experts for "${module}"\n\n${lines.join("\n")}`,
+              text: `## Experts for "${module}"\n\n${lines.join("\n\n")}`,
             },
           ],
         };
@@ -211,9 +219,9 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         // Search for DECISION entities matching the topic
         const result = localSearch(store, {
           query: topic,
-          maxEntities: 10,
-          maxRelations: 20,
-          maxTextUnits: 10,
+          maxEntities: 15,
+          maxRelations: 50,
+          maxTextUnits: 20,
           entityTypes: [EntityType.DECISION],
         });
 
@@ -221,9 +229,9 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         if (result.entities.length === 0) {
           const broader = localSearch(store, {
             query: topic,
-            maxEntities: 10,
-            maxRelations: 20,
-            maxTextUnits: 10,
+            maxEntities: 15,
+            maxRelations: 50,
+            maxTextUnits: 20,
           });
           return {
             content: [
@@ -305,16 +313,25 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           };
         }
 
-        const lines = results.map(
-          (r) =>
-            `- **${r.module.name}**: ${r.coChangeCount} co-changes (ratio: ${(r.coChangeRatio * 100).toFixed(1)}%), shared authors: ${r.sharedAuthors.join(", ") || "none"}`,
-        );
+        const maxCoChanges = Math.max(...results.map((r) => r.coChangeCount), 1);
+        const lines = results.map((r) => {
+          const pct = (r.coChangeRatio * 100).toFixed(0);
+          const bar = makeBar(Math.round((r.coChangeCount / maxCoChanges) * 100));
+          const authors = r.sharedAuthors.length > 0 ? r.sharedAuthors.join(", ") : "none";
+          return `- **${r.module.name}** ${bar} ${r.coChangeCount} co-changes (${pct}% probability)\n  Shared authors: ${authors}`;
+        });
+
+        const highCoupling = results.filter((r) => r.coChangeRatio > 0.5);
+        const insight =
+          highCoupling.length > 0
+            ? `\n> **Note:** ${highCoupling.length} module(s) change >50% of the time when "${module}" changes — consider if they should be colocated or decoupled.\n`
+            : "";
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `## Coupling for "${module}"\n\n${lines.join("\n")}`,
+              text: `## Coupling Analysis: "${module}"\n\n${lines.join("\n\n")}${insight}`,
             },
           ],
         };
@@ -417,18 +434,16 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         const steps = result.relations.map((rel, i) => {
           const stepFrom = result.path[i]!;
           const stepTo = result.path[i + 1]!;
-          // Respect actual relation direction, not BFS traversal direction
-          if (rel.sourceId === stepFrom.id) {
-            return `  ${stepFrom.name} --[${rel.type}]--> ${stepTo.name}`;
-          }
-          return `  ${stepFrom.name} <--[${rel.type}]-- ${stepTo.name}`;
+          const arrow = rel.sourceId === stepFrom.id ? "→" : "←";
+          const desc = rel.description ? ` — ${rel.description}` : "";
+          return `${i + 1}. **${stepFrom.name}** ${arrow} *[${rel.type}]* ${arrow} **${stepTo.name}**${desc}`;
         });
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `## Path: ${fromEntity.name} -> ${toEntity.name} (${result.length} hops)\n\n${steps.join("\n")}`,
+              text: `## Path: ${fromEntity.name} → ${toEntity.name}\n\n**${result.length} hop(s)** connecting these entities:\n\n${steps.join("\n")}`,
             },
           ],
         };
@@ -455,7 +470,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     {
       description:
         "Look up a specific entity by ID, exact name, or fuzzy search. Returns full details including type, " +
-        "description, aliases, activity timeline, and up to 15 relationships.\n\n" +
+        "description, aliases, activity timeline, and all relationships.\n\n" +
         "Accepts entity IDs ('person:alice-chen'), names ('Alice Chen'), or search terms. " +
         "For ranked expert lists, use hald_find_expert instead.",
       annotations: {
@@ -488,34 +503,49 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           };
         }
 
+        const firstSeen = entity.firstSeen.split("T")[0] ?? entity.firstSeen;
+        const lastSeen = entity.lastSeen.split("T")[0] ?? entity.lastSeen;
         const lines = [
           `## ${entity.name}`,
           "",
-          `- **Type:** ${entity.type}`,
-          `- **ID:** ${entity.id}`,
-          `- **Description:** ${entity.description}`,
-          `- **First seen:** ${entity.firstSeen}`,
-          `- **Last seen:** ${entity.lastSeen}`,
-          `- **Frequency:** ${entity.frequency}`,
+          `| Field | Value |`,
+          `|-------|-------|`,
+          `| Type | ${entity.type} |`,
+          `| ID | \`${entity.id}\` |`,
+          `| Active | ${firstSeen} → ${lastSeen} |`,
+          `| Frequency | ${entity.frequency} changes |`,
         ];
 
         if (entity.aliases.length > 0) {
-          lines.push(`- **Aliases:** ${entity.aliases.join(", ")}`);
+          lines.push(`| Aliases | ${entity.aliases.join(", ")} |`);
         }
 
-        // Show relations
+        if (entity.description) {
+          lines.push("", `> ${entity.description}`);
+        }
+
+        // Show relations grouped by type
         const rels = store.getRelationsForEntity(entity.id);
         if (rels.length > 0) {
-          lines.push("", "### Relationships", "");
-          for (const rel of rels.slice(0, 15)) {
-            const otherId = rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
-            const other = store.getEntity(otherId);
-            const otherName = other?.name ?? otherId;
-            const direction =
-              rel.sourceId === entity.id
-                ? `${entity.name} --[${rel.type}]--> ${otherName}`
-                : `${otherName} --[${rel.type}]--> ${entity.name}`;
-            lines.push(`- ${direction} (weight: ${rel.weight})`);
+          lines.push("", `### Relationships (${rels.length})\n`);
+
+          const relsByType = new Map<string, typeof rels>();
+          for (const rel of rels) {
+            const list = relsByType.get(rel.type) ?? [];
+            list.push(rel);
+            relsByType.set(rel.type, list);
+          }
+
+          for (const [type, typeRels] of relsByType) {
+            lines.push(`**${type}**`);
+            for (const rel of typeRels) {
+              const otherId = rel.sourceId === entity.id ? rel.targetId : rel.sourceId;
+              const other = store.getEntity(otherId);
+              const otherName = other?.name ?? otherId;
+              const arrow = rel.sourceId === entity.id ? "→" : "←";
+              lines.push(`- ${arrow} ${otherName} (weight: ${rel.weight})`);
+            }
+            lines.push("");
           }
         }
 
@@ -590,24 +620,32 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
 
         const orphaned = results.filter((r) => r.activeExpertCount === 0);
         const silos = results.filter((r) => r.activeExpertCount === 1);
-        const sections: string[] = ["## Knowledge Risk Report\n"];
+        const sections: string[] = [
+          "## Knowledge Risk Report\n",
+          `**${orphaned.length}** orphaned module(s) | **${silos.length}** knowledge silo(s) | **${results.length}** total at-risk\n`,
+        ];
 
         if (orphaned.length > 0) {
-          sections.push(`### Orphaned Modules (no active maintainer)\n`);
+          sections.push(`### CRITICAL — Orphaned Modules (no active maintainer)\n`);
           for (const r of orphaned) {
+            const lastDate = r.lastActivity.split("T")[0] ?? r.lastActivity;
             sections.push(
-              `- **${r.module.name}** — frequency: ${r.module.frequency}, last activity: ${r.lastActivity}`,
+              `- **${r.module.name}** — ${r.module.frequency} changes, last activity: ${lastDate}\n  No active maintainer. Consider assigning an owner or archiving.`,
             );
           }
         }
 
         if (silos.length > 0) {
-          sections.push(`\n### Knowledge Silos (bus factor = 1)\n`);
+          sections.push(`\n### WARNING — Knowledge Silos (bus factor = 1)\n`);
           for (const r of silos) {
+            const lastDate = r.lastActivity.split("T")[0] ?? r.lastActivity;
             sections.push(
-              `- **${r.module.name}** — sole expert: ${r.soloExpert?.name ?? "unknown"}, frequency: ${r.module.frequency}, last activity: ${r.lastActivity}`,
+              `- **${r.module.name}** — sole expert: **${r.soloExpert?.name ?? "unknown"}**, ${r.module.frequency} changes, last activity: ${lastDate}`,
             );
           }
+          sections.push(
+            `\n> **Recommendation:** Consider pairing or rotating contributors on silo modules to increase bus factor.`,
+          );
         }
 
         return {
@@ -1147,43 +1185,74 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
 // Formatters
 // ================================================================
 
+/** Render a visual progress bar for rankings. */
+function makeBar(pct: number): string {
+  const filled = Math.round(pct / 10);
+  return "\u2588".repeat(filled) + "\u2591".repeat(10 - filled);
+}
+
 function formatLocalResult(result: ReturnType<typeof localSearch>): string {
   const sections: string[] = [];
 
+  // Group entities by type for clearer reading
   if (result.entities.length > 0) {
-    const header =
+    const matchInfo =
       result.totalEntityMatches > result.entities.length
-        ? `## Entities (showing ${result.entities.length} of ${result.totalEntityMatches} matches)\n`
-        : "## Entities\n";
-    sections.push(header);
+        ? ` (${result.entities.length} of ${result.totalEntityMatches} matches)`
+        : "";
+    sections.push(`## Entities${matchInfo}\n`);
+
+    const grouped = new Map<string, typeof result.entities>();
     for (const e of result.entities) {
-      const tag = e.isSeed ? "seed" : `${e.hopDistance}-hop`;
-      sections.push(
-        `- **[${e.type}] ${e.name}** (${tag}, score: ${e.score.toFixed(2)}): ${e.description} (last seen: ${e.lastSeen})`,
-      );
+      const list = grouped.get(e.type) ?? [];
+      list.push(e);
+      grouped.set(e.type, list);
+    }
+
+    for (const [type, entities] of grouped) {
+      sections.push(`**${type}**`);
+      for (const e of entities) {
+        const relevance = e.isSeed ? "direct match" : `${e.hopDistance}-hop`;
+        const lastSeen = e.lastSeen.split("T")[0] ?? e.lastSeen;
+        sections.push(`- **${e.name}** (${relevance}, score ${e.score.toFixed(2)}) — ${e.description} [last active: ${lastSeen}]`);
+      }
+      sections.push("");
     }
   }
 
   if (result.relations.length > 0) {
-    sections.push("\n## Relationships\n");
-    for (const r of result.relations.slice(0, 15)) {
-      sections.push(
-        `- ${r.sourceName} —[${r.type}]→ ${r.targetName}: ${r.description} (weight: ${r.weight})`,
-      );
+    sections.push("## Relationships\n");
+    // Group relations by type for clarity
+    const relByType = new Map<string, typeof result.relations>();
+    for (const r of result.relations) {
+      const list = relByType.get(r.type) ?? [];
+      list.push(r);
+      relByType.set(r.type, list);
     }
-  }
 
-  if (result.textUnits.length > 0) {
-    sections.push("\n## Supporting Evidence\n");
-    for (const tu of result.textUnits) {
-      sections.push(`### Commits ${tu.dateRange.start} to ${tu.dateRange.end}\n${tu.content}\n`);
+    for (const [type, rels] of relByType) {
+      sections.push(`**${type}**`);
+      for (const r of rels) {
+        const desc = r.description ? ` — ${r.description}` : "";
+        sections.push(`- ${r.sourceName} → ${r.targetName} (weight: ${r.weight})${desc}`);
+      }
+      sections.push("");
     }
   }
 
   if (result.communities.length > 0) {
-    sections.push("\n## Community Context\n");
+    sections.push("## Community Context\n");
     for (const c of result.communities) {
       sections.push(`### ${c.title}\n${c.summary}\n`);
+    }
+  }
+
+  if (result.textUnits.length > 0) {
+    sections.push("## Supporting Evidence (commit history)\n");
+    for (const tu of result.textUnits) {
+      const start = tu.dateRange.start.split("T")[0] ?? tu.dateRange.start;
+      const end = tu.dateRange.end.split("T")[0] ?? tu.dateRange.end;
+      sections.push(`### ${start} to ${end}\n\`\`\`\n${tu.content}\n\`\`\`\n`);
     }
   }
 

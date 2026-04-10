@@ -10,7 +10,7 @@ describe("loadConfig", () => {
 
     expect(config.branch).toBe("HEAD");
     expect(config.commitsPerChunk).toBe(10);
-    expect(config.maxChunkTokens).toBe(2000);
+    expect(config.maxChunkTokens).toBe(5000);
     expect(config.provider).toBe("auto");
     expect(config.maxConcurrency).toBe(5);
     expect(config.maxRetries).toBe(3);

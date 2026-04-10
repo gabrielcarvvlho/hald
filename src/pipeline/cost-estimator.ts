@@ -17,11 +17,13 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
   "claude-haiku-4-5-20251001": { input: 0.8, output: 4.0 },
   // OpenAI
+  "gpt-5.4-mini": { input: 0.75, output: 4.5 },
   "gpt-4.1-mini": { input: 0.4, output: 1.6 },
   "gpt-4.1": { input: 2.0, output: 8.0 },
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
   "gpt-4o": { input: 2.5, output: 10.0 },
   // Google
+  "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.5 },
   "gemini-2.5-flash": { input: 0.15, output: 0.6 },
   "gemini-2.5-pro": { input: 1.25, output: 10.0 },
 };
@@ -29,8 +31,8 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 /** Default model for each provider — used when model is not specified. */
 const DEFAULT_MODELS: Record<string, string> = {
   anthropic: "claude-sonnet-4-20250514",
-  openai: "gpt-4.1-mini",
-  google: "gemini-2.5-flash",
+  openai: "gpt-5.4-mini",
+  google: "gemini-3.1-flash-lite-preview",
 };
 
 export interface CostEstimate {
