@@ -26,3 +26,5 @@ coverage/
 progress/
 docs/_internal/
 .superpowers/
+
+.git-oracle/

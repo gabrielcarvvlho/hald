@@ -17,6 +17,8 @@ export interface ExpertResult {
   score: number;
   /** Sum of AUTHORED + MODIFIED relation weights (approximate commit involvement). */
   commitCount: number;
+  /** commitCount / total module frequency (0–1 range). */
+  commitPercentage: number;
   lastActive: string;
   modules: string[];
 }
@@ -96,6 +98,9 @@ export function findExperts(store: Store, modulePath: string, topN = 5): ExpertR
     }
   }
 
+  // Total module frequency for commitPercentage calculation
+  const totalModuleFrequency = modules.reduce((sum, m) => sum + (m.frequency || 0), 0) || 1;
+
   // Score: weight × recency multiplier
   const now = new Date();
   const results: ExpertResult[] = [];
@@ -116,6 +121,7 @@ export function findExperts(store: Store, modulePath: string, topN = 5): ExpertR
       person,
       score: Math.round(data.weight * recencyMultiplier * 100) / 100,
       commitCount: data.weight, // weight ≈ commit involvement count
+      commitPercentage: Math.round((data.weight / totalModuleFrequency) * 10000) / 10000,
       lastActive: data.lastSeen,
       modules: [...data.modules],
     });
