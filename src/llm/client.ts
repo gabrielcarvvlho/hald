@@ -127,10 +127,17 @@ export async function createClient(config: LLMClientConfig): Promise<LLMClient> 
     }
   }
 
-  const rpm =
-    process.env.HALD_RATE_LIMIT !== undefined
-      ? Number(process.env.HALD_RATE_LIMIT)
-      : DEFAULT_RPM[provider];
+  const rawRpm = process.env.HALD_RATE_LIMIT !== undefined
+    ? Number(process.env.HALD_RATE_LIMIT)
+    : DEFAULT_RPM[provider];
+  const rpm = Number.isFinite(rawRpm) && rawRpm > 0 ? rawRpm : DEFAULT_RPM[provider];
+
+  if (rawRpm !== rpm) {
+    logger.warn("Invalid HALD_RATE_LIMIT, using default", {
+      raw: process.env.HALD_RATE_LIMIT,
+      fallback: rpm,
+    });
+  }
 
   logger.debug("Wrapping client with RateLimiter", { provider, rpm });
   const limiter = new RateLimiter(rpm);

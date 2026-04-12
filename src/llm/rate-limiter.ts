@@ -24,6 +24,9 @@ export class RateLimiter {
   private queue: Promise<void> = Promise.resolve();
 
   constructor(requestsPerMinute: number) {
+    if (!Number.isFinite(requestsPerMinute) || requestsPerMinute <= 0) {
+      throw new Error(`RateLimiter: requestsPerMinute must be positive, got ${requestsPerMinute}`);
+    }
     this.burstSize = Math.ceil(requestsPerMinute / 60);
     this.tokens = this.burstSize;
     // Milliseconds between token refills (one token per interval)

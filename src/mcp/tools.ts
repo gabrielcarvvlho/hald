@@ -25,7 +25,7 @@ import { globalSearch, classifyQuery } from "../query/global-search.js";
 import type { GlobalSearchResult } from "../query/global-search.js";
 import type { QueryEmbedder } from "../query/similarity.js";
 import { EntityType, RelationType } from "../shared/types.js";
-import type { Entity, TextUnit } from "../shared/types.js";
+import type { Entity, Relation, TextUnit } from "../shared/types.js";
 
 type GetStore = () => Store;
 type GetQueryEmbedder = () => Promise<QueryEmbedder>;
@@ -234,14 +234,17 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
           queryEmbedder,
         });
 
-        // 2. Broader search for context (modules, people, tech involved)
-        const broadResult = await localSearch(store, {
-          query: topic,
-          maxEntities: 15,
-          maxRelations: 50,
-          maxTextUnits: 20,
-          queryEmbedder,
-        });
+        // 2. Broader search only if decision-filtered search found few results
+        const needsBroadSearch = decisionResult.entities.length < 3;
+        const broadResult = needsBroadSearch
+          ? await localSearch(store, {
+              query: topic,
+              maxEntities: 15,
+              maxRelations: 50,
+              maxTextUnits: 20,
+              queryEmbedder,
+            })
+          : { entities: [], relations: [], textUnits: [], communities: [], totalEntityMatches: 0, totalRelations: 0, query: topic };
 
         // No signal at all
         if (decisionResult.entities.length === 0 && broadResult.entities.length === 0) {
@@ -285,7 +288,7 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
 
         // 6. DECIDED relations: PERSON → DECISION (who made the call)
         const decisionIds = new Set(decisionEntities.map((d) => d.id));
-        const decidedRelations: Array<{ id: string; sourceId: string; targetId: string; weight: number; description: string }> = dedupedRelations.filter(
+        const decidedRelations: Relation[] = dedupedRelations.filter(
           (r) => r.type === RelationType.DECIDED && decisionIds.has(r.targetId),
         );
 
@@ -294,7 +297,8 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
         for (const d of decisionEntities) {
           const rels = store.getRelationsForEntity(d.id);
           for (const r of rels) {
-            if (r.type === RelationType.DECIDED && !relSeen.has(r.id)) {
+            // Validate direction: DECIDED is always PERSON → DECISION (sourceId = person)
+            if (r.type === RelationType.DECIDED && decisionIds.has(r.targetId) && !relSeen.has(r.id)) {
               relSeen.add(r.id);
               decidedRelations.push(r);
               // Resolve the person entity if not already in map
@@ -311,17 +315,14 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
         }
 
         // 7. SUPERSEDES relations: DECISION → DECISION (evolution chain)
-        const supersededRelations = dedupedRelations.filter(
+        const supersededRelations: Relation[] = dedupedRelations.filter(
           (r) =>
             r.type === RelationType.SUPERSEDES &&
             (decisionIds.has(r.sourceId) || decisionIds.has(r.targetId)),
         );
 
-        // 8. Affected modules: AUTHORED or MODIFIED from decision-maker persons
-        const decisionMakerIds = new Set([
-          ...decidedRelations.map((r) => r.sourceId),
-          ...personEntities.map((p) => p.id),
-        ]);
+        // 8. Affected modules: AUTHORED or MODIFIED from actual decision makers only
+        const decisionMakerIds = new Set(decidedRelations.map((r) => r.sourceId));
         const affectedModuleIds = new Set<string>();
         for (const r of dedupedRelations) {
           if (
@@ -1396,8 +1397,8 @@ function formatGlobalResult(result: GlobalSearchResult): string {
 interface DecisionTraceInput {
   topic: string;
   decisionEntities: Entity[];
-  decidedRelations: Array<{ sourceId: string; targetId: string; weight: number; description: string }>;
-  supersededRelations: Array<{ sourceId: string; targetId: string; description: string }>;
+  decidedRelations: Relation[];
+  supersededRelations: Relation[];
   affectedModules: Entity[];
   techEntities: Entity[];
   timeline: TextUnit[];
@@ -1479,17 +1480,16 @@ function formatDecisionTrace(input: DecisionTraceInput): string {
     sections.push("");
   }
 
-  // Superseded Decisions
-  sections.push("### Superseded Decisions\n");
+  // Superseded Decisions (only show if present)
   if (supersededRelations.length > 0) {
+    sections.push("### Superseded Decisions\n");
     for (const r of supersededRelations) {
       const from = entityMap.get(r.sourceId)?.name ?? r.sourceId;
       const to = entityMap.get(r.targetId)?.name ?? r.targetId;
       const desc = r.description ? ` — ${r.description}` : "";
       sections.push(`- **${from}** supersedes **${to}**${desc}`);
     }
-  } else {
-    sections.push("(none found)");
+    sections.push("");
   }
 
   return sections.join("\n");
