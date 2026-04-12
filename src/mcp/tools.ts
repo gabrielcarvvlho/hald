@@ -24,7 +24,8 @@ import type { LocalSearchResult } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
 import type { GlobalSearchResult } from "../query/global-search.js";
 import type { QueryEmbedder } from "../query/similarity.js";
-import { EntityType } from "../shared/types.js";
+import { EntityType, RelationType } from "../shared/types.js";
+import type { Entity, TextUnit } from "../shared/types.js";
 
 type GetStore = () => Store;
 type GetQueryEmbedder = () => Promise<QueryEmbedder>;
@@ -223,40 +224,138 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
         const store = getStore();
         const queryEmbedder = await getQueryEmbedder();
 
-        // Search for DECISION entities matching the topic
-        const result = await localSearch(store, {
+        // 1. Search for DECISION entities matching the topic
+        const decisionResult = await localSearch(store, {
           query: topic,
-          maxEntities: 15,
+          maxEntities: 10,
           maxRelations: 50,
           maxTextUnits: 20,
           entityTypes: [EntityType.DECISION],
           queryEmbedder,
         });
 
-        // Also do a broader search if no decisions found
-        if (result.entities.length === 0) {
-          const broader = await localSearch(store, {
-            query: topic,
-            maxEntities: 15,
-            maxRelations: 50,
-            maxTextUnits: 20,
-            queryEmbedder,
-          });
+        // 2. Broader search for context (modules, people, tech involved)
+        const broadResult = await localSearch(store, {
+          query: topic,
+          maxEntities: 15,
+          maxRelations: 50,
+          maxTextUnits: 20,
+          queryEmbedder,
+        });
+
+        // No signal at all
+        if (decisionResult.entities.length === 0 && broadResult.entities.length === 0) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: formatLocalResult(broader),
+                text: `No decision history found for "${topic}". Try indexing the repository first with hald_index, or rephrase the topic.`,
               },
             ],
           };
         }
 
+        // 3. Collect all entity IDs from both results for relation traversal
+        const allEntityMap = new Map<string, Entity>();
+        for (const e of [...decisionResult.entities, ...broadResult.entities]) {
+          allEntityMap.set(e.id, e);
+        }
+
+        // 4. Collect all relations from both results
+        const allRelations = [...decisionResult.relations, ...broadResult.relations];
+        const relSeen = new Set<string>();
+        const dedupedRelations = allRelations.filter((r) => {
+          if (relSeen.has(r.id)) return false;
+          relSeen.add(r.id);
+          return true;
+        });
+
+        // 5. Categorise entities by role
+        const decisionEntities: Entity[] = [];
+        const personEntities: Entity[] = [];
+        const moduleEntities: Entity[] = [];
+        const techEntities: Entity[] = [];
+
+        for (const e of allEntityMap.values()) {
+          if (e.type === EntityType.DECISION) decisionEntities.push(e);
+          else if (e.type === EntityType.PERSON) personEntities.push(e);
+          else if (e.type === EntityType.MODULE) moduleEntities.push(e);
+          else if (e.type === EntityType.TECHNOLOGY) techEntities.push(e);
+        }
+
+        // 6. DECIDED relations: PERSON → DECISION (who made the call)
+        const decisionIds = new Set(decisionEntities.map((d) => d.id));
+        const decidedRelations: Array<{ id: string; sourceId: string; targetId: string; weight: number; description: string }> = dedupedRelations.filter(
+          (r) => r.type === RelationType.DECIDED && decisionIds.has(r.targetId),
+        );
+
+        // Also pull DECIDED relations directly from the store for decision entities
+        // that may not be in the broad result's relation set
+        for (const d of decisionEntities) {
+          const rels = store.getRelationsForEntity(d.id);
+          for (const r of rels) {
+            if (r.type === RelationType.DECIDED && !relSeen.has(r.id)) {
+              relSeen.add(r.id);
+              decidedRelations.push(r);
+              // Resolve the person entity if not already in map
+              const personId = r.sourceId;
+              if (!allEntityMap.has(personId)) {
+                const person = store.getEntity(personId);
+                if (person) {
+                  allEntityMap.set(personId, person);
+                  personEntities.push(person);
+                }
+              }
+            }
+          }
+        }
+
+        // 7. SUPERSEDES relations: DECISION → DECISION (evolution chain)
+        const supersededRelations = dedupedRelations.filter(
+          (r) =>
+            r.type === RelationType.SUPERSEDES &&
+            (decisionIds.has(r.sourceId) || decisionIds.has(r.targetId)),
+        );
+
+        // 8. Affected modules: AUTHORED or MODIFIED from decision-maker persons
+        const decisionMakerIds = new Set([
+          ...decidedRelations.map((r) => r.sourceId),
+          ...personEntities.map((p) => p.id),
+        ]);
+        const affectedModuleIds = new Set<string>();
+        for (const r of dedupedRelations) {
+          if (
+            (r.type === RelationType.AUTHORED || r.type === RelationType.MODIFIED) &&
+            decisionMakerIds.has(r.sourceId)
+          ) {
+            affectedModuleIds.add(r.targetId);
+          }
+        }
+        const affectedModules = moduleEntities.filter((m) => affectedModuleIds.has(m.id));
+
+        // 9. Timeline: collect and dedupe text units from both results
+        const tuMap = new Map<string, TextUnit>();
+        for (const tu of [...decisionResult.textUnits, ...broadResult.textUnits]) {
+          tuMap.set(tu.id, tu);
+        }
+        const timeline = [...tuMap.values()].sort((a, b) =>
+          a.dateRange.start.localeCompare(b.dateRange.start),
+        );
+
         return {
           content: [
             {
               type: "text" as const,
-              text: formatLocalResult(result),
+              text: formatDecisionTrace({
+                topic,
+                decisionEntities,
+                decidedRelations,
+                supersededRelations,
+                affectedModules,
+                techEntities,
+                timeline,
+                entityMap: allEntityMap,
+              }),
             },
           ],
         };
@@ -1291,5 +1390,107 @@ function formatGlobalResult(result: GlobalSearchResult): string {
   for (const c of result.communities) {
     sections.push(`### ${c.title}\n\n${c.summary}\n`);
   }
+  return sections.join("\n");
+}
+
+interface DecisionTraceInput {
+  topic: string;
+  decisionEntities: Entity[];
+  decidedRelations: Array<{ sourceId: string; targetId: string; weight: number; description: string }>;
+  supersededRelations: Array<{ sourceId: string; targetId: string; description: string }>;
+  affectedModules: Entity[];
+  techEntities: Entity[];
+  timeline: TextUnit[];
+  entityMap: Map<string, Entity>;
+}
+
+function formatDecisionTrace(input: DecisionTraceInput): string {
+  const {
+    topic,
+    decisionEntities,
+    decidedRelations,
+    supersededRelations,
+    affectedModules,
+    techEntities,
+    timeline,
+    entityMap,
+  } = input;
+
+  const sections: string[] = [`## Decision Trace: "${topic}"\n`];
+
+  // Decision Makers
+  const makerIds = new Set(decidedRelations.map((r) => r.sourceId));
+  const makers = [...makerIds]
+    .map((id) => entityMap.get(id))
+    .filter((e): e is Entity => e !== undefined);
+
+  if (makers.length > 0) {
+    sections.push("### Decision Makers\n");
+    for (const maker of makers) {
+      const rel = decidedRelations.find((r) => r.sourceId === maker.id);
+      const weight = rel ? ` (weight: ${rel.weight})` : "";
+      const desc = rel?.description ? ` — ${rel.description}` : maker.description ? ` — ${maker.description}` : "";
+      sections.push(`- **${maker.name}**${desc}${weight}`);
+    }
+    sections.push("");
+  }
+
+  // Core Decisions
+  if (decisionEntities.length > 0) {
+    sections.push("### Decisions\n");
+    for (const d of decisionEntities) {
+      const firstSeen = d.firstSeen.split("T")[0] ?? d.firstSeen;
+      const lastSeen = d.lastSeen.split("T")[0] ?? d.lastSeen;
+      const period = firstSeen === lastSeen ? firstSeen : `${firstSeen} to ${lastSeen}`;
+      sections.push(`- **${d.name}** (${period})${d.description ? ` — ${d.description}` : ""}`);
+    }
+    sections.push("");
+  }
+
+  // Timeline
+  if (timeline.length > 0) {
+    sections.push("### Timeline\n");
+    for (const tu of timeline) {
+      const start = tu.dateRange.start.split("T")[0] ?? tu.dateRange.start;
+      const end = tu.dateRange.end.split("T")[0] ?? tu.dateRange.end;
+      const period = start === end ? `**${start}**` : `**${start} to ${end}**`;
+      // Trim content to a brief summary (first non-empty line)
+      const firstLine = tu.content.split("\n").find((l) => l.trim().length > 0) ?? tu.content;
+      const snippet = firstLine.length > 200 ? firstLine.slice(0, 200) + "…" : firstLine;
+      sections.push(`${period}\n${snippet}\n`);
+    }
+  }
+
+  // Affected Modules
+  if (affectedModules.length > 0) {
+    sections.push("### Affected Modules\n");
+    for (const m of affectedModules) {
+      sections.push(`- **${m.name}**${m.description ? ` — ${m.description}` : ""} (${m.frequency} changes)`);
+    }
+    sections.push("");
+  }
+
+  // Technologies
+  if (techEntities.length > 0) {
+    sections.push("### Technologies\n");
+    for (const t of techEntities) {
+      sections.push(`- **${t.name}**${t.description ? ` — ${t.description}` : ""}`);
+    }
+    sections.push("");
+  }
+
+  // Superseded Decisions
+  sections.push("### Superseded Decisions\n");
+  if (supersededRelations.length > 0) {
+    for (const r of supersededRelations) {
+      const from = entityMap.get(r.sourceId)?.name ?? r.sourceId;
+      const to = entityMap.get(r.targetId)?.name ?? r.targetId;
+      const desc = r.description ? ` — ${r.description}` : "";
+      sections.push(`- **${from}** supersedes **${to}**${desc}`);
+    }
+  } else {
+    sections.push("(none found)");
+  }
+
   return sections.join("\n");
 }
