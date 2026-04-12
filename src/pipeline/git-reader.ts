@@ -2,6 +2,28 @@ import { simpleGit } from "simple-git";
 import type { CommitData, FileChange } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 
+// Extensions whose diffs are noise — skip to save tokens
+const DIFF_SKIP_EXTENSIONS = new Set([
+  ".lock", ".sum", ".min.js", ".min.css", ".map", ".snap",
+  ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+  ".woff", ".woff2", ".ttf", ".eot",
+  ".pb", ".pyc", ".pyo", ".class", ".o", ".so", ".dylib",
+]);
+
+const DIFF_SKIP_PATHS = [
+  "node_modules/", "vendor/", "dist/", "build/", ".next/",
+  "__pycache__/", ".git/",
+];
+
+function shouldSkipDiff(filePath: string): boolean {
+  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+  if (DIFF_SKIP_EXTENSIONS.has(ext)) return true;
+  for (const prefix of DIFF_SKIP_PATHS) {
+    if (filePath.startsWith(prefix) || filePath.includes(`/${prefix}`)) return true;
+  }
+  return false;
+}
+
 export interface GitReaderOptions {
   repoPath: string;
   branch?: string;
@@ -39,13 +61,29 @@ export async function* readCommits(options: GitReaderOptions): AsyncIterable<Com
     ...args,
   ]);
 
+  // Call 3: diffs (patch) for non-merge commits
+  const rawPatch = await git.raw([
+    "log",
+    "--reverse",
+    `--format=__COMMIT__%H`,
+    "-p",
+    "--no-merges",
+    "--diff-filter=AMRT",
+    ...args,
+  ]);
+
   const commits = parseNameStatusLog(rawNameStatus);
   const numstatMap = parseNumstatLog(rawNumstat);
+  const patchMap = parsePatchLog(rawPatch);
 
   for (const commit of commits) {
     const stats = numstatMap.get(commit.hash);
     if (stats) {
       commit.filesChanged = mergeFileInfo(commit.filesChanged, stats);
+    }
+    const patches = patchMap.get(commit.hash);
+    if (patches) {
+      commit.filesChanged = mergeDiffs(commit.filesChanged, patches);
     }
     yield commit;
   }
@@ -228,5 +266,85 @@ function mergeFileInfo(statusFiles: FileChange[], numstatFiles: NumstatEntry[]):
       additions: stats?.additions ?? f.additions,
       deletions: stats?.deletions ?? f.deletions,
     };
+  });
+}
+
+// ================================================================
+// Patch (diff) parsing
+// ================================================================
+
+interface PatchEntry {
+  path: string;
+  diff: string;
+}
+
+function parsePatchLog(raw: string): Map<string, PatchEntry[]> {
+  if (!raw.trim()) return new Map();
+
+  const result = new Map<string, PatchEntry[]>();
+  const blocks = raw.split("__COMMIT__").filter(Boolean);
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const hash = lines[0]!.trim();
+    if (!hash) continue;
+
+    const patches: PatchEntry[] = [];
+    let currentPath: string | null = null;
+    let currentLines: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i]!;
+
+      if (line.startsWith("diff --git ")) {
+        // Flush previous patch
+        if (currentPath !== null) {
+          patches.push({ path: currentPath, diff: currentLines.join("\n") });
+        }
+
+        // Extract path from "diff --git a/... b/<path>"
+        const match = line.match(/^diff --git a\/.+ b\/(.+)$/);
+        const filePath = match?.[1] ?? "";
+
+        if (shouldSkipDiff(filePath)) {
+          currentPath = null;
+          currentLines = [];
+        } else {
+          currentPath = filePath;
+          currentLines = [line];
+        }
+        continue;
+      }
+
+      if (currentPath !== null) {
+        currentLines.push(line);
+      }
+    }
+
+    // Flush last patch in block
+    if (currentPath !== null) {
+      patches.push({ path: currentPath, diff: currentLines.join("\n") });
+    }
+
+    if (patches.length > 0) {
+      result.set(hash, patches);
+    }
+  }
+
+  return result;
+}
+
+function mergeDiffs(files: FileChange[], patches: PatchEntry[]): FileChange[] {
+  const patchMap = new Map<string, PatchEntry>();
+  for (const p of patches) {
+    patchMap.set(p.path, p);
+  }
+
+  return files.map((f) => {
+    const patch = patchMap.get(f.path) ?? patchMap.get(f.oldPath ?? "");
+    if (patch) {
+      return { ...f, diff: patch.diff };
+    }
+    return f;
   });
 }
