@@ -14,7 +14,7 @@ describe("MCP resources — populated index", () => {
   let server: McpServer;
 
   beforeAll(async () => {
-    ({ db, store } = createPopulatedStore());
+    ({ db, store } = await createPopulatedStore());
 
     server = new McpServer({ name: "hald-test", version: "0.1.0" });
     const getStore = () => store;

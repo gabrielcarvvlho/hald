@@ -20,6 +20,7 @@ import {
   findKnowledgeSilos,
 } from "../query/graph-ops.js";
 import { localSearch } from "../query/local-search.js";
+import type { LocalSearchResult } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
 import { EntityType } from "../shared/types.js";
 
@@ -78,7 +79,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           };
         }
 
-        const result = localSearch(store, {
+        const result = await localSearch(store, {
           query: question,
           maxEntities: 15,
           maxRelations: 50,
@@ -217,7 +218,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
         const store = getStore();
 
         // Search for DECISION entities matching the topic
-        const result = localSearch(store, {
+        const result = await localSearch(store, {
           query: topic,
           maxEntities: 15,
           maxRelations: 50,
@@ -227,7 +228,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
 
         // Also do a broader search if no decisions found
         if (result.entities.length === 0) {
-          const broader = localSearch(store, {
+          const broader = await localSearch(store, {
             query: topic,
             maxEntities: 15,
             maxRelations: 50,
@@ -1191,7 +1192,7 @@ function makeBar(pct: number): string {
   return "\u2588".repeat(filled) + "\u2591".repeat(10 - filled);
 }
 
-function formatLocalResult(result: ReturnType<typeof localSearch>): string {
+function formatLocalResult(result: LocalSearchResult): string {
   const sections: string[] = [];
 
   // Group entities by type for clearer reading

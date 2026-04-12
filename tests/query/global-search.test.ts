@@ -8,8 +8,8 @@ describe("globalSearch", () => {
   let db: Database.Database;
   let store: Store;
 
-  beforeEach(() => {
-    ({ db, store } = createPopulatedStore());
+  beforeEach(async () => {
+    ({ db, store } = await createPopulatedStore());
   });
   afterEach(() => db.close());
 

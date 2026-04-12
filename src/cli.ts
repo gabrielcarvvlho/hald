@@ -204,7 +204,7 @@ program
           }
         }
       } else {
-        const result = localSearch(store, {
+        const result = await localSearch(store, {
           query: question,
           maxEntities: 10,
           maxRelations: 20,

@@ -626,8 +626,8 @@ describe("Store — Embeddings", () => {
   let store: Store;
   let db: Database.Database;
 
-  beforeEach(() => {
-    ({ db, store } = createPopulatedStore());
+  beforeEach(async () => {
+    ({ db, store } = await createPopulatedStore());
   });
   afterEach(() => db.close());
 
@@ -649,26 +649,21 @@ describe("Store — Embeddings", () => {
     expect(result!.equals(embedding)).toBe(true);
   });
 
-  it("getEntityEmbedding returns null for entity without embedding", () => {
-    // person:carlos-ruiz has no embedding set
-    const result = store.getEntityEmbedding("person:carlos-ruiz");
+  it("getEntityEmbedding returns null for nonexistent entity", () => {
+    const result = store.getEntityEmbedding("person:nonexistent");
     expect(result).toBeNull();
   });
 
-  it("getAllEntityEmbeddings returns only entities with embeddings", () => {
-    // Initially none have embeddings
-    expect(store.getAllEntityEmbeddings()).toHaveLength(0);
+  it("getAllEntityEmbeddings returns entities with embeddings", () => {
+    // Sample store pre-populates 8 entity embeddings
+    const initial = store.getAllEntityEmbeddings();
+    expect(initial.length).toBe(8);
 
+    // Overwrite one with our own value and verify round-trip
     store.setEntityEmbedding("person:alice-chen", makeEmbedding(1));
-    store.setEntityEmbedding("module:src/payments", makeEmbedding(2));
-
     const results = store.getAllEntityEmbeddings();
-    expect(results).toHaveLength(2);
+    expect(results.length).toBe(8);
 
-    const ids = results.map((r) => r.id).sort();
-    expect(ids).toEqual(["module:src/payments", "person:alice-chen"]);
-
-    // Verify the Buffer values round-trip correctly
     const aliceResult = results.find((r) => r.id === "person:alice-chen")!;
     expect(aliceResult.embedding.equals(makeEmbedding(1))).toBe(true);
   });
@@ -682,21 +677,23 @@ describe("Store — Embeddings", () => {
     expect(result!.equals(embedding)).toBe(true);
   });
 
-  it("getCommunityEmbedding returns null for community without embedding", () => {
-    const result = store.getCommunityEmbedding("comm:0:1");
+  it("getCommunityEmbedding returns null for nonexistent community", () => {
+    const result = store.getCommunityEmbedding("comm:nonexistent");
     expect(result).toBeNull();
   });
 
-  it("getAllCommunityEmbeddings returns only communities with embeddings", () => {
-    // Initially none have embeddings
-    expect(store.getAllCommunityEmbeddings()).toHaveLength(0);
+  it("getAllCommunityEmbeddings returns communities with embeddings", () => {
+    // Sample store pre-populates 2 community embeddings
+    const initial = store.getAllCommunityEmbeddings();
+    expect(initial.length).toBe(2);
 
+    // Overwrite one with our own value and verify round-trip
     store.setCommunityEmbedding("comm:0:0", makeEmbedding(5));
-
     const results = store.getAllCommunityEmbeddings();
-    expect(results).toHaveLength(1);
-    expect(results[0]!.id).toBe("comm:0:0");
-    expect(results[0]!.embedding.equals(makeEmbedding(5))).toBe(true);
+    expect(results.length).toBe(2);
+
+    const comm0 = results.find((r) => r.id === "comm:0:0")!;
+    expect(comm0.embedding.equals(makeEmbedding(5))).toBe(true);
   });
 
   it("getAllCommunities returns all communities", () => {

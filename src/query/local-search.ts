@@ -1,5 +1,6 @@
 import type { Store } from "../store/queries.js";
 import type { Entity, EntityType, Relation, TextUnit, Community } from "../shared/types.js";
+import { QueryEmbedder, rankBuffersBySimilarity } from "./similarity.js";
 
 // ================================================================
 // Types
@@ -19,6 +20,7 @@ export interface LocalSearchOptions {
   maxTextUnitTokens?: number;
   entityTypes?: EntityType[];
   rankingWeights?: Partial<RankingWeights>;
+  queryEmbedder?: QueryEmbedder;
 }
 
 export interface ScoredEntity extends Entity {
@@ -53,6 +55,14 @@ const DEFAULT_WEIGHTS: RankingWeights = {
   degree: 0.2,
 };
 
+// When embeddings are available, shift weight toward semantic signal
+const HYBRID_WEIGHTS: RankingWeights = {
+  fts: 0.25,
+  recency: 0.1,
+  degree: 0.05,
+};
+const SEMANTIC_WEIGHT = 0.6;
+
 const SEED_ENTITY_RATIO = 0.6; // Fraction of maxEntities reserved for seeds (rest for neighbors)
 const MAX_RELATIONS_PER_SEED = 15;
 const MIN_RELATION_WEIGHT = 1.0;
@@ -72,7 +82,7 @@ const HOP2_SCORE_DECAY = 0.25; // Max score for 2-hop neighbors
  * expanding 1-2 hops via budget-aware relation traversal, and returning
  * supporting evidence with token-budgeted text units.
  */
-export function localSearch(store: Store, options: LocalSearchOptions): LocalSearchResult {
+export async function localSearch(store: Store, options: LocalSearchOptions): Promise<LocalSearchResult> {
   const {
     query,
     maxEntities = 10,
@@ -83,7 +93,6 @@ export function localSearch(store: Store, options: LocalSearchOptions): LocalSea
     rankingWeights,
   } = options;
 
-  const weights: RankingWeights = { ...DEFAULT_WEIGHTS, ...rankingWeights };
   const now = new Date();
 
   // 1. FTS search with BM25 column-weighted ranking
@@ -92,6 +101,36 @@ export function localSearch(store: Store, options: LocalSearchOptions): LocalSea
   if (entityTypes && entityTypes.length > 0) {
     const typeSet = new Set(entityTypes);
     rankedSeeds = rankedSeeds.filter((r) => typeSet.has(r.entity.type));
+  }
+
+  // Embedding-based candidates (if available)
+  let semanticScores = new Map<string, number>();
+  const queryEmbedding = options.queryEmbedder
+    ? await options.queryEmbedder.embedQuery(query)
+    : null;
+
+  if (queryEmbedding) {
+    const allEmbeddings = store.getAllEntityEmbeddings();
+    if (allEmbeddings.length > 0) {
+      const ranked = rankBuffersBySimilarity(queryEmbedding, allEmbeddings);
+      for (const item of ranked.slice(0, maxEntities * 3)) {
+        semanticScores.set(item.id, item.similarity);
+      }
+    }
+  }
+
+  const useHybrid = semanticScores.size > 0;
+
+  // Merge semantic-only candidates into the seed list
+  if (useHybrid) {
+    const ftsIds = new Set(rankedSeeds.map((r) => r.entity.id));
+    for (const [entityId, simScore] of semanticScores) {
+      if (ftsIds.has(entityId)) continue;
+      const entity = store.getEntity(entityId);
+      if (!entity) continue;
+      if (entityTypes && entityTypes.length > 0 && !entityTypes.includes(entity.type)) continue;
+      rankedSeeds.push({ entity, ftsRank: 0 });
+    }
   }
 
   const totalEntityMatches = rankedSeeds.length;
@@ -117,6 +156,10 @@ export function localSearch(store: Store, options: LocalSearchOptions): LocalSea
   }
 
   // 3. Composite scoring: BM25 × recency × degree centrality
+  const weights: RankingWeights = {
+    ...(useHybrid ? HYBRID_WEIGHTS : DEFAULT_WEIGHTS),
+    ...rankingWeights,
+  };
   const maxDegree = Math.max(...[...seedRelationsMap.values()].map((r) => r.length), 1);
 
   // Adaptive BM25 normalization: divide by max absolute score in result set
@@ -126,7 +169,7 @@ export function localSearch(store: Store, options: LocalSearchOptions): LocalSea
     const degree = seedRelationsMap.get(entity.id)?.length ?? 0;
     return {
       ...entity,
-      score: computeScore(entity, ftsRank, degree, maxDegree, now, weights, maxAbsFtsRank),
+      score: computeScore(entity, ftsRank, degree, maxDegree, now, weights, maxAbsFtsRank, semanticScores.get(entity.id)),
       isSeed: true,
       hopDistance: 0,
       degree,
@@ -179,6 +222,7 @@ function computeScore(
   now: Date,
   weights: RankingWeights,
   maxAbsFtsRank: number,
+  semanticScore?: number,
 ): number {
   // FTS: adaptive normalization — divide by max absolute BM25 score in the result set
   // BM25 scores are negative (more negative = better match), so -rank/maxAbs maps to [0, 1]
@@ -192,7 +236,13 @@ function computeScore(
   const degreeScore =
     maxDegree > 1 ? Math.log(1 + degree) / Math.log(1 + maxDegree) : degree > 0 ? 1 : 0;
 
-  return weights.fts * ftsScore + weights.recency * recencyScore + weights.degree * degreeScore;
+  let score = weights.fts * ftsScore + weights.recency * recencyScore + weights.degree * degreeScore;
+
+  if (semanticScore !== undefined) {
+    score += SEMANTIC_WEIGHT * Math.max(0, semanticScore);
+  }
+
+  return score;
 }
 
 // ================================================================

@@ -5,7 +5,7 @@ import { EntityType, RelationType } from "../../src/shared/types.js";
 import type { Entity, Relation, TextUnit, Community } from "../../src/shared/types.js";
 
 /** Creates an in-memory store populated with sample data for query tests. */
-export function createPopulatedStore(): { db: Database.Database; store: Store } {
+export async function createPopulatedStore(): Promise<{ db: Database.Database; store: Store }> {
   const db = openDatabase(":memory:");
   const store = new Store(db);
 
@@ -277,6 +277,20 @@ export function createPopulatedStore(): { db: Database.Database; store: Store } 
   // === Meta ===
   store.setMeta("last_indexed_commit", "bbb222");
   store.setMeta("last_indexed_at", "2024-06-15T10:00:00Z");
+
+  // === Embeddings for testing hybrid search ===
+  const { embeddingToBuffer } = await import("../../src/llm/embeddings.js");
+  store.setEntityEmbedding("module:src/payments", embeddingToBuffer(new Float32Array([0.9, 0.1, 0.0, 0.0])));
+  store.setEntityEmbedding("module:src/billing", embeddingToBuffer(new Float32Array([0.8, 0.2, 0.0, 0.0])));
+  store.setEntityEmbedding("technology:grpc", embeddingToBuffer(new Float32Array([0.7, 0.1, 0.2, 0.0])));
+  store.setEntityEmbedding("person:alice-chen", embeddingToBuffer(new Float32Array([0.6, 0.1, 0.1, 0.2])));
+  store.setEntityEmbedding("person:bob-martinez", embeddingToBuffer(new Float32Array([0.5, 0.3, 0.0, 0.2])));
+  store.setEntityEmbedding("module:src/middleware", embeddingToBuffer(new Float32Array([0.1, 0.1, 0.8, 0.0])));
+  store.setEntityEmbedding("decision:rest-to-grpc-migration", embeddingToBuffer(new Float32Array([0.7, 0.0, 0.2, 0.1])));
+  store.setEntityEmbedding("person:carlos-ruiz", embeddingToBuffer(new Float32Array([0.1, 0.1, 0.1, 0.7])));
+  store.setCommunityEmbedding("comm:0:0", embeddingToBuffer(new Float32Array([0.8, 0.1, 0.1, 0.0])));
+  store.setCommunityEmbedding("comm:0:1", embeddingToBuffer(new Float32Array([0.6, 0.3, 0.0, 0.1])));
+  store.setMeta("embedding_dimensions", "4");
 
   return { db, store };
 }

@@ -16,7 +16,7 @@ describe("MCP integration", () => {
 
   beforeAll(async () => {
     // 1. Populate an in-memory store
-    ({ db, store } = createPopulatedStore());
+    ({ db, store } = await createPopulatedStore());
 
     // 2. Create MCP server and register tools/resources
     server = new McpServer({ name: "hald-test", version: "0.1.0" });

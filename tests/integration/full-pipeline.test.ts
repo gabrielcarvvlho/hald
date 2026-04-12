@@ -303,8 +303,8 @@ describe("Full pipeline integration test", () => {
 
   // --- Query: localSearch ---
 
-  it("localSearch finds Alice by name", () => {
-    const result = localSearch(store, {
+  it("localSearch finds Alice by name", async () => {
+    const result = await localSearch(store, {
       query: "Alice Chen",
       maxEntities: 10,
       maxRelations: 20,

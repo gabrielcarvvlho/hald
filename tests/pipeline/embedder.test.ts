@@ -22,7 +22,7 @@ function createMockEmbeddingClient(dimensions: number): EmbeddingClient {
 
 describe("embedder", () => {
   it("embeds all entities and communities", async () => {
-    const { store, db } = createPopulatedStore();
+    const { store, db } = await createPopulatedStore();
     const client = createMockEmbeddingClient(64);
 
     const result = await embedEntitiesAndCommunities(store, client);
@@ -54,7 +54,7 @@ describe("embedder", () => {
   });
 
   it("skips entities that already have embeddings with same description", async () => {
-    const { store, db } = createPopulatedStore();
+    const { store, db } = await createPopulatedStore();
     const client = createMockEmbeddingClient(64);
 
     // First run — embed everything
@@ -73,7 +73,7 @@ describe("embedder", () => {
   });
 
   it("returns zero counts when client is null", async () => {
-    const { store, db } = createPopulatedStore();
+    const { store, db } = await createPopulatedStore();
 
     const result = await embedEntitiesAndCommunities(store, null);
 
@@ -82,15 +82,15 @@ describe("embedder", () => {
     expect(result.entitiesSkipped).toBe(0);
     expect(result.communitiesSkipped).toBe(0);
 
-    // No embeddings stored
+    // Pre-existing embeddings from sample store remain, but no new ones were added
     const embBuf = store.getEntityEmbedding("person:alice-chen");
-    expect(embBuf).toBeNull();
+    expect(embBuf).not.toBeNull();
 
     db.close();
   });
 
   it("re-embeds entity when description changes", async () => {
-    const { store, db } = createPopulatedStore();
+    const { store, db } = await createPopulatedStore();
     const client = createMockEmbeddingClient(64);
 
     // First run

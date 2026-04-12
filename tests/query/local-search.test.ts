@@ -13,8 +13,8 @@ describe("localSearch", () => {
   let db: Database.Database;
   let store: StoreType;
 
-  beforeEach(() => {
-    ({ db, store } = createPopulatedStore());
+  beforeEach(async () => {
+    ({ db, store } = await createPopulatedStore());
   });
   afterEach(() => db.close());
 
@@ -22,22 +22,22 @@ describe("localSearch", () => {
   // Core behavior (existing tests, updated for new result shape)
   // ================================================================
 
-  it("finds entities matching a query", () => {
-    const result = localSearch(store, { query: "payments" });
+  it("finds entities matching a query", async () => {
+    const result = await localSearch(store, { query: "payments" });
 
     expect(result.entities.length).toBeGreaterThan(0);
     const names = result.entities.map((e) => e.name);
     expect(names).toContain("src/payments");
   });
 
-  it("includes relations for matched entities", () => {
-    const result = localSearch(store, { query: "payments" });
+  it("includes relations for matched entities", async () => {
+    const result = await localSearch(store, { query: "payments" });
 
     expect(result.relations.length).toBeGreaterThan(0);
   });
 
-  it("includes text units as supporting evidence", () => {
-    const result = localSearch(store, { query: "payments gRPC" });
+  it("includes text units as supporting evidence", async () => {
+    const result = await localSearch(store, { query: "payments gRPC" });
 
     expect(result.textUnits.length).toBeGreaterThan(0);
     // Text unit about gRPC migration should be included
@@ -45,17 +45,17 @@ describe("localSearch", () => {
     expect(hasGrpcContent).toBe(true);
   });
 
-  it("includes community context", () => {
-    const result = localSearch(store, { query: "payments" });
+  it("includes community context", async () => {
+    const result = await localSearch(store, { query: "payments" });
 
     expect(result.communities.length).toBeGreaterThan(0);
     const titles = result.communities.map((c) => c.title);
     expect(titles.some((t) => t.toLowerCase().includes("payment"))).toBe(true);
   });
 
-  it("expands 1-hop via relations", () => {
+  it("expands 1-hop via relations", async () => {
     // Search for "Alice" → should also find modules she authored
-    const result = localSearch(store, { query: "Alice" });
+    const result = await localSearch(store, { query: "Alice" });
 
     const names = result.entities.map((e) => e.name);
     expect(names).toContain("Alice Chen");
@@ -63,8 +63,8 @@ describe("localSearch", () => {
     expect(names.some((n) => n.includes("payments") || n.includes("middleware"))).toBe(true);
   });
 
-  it("filters by entity type", () => {
-    const result = localSearch(store, {
+  it("filters by entity type", async () => {
+    const result = await localSearch(store, {
       query: "payments",
       entityTypes: [EntityType.MODULE],
     });
@@ -76,8 +76,8 @@ describe("localSearch", () => {
     expect(moduleEntities[0]!.name).toBe("src/payments");
   });
 
-  it("respects maxEntities limit", () => {
-    const result = localSearch(store, {
+  it("respects maxEntities limit", async () => {
+    const result = await localSearch(store, {
       query: "payments billing",
       maxEntities: 2,
     });
@@ -85,8 +85,8 @@ describe("localSearch", () => {
     expect(result.entities.length).toBeLessThanOrEqual(2);
   });
 
-  it("returns empty for no matches", () => {
-    const result = localSearch(store, { query: "zzz-nonexistent-xyz" });
+  it("returns empty for no matches", async () => {
+    const result = await localSearch(store, { query: "zzz-nonexistent-xyz" });
 
     expect(result.entities).toHaveLength(0);
     expect(result.relations).toHaveLength(0);
@@ -99,13 +99,13 @@ describe("localSearch", () => {
   // ================================================================
 
   describe("result structure", () => {
-    it("includes query in result", () => {
-      const result = localSearch(store, { query: "payments" });
+    it("includes query in result", async () => {
+      const result = await localSearch(store, { query: "payments" });
       expect(result.query).toBe("payments");
     });
 
-    it("marks seed entities with isSeed=true and hopDistance=0", () => {
-      const result = localSearch(store, { query: "Alice" });
+    it("marks seed entities with isSeed=true and hopDistance=0", async () => {
+      const result = await localSearch(store, { query: "Alice" });
 
       const alice = result.entities.find((e) => e.name === "Alice Chen");
       expect(alice).toBeDefined();
@@ -115,8 +115,8 @@ describe("localSearch", () => {
       expect(alice!.degree).toBeGreaterThan(0);
     });
 
-    it("marks hop-expanded entities with isSeed=false, hopDistance>0, and real scores", () => {
-      const result = localSearch(store, { query: "Alice" });
+    it("marks hop-expanded entities with isSeed=false, hopDistance>0, and real scores", async () => {
+      const result = await localSearch(store, { query: "Alice" });
 
       const neighbors = result.entities.filter((e) => !e.isSeed);
       expect(neighbors.length).toBeGreaterThan(0);
@@ -130,8 +130,8 @@ describe("localSearch", () => {
       }
     });
 
-    it("annotates relations with sourceName and targetName", () => {
-      const result = localSearch(store, { query: "payments" });
+    it("annotates relations with sourceName and targetName", async () => {
+      const result = await localSearch(store, { query: "payments" });
 
       expect(result.relations.length).toBeGreaterThan(0);
       for (const rel of result.relations) {
@@ -144,9 +144,9 @@ describe("localSearch", () => {
       }
     });
 
-    it("reports totalEntityMatches reflecting pre-truncation count", () => {
+    it("reports totalEntityMatches reflecting pre-truncation count", async () => {
       // With maxEntities=2, there should be more total matches than returned
-      const result = localSearch(store, {
+      const result = await localSearch(store, {
         query: "payments",
         maxEntities: 2,
       });
@@ -156,8 +156,8 @@ describe("localSearch", () => {
       );
     });
 
-    it("seeds come before neighbors in entity list", () => {
-      const result = localSearch(store, { query: "Alice" });
+    it("seeds come before neighbors in entity list", async () => {
+      const result = await localSearch(store, { query: "Alice" });
 
       let seenNeighbor = false;
       for (const e of result.entities) {
@@ -174,8 +174,8 @@ describe("localSearch", () => {
   // ================================================================
 
   describe("composite scoring", () => {
-    it("produces scores in a reasonable range [0, 1]", () => {
-      const result = localSearch(store, { query: "payments" });
+    it("produces scores in a reasonable range [0, 1]", async () => {
+      const result = await localSearch(store, { query: "payments" });
 
       for (const e of result.entities.filter((e) => e.isSeed)) {
         expect(e.score).toBeGreaterThanOrEqual(0);
@@ -183,15 +183,15 @@ describe("localSearch", () => {
       }
     });
 
-    it("respects custom ranking weights", () => {
+    it("respects custom ranking weights", async () => {
       // Maximize recency weight: recently-seen entities should dominate
-      const recencyHeavy = localSearch(store, {
+      const recencyHeavy = await localSearch(store, {
         query: "payments",
         rankingWeights: { fts: 0.1, recency: 0.8, degree: 0.1 },
       });
 
       // Maximize FTS weight: best text matches should dominate
-      const ftsHeavy = localSearch(store, {
+      const ftsHeavy = await localSearch(store, {
         query: "payments",
         rankingWeights: { fts: 0.8, recency: 0.1, degree: 0.1 },
       });
@@ -206,8 +206,8 @@ describe("localSearch", () => {
       expect(recencyScores).not.toEqual(ftsScores);
     });
 
-    it("seeds are sorted by score descending", () => {
-      const result = localSearch(store, { query: "payments" });
+    it("seeds are sorted by score descending", async () => {
+      const result = await localSearch(store, { query: "payments" });
 
       const seeds = result.entities.filter((e) => e.isSeed);
       for (let i = 1; i < seeds.length; i++) {
@@ -221,9 +221,9 @@ describe("localSearch", () => {
   // ================================================================
 
   describe("hop expansion", () => {
-    it("reaches 2-hop neighbors", () => {
+    it("reaches 2-hop neighbors", async () => {
       // Alice → src/payments (1-hop) → src/billing (2-hop via DEPENDS_ON/CO_CHANGED)
-      const result = localSearch(store, { query: "Alice" });
+      const result = await localSearch(store, { query: "Alice" });
 
       const names = result.entities.map((e) => e.name);
       // billing depends on payments, which Alice authored — should reach via 2-hop
@@ -235,8 +235,8 @@ describe("localSearch", () => {
       }
     });
 
-    it("2-hop neighbors score lower than 1-hop neighbors", () => {
-      const result = localSearch(store, { query: "Alice" });
+    it("2-hop neighbors score lower than 1-hop neighbors", async () => {
+      const result = await localSearch(store, { query: "Alice" });
 
       const hop1 = result.entities.filter((e) => e.hopDistance === 1);
       const hop2 = result.entities.filter((e) => e.hopDistance === 2);
@@ -249,8 +249,8 @@ describe("localSearch", () => {
       }
     });
 
-    it("respects maxRelations as upper bound", () => {
-      const result = localSearch(store, {
+    it("respects maxRelations as upper bound", async () => {
+      const result = await localSearch(store, {
         query: "payments",
         maxRelations: 3,
       });
@@ -258,8 +258,8 @@ describe("localSearch", () => {
       expect(result.relations.length).toBeLessThanOrEqual(3);
     });
 
-    it("filters low-weight relations", () => {
-      const result = localSearch(store, { query: "payments" });
+    it("filters low-weight relations", async () => {
+      const result = await localSearch(store, { query: "payments" });
 
       // All returned relations should meet minimum weight threshold
       for (const rel of result.relations) {
@@ -273,10 +273,10 @@ describe("localSearch", () => {
   // ================================================================
 
   describe("text unit selection", () => {
-    it("distributes text units across seed entities (round-robin)", () => {
+    it("distributes text units across seed entities (round-robin)", async () => {
       // "payments" matches src/payments AND the decision entity
       // Round-robin should pick text units from multiple seeds
-      const result = localSearch(store, {
+      const result = await localSearch(store, {
         query: "payments gRPC migration",
         maxTextUnits: 3,
       });
@@ -287,8 +287,8 @@ describe("localSearch", () => {
       expect(uniqueIds.size).toBe(result.textUnits.length); // no duplicates
     });
 
-    it("respects maxTextUnits limit", () => {
-      const result = localSearch(store, {
+    it("respects maxTextUnits limit", async () => {
+      const result = await localSearch(store, {
         query: "payments",
         maxTextUnits: 1,
       });
@@ -296,13 +296,13 @@ describe("localSearch", () => {
       expect(result.textUnits.length).toBeLessThanOrEqual(1);
     });
 
-    it("respects token budget", () => {
+    it("respects token budget", async () => {
       // With very small token budget, should return fewer text units
-      const small = localSearch(store, {
+      const small = await localSearch(store, {
         query: "payments",
         maxTextUnitTokens: 10, // ~40 characters — barely one short text unit
       });
-      const large = localSearch(store, {
+      const large = await localSearch(store, {
         query: "payments",
         maxTextUnitTokens: 10000,
       });
@@ -310,8 +310,8 @@ describe("localSearch", () => {
       expect(small.textUnits.length).toBeLessThanOrEqual(large.textUnits.length);
     });
 
-    it("prefers recent text units", () => {
-      const result = localSearch(store, { query: "payments" });
+    it("prefers recent text units", async () => {
+      const result = await localSearch(store, { query: "payments" });
 
       if (result.textUnits.length >= 2) {
         // Text units should be sorted by recency within each entity's selection
@@ -328,29 +328,29 @@ describe("localSearch", () => {
   // ================================================================
 
   describe("FTS5 query improvements", () => {
-    it("handles camelCase queries via splitting", () => {
+    it("handles camelCase queries via splitting", async () => {
       // "PaymentGateway" should find entities even if stored as separate words
       // In our fixture, "src/payments" description has "Payments service"
       // The camelCase split produces "Payment" + "Gateway" — "Payment" should match
-      const result = localSearch(store, { query: "PaymentService" });
+      const result = await localSearch(store, { query: "PaymentService" });
 
       // "Payment" token should match entities with "payment" in name/description
       const names = result.entities.map((e) => e.name);
       expect(names.some((n) => n.includes("payment"))).toBe(true);
     });
 
-    it("preserves original token alongside camelCase splits", () => {
+    it("preserves original token alongside camelCase splits", async () => {
       // "gRPC" → camelCase splits to ["g", "RPC"] but original "gRPC" is kept
       // "gRPC" as prefix (grpc*) should match the gRPC technology entity
-      const result = localSearch(store, { query: "gRPC" });
+      const result = await localSearch(store, { query: "gRPC" });
 
       const names = result.entities.map((e) => e.name);
       expect(names.some((n) => n.toLowerCase().includes("grpc"))).toBe(true);
     });
 
-    it("uses prefix matching for short tokens", () => {
+    it("uses prefix matching for short tokens", async () => {
       // "auth" (4 chars) should become "auth*" and match "Auth middleware"
-      const result = localSearch(store, { query: "auth" });
+      const result = await localSearch(store, { query: "auth" });
 
       // "auth*" should match src/middleware (description: "Auth middleware layer")
       const hasAuthRelated = result.entities.some(
@@ -366,8 +366,8 @@ describe("localSearch", () => {
   // ================================================================
 
   describe("edge cases", () => {
-    it("handles maxEntities=1 correctly", () => {
-      const result = localSearch(store, {
+    it("handles maxEntities=1 correctly", async () => {
+      const result = await localSearch(store, {
         query: "payments",
         maxEntities: 1,
       });
@@ -376,22 +376,22 @@ describe("localSearch", () => {
       expect(result.entities[0]!.isSeed).toBe(true);
     });
 
-    it("handles query with only stop words gracefully", () => {
-      const result = localSearch(store, { query: "who is the" });
+    it("handles query with only stop words gracefully", async () => {
+      const result = await localSearch(store, { query: "who is the" });
 
       expect(result.entities).toHaveLength(0);
       expect(result.relations).toHaveLength(0);
     });
 
-    it("handles single-character query gracefully", () => {
-      const result = localSearch(store, { query: "x" });
+    it("handles single-character query gracefully", async () => {
+      const result = await localSearch(store, { query: "x" });
 
       // Single char is filtered out, should return empty
       expect(result.entities).toHaveLength(0);
     });
 
-    it("returns empty result shape with all metadata fields", () => {
-      const result = localSearch(store, { query: "zzz-nonexistent" });
+    it("returns empty result shape with all metadata fields", async () => {
+      const result = await localSearch(store, { query: "zzz-nonexistent" });
 
       expect(result.query).toBe("zzz-nonexistent");
       expect(result.entities).toHaveLength(0);
@@ -402,13 +402,38 @@ describe("localSearch", () => {
       expect(result.totalRelations).toBe(0);
     });
 
-    it("handles entity type filter that matches nothing", () => {
-      const result = localSearch(store, {
+    it("handles entity type filter that matches nothing", async () => {
+      const result = await localSearch(store, {
         query: "payments",
         entityTypes: [EntityType.PATTERN], // no PATTERN entities in fixture
       });
 
       expect(result.entities).toHaveLength(0);
+    });
+  });
+
+  // ================================================================
+  // Hybrid search (embedding + FTS)
+  // ================================================================
+
+  describe("hybrid search", () => {
+    it("uses hybrid scoring when queryEmbedder is provided", async () => {
+      const { QueryEmbedder } = await import("../../src/query/similarity.js");
+      const mockClient = {
+        provider: "openai" as const,
+        dimensions: 4,
+        async embed(texts: string[]): Promise<Float32Array[]> {
+          // Return vector similar to payments entities
+          return texts.map(() => new Float32Array([0.85, 0.1, 0.0, 0.05]));
+        },
+      };
+      const embedder = new QueryEmbedder(mockClient);
+      const result = await localSearch(store, {
+        query: "financial transactions",
+        queryEmbedder: embedder,
+      });
+      // With embeddings, should find payments/billing by semantic similarity
+      expect(result.entities.length).toBeGreaterThan(0);
     });
   });
 });
@@ -474,8 +499,8 @@ describe("localSearch — hub entity budget control", () => {
 
   afterEach(() => db.close());
 
-  it("caps relations per seed at MAX_RELATIONS_PER_SEED", () => {
-    const result = localSearch(store, {
+  it("caps relations per seed at MAX_RELATIONS_PER_SEED", async () => {
+    const result = await localSearch(store, {
       query: "hub",
       maxRelations: 50, // generous budget
     });
@@ -485,8 +510,8 @@ describe("localSearch — hub entity budget control", () => {
     expect(result.relations.length).toBeLessThanOrEqual(15);
   });
 
-  it("selects highest-weight relations when budget is limited", () => {
-    const result = localSearch(store, {
+  it("selects highest-weight relations when budget is limited", async () => {
+    const result = await localSearch(store, {
       query: "hub",
       maxRelations: 5,
     });
@@ -500,8 +525,8 @@ describe("localSearch — hub entity budget control", () => {
     }
   });
 
-  it("does not exceed maxEntities even with many neighbors", () => {
-    const result = localSearch(store, {
+  it("does not exceed maxEntities even with many neighbors", async () => {
+    const result = await localSearch(store, {
       query: "hub",
       maxEntities: 5,
     });
