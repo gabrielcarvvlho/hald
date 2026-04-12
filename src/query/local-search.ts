@@ -104,7 +104,7 @@ export async function localSearch(store: Store, options: LocalSearchOptions): Pr
   }
 
   // Embedding-based candidates (if available)
-  let semanticScores = new Map<string, number>();
+  const semanticScores = new Map<string, number>();
   const queryEmbedding = options.queryEmbedder
     ? await options.queryEmbedder.embedQuery(query)
     : null;
@@ -124,7 +124,7 @@ export async function localSearch(store: Store, options: LocalSearchOptions): Pr
   // Merge semantic-only candidates into the seed list
   if (useHybrid) {
     const ftsIds = new Set(rankedSeeds.map((r) => r.entity.id));
-    for (const [entityId, simScore] of semanticScores) {
+    for (const [entityId] of semanticScores) {
       if (ftsIds.has(entityId)) continue;
       const entity = store.getEntity(entityId);
       if (!entity) continue;
