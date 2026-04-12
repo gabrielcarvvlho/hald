@@ -1,5 +1,7 @@
 import type { LLMClient, LLMClientConfig, LLMProvider } from "./types.js";
 import { logger } from "../shared/logger.js";
+import { RateLimiter, DEFAULT_RPM } from "./rate-limiter.js";
+import { RateLimitedClient } from "./rate-limited-client.js";
 
 export class NoProviderError extends Error {
   constructor(message: string) {
@@ -105,18 +107,32 @@ export async function createClient(config: LLMClientConfig): Promise<LLMClient> 
 
   logger.info("Creating LLM client", { provider, model: config.model });
 
+  let inner: LLMClient;
+
   switch (provider) {
     case "anthropic": {
       const { AnthropicClient } = await import("./anthropic.js");
-      return new AnthropicClient(apiKey, config.model, config.baseUrl, config.maxRetries);
+      inner = new AnthropicClient(apiKey, config.model, config.baseUrl, config.maxRetries);
+      break;
     }
     case "openai": {
       const { OpenAIClient } = await import("./openai.js");
-      return new OpenAIClient(apiKey, config.model, config.baseUrl, config.maxRetries);
+      inner = new OpenAIClient(apiKey, config.model, config.baseUrl, config.maxRetries);
+      break;
     }
     case "google": {
       const { GoogleClient } = await import("./google.js");
-      return new GoogleClient(apiKey, config.model, config.maxRetries);
+      inner = new GoogleClient(apiKey, config.model, config.maxRetries);
+      break;
     }
   }
+
+  const rpm =
+    process.env.HALD_RATE_LIMIT !== undefined
+      ? Number(process.env.HALD_RATE_LIMIT)
+      : DEFAULT_RPM[provider];
+
+  logger.debug("Wrapping client with RateLimiter", { provider, rpm });
+  const limiter = new RateLimiter(rpm);
+  return new RateLimitedClient(inner, limiter);
 }
