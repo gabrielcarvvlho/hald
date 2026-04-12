@@ -22,7 +22,9 @@ import { normalizeModulePath } from "./resolver.js";
 import { build, generateRelationId } from "./graph-builder.js";
 import { cluster, jaccardSimilarity } from "./clusterer.js";
 import { summarizeBatch } from "./summarizer.js";
-import { createClient } from "../llm/client.js";
+import { createClient, detectProvider } from "../llm/client.js";
+import { createEmbeddingClient } from "../llm/embeddings.js";
+import { embedEntitiesAndCommunities } from "./embedder.js";
 import { calculateActualCost } from "./cost-estimator.js";
 import { logger } from "../shared/logger.js";
 import { safeJsonParse } from "../shared/utils.js";
@@ -310,6 +312,26 @@ async function runPipeline(
         }
       });
     }
+  }
+
+  // 14. Generate embeddings (optional — skipped if provider doesn't support it)
+  progress("embedding", 0, 0);
+  const detected = detectProvider();
+  const embeddingClient = detected
+    ? await createEmbeddingClient({
+        provider: detected.provider,
+        apiKey: config.apiKey ?? detected.apiKey,
+        baseUrl: config.baseUrl,
+        maxRetries: config.maxRetries,
+      })
+    : null;
+
+  const embeddingResult = await embedEntitiesAndCommunities(store, embeddingClient);
+  if (embeddingResult.entitiesEmbedded > 0 || embeddingResult.communitiesEmbedded > 0) {
+    logger.info("orchestrator: embeddings generated", {
+      entities: embeddingResult.entitiesEmbedded,
+      communities: embeddingResult.communitiesEmbedded,
+    });
   }
 
   // 13. Update metadata
