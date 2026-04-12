@@ -214,16 +214,18 @@ export async function createEmbeddingClient(
 /**
  * Detect which embedding-capable provider is available.
  * Only OpenAI and Google support embeddings; Anthropic does not.
+ * Checks env vars first, then falls back to prefix-based inference from apiKey.
  */
 function detectEmbeddingProvider(apiKey?: string): LLMProvider | null {
-  // If an explicit key was provided, check OpenAI first then Google
-  if (apiKey) {
-    if (process.env.OPENAI_API_KEY) return "openai";
-    if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) return "google";
-  }
-
+  // Env vars take priority
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) return "google";
+
+  // If an explicit key was provided, infer provider from key prefix
+  if (apiKey) {
+    if (apiKey.startsWith("sk-")) return "openai";
+    if (apiKey.startsWith("AI")) return "google";
+  }
 
   return null;
 }

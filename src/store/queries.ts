@@ -367,6 +367,12 @@ export class Store {
     return rows;
   }
 
+  getCommunityCount(): number {
+    return (
+      this.db.prepare("SELECT COUNT(*) as c FROM communities").get() as { c: number }
+    ).c;
+  }
+
   getAllCommunities(): Community[] {
     const rows = this.db
       .prepare("SELECT * FROM communities")

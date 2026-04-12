@@ -314,7 +314,7 @@ async function runPipeline(
     }
   }
 
-  // 14. Generate embeddings (optional — skipped if provider doesn't support it)
+  // 13. Generate embeddings (optional — skipped if provider doesn't support it)
   progress("embedding", 0, 0);
   const detected = detectProvider();
   const embeddingClient = detected
@@ -334,7 +334,7 @@ async function runPipeline(
     });
   }
 
-  // 13. Update metadata
+  // 14. Update metadata
   const lastCommit = commits[commits.length - 1]!;
   store.setMeta("last_indexed_commit", lastCommit.hash);
   store.setMeta("last_indexed_at", new Date().toISOString());

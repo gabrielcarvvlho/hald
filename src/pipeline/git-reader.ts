@@ -10,6 +10,9 @@ const DIFF_SKIP_EXTENSIONS = new Set([
   ".pb", ".pyc", ".pyo", ".class", ".o", ".so", ".dylib",
 ]);
 
+// Max lines per file diff at reader level to prevent memory pressure
+const MAX_DIFF_LINES_PER_FILE = 500;
+
 const DIFF_SKIP_PATHS = [
   "node_modules/", "vendor/", "dist/", "build/", ".next/",
   "__pycache__/", ".git/",
@@ -316,7 +319,7 @@ function parsePatchLog(raw: string): Map<string, PatchEntry[]> {
         continue;
       }
 
-      if (currentPath !== null) {
+      if (currentPath !== null && currentLines.length < MAX_DIFF_LINES_PER_FILE) {
         currentLines.push(line);
       }
     }
