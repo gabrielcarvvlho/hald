@@ -7,6 +7,7 @@ import type { Store } from "../../src/store/queries.js";
 import { createPopulatedStore } from "../helpers/sample-store.js";
 import { registerTools } from "../../src/mcp/tools.js";
 import { registerResources } from "../../src/mcp/resources.js";
+import { QueryEmbedder } from "../../src/query/similarity.js";
 
 describe("MCP integration", () => {
   let db: Database.Database;
@@ -21,7 +22,8 @@ describe("MCP integration", () => {
     // 2. Create MCP server and register tools/resources
     server = new McpServer({ name: "hald-test", version: "0.1.0" });
     const getStore = () => store;
-    registerTools(server, getStore);
+    const getQueryEmbedder = async () => new QueryEmbedder(null);
+    registerTools(server, getStore, getQueryEmbedder);
     registerResources(server, getStore);
 
     // 3. Connect client <-> server via in-memory transport

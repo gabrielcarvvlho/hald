@@ -325,8 +325,8 @@ describe("Full pipeline integration test", () => {
 
   // --- Query: globalSearch ---
 
-  it("globalSearch returns communities array without crash", () => {
-    const result = globalSearch(store, {
+  it("globalSearch returns communities array without crash", async () => {
+    const result = await globalSearch(store, {
       query: "architecture decisions",
       maxCommunities: 5,
     });

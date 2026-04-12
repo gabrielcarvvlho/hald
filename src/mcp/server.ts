@@ -6,6 +6,9 @@ import { Store } from "../store/queries.js";
 import { logger } from "../shared/logger.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
+import { createEmbeddingClient } from "../llm/embeddings.js";
+import { detectProvider } from "../llm/client.js";
+import { QueryEmbedder } from "../query/similarity.js";
 
 /**
  * Create and configure the MCP server with all tools and resources.
@@ -28,7 +31,28 @@ export function createMcpServer(): McpServer {
     return store;
   }
 
-  registerTools(server, getStore);
+  // Lazy QueryEmbedder — initialized on first use
+  let queryEmbedder: QueryEmbedder | null = null;
+  let queryEmbedderInitialized = false;
+  async function getQueryEmbedder(): Promise<QueryEmbedder> {
+    if (!queryEmbedderInitialized) {
+      queryEmbedderInitialized = true;
+      try {
+        const detected = detectProvider();
+        const provider = detected?.provider ?? "auto";
+        const client = await createEmbeddingClient({
+          provider,
+          maxRetries: 2,
+        });
+        queryEmbedder = new QueryEmbedder(client);
+      } catch {
+        queryEmbedder = new QueryEmbedder(null);
+      }
+    }
+    return queryEmbedder ?? new QueryEmbedder(null);
+  }
+
+  registerTools(server, getStore, getQueryEmbedder);
   registerResources(server, getStore);
 
   return server;

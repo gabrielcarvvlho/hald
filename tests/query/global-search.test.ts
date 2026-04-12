@@ -13,16 +13,16 @@ describe("globalSearch", () => {
   });
   afterEach(() => db.close());
 
-  it("finds communities matching a query", () => {
-    const result = globalSearch(store, { query: "payments gRPC migration" });
+  it("finds communities matching a query", async () => {
+    const result = await globalSearch(store, { query: "payments gRPC migration" });
 
     expect(result.communities.length).toBeGreaterThan(0);
     const titles = result.communities.map((c) => c.title);
     expect(titles.some((t) => t.toLowerCase().includes("payment"))).toBe(true);
   });
 
-  it("returns communities with summaries", () => {
-    const result = globalSearch(store, { query: "billing" });
+  it("returns communities with summaries", async () => {
+    const result = await globalSearch(store, { query: "billing" });
 
     for (const community of result.communities) {
       expect(community.summary.length).toBeGreaterThan(0);
@@ -30,8 +30,8 @@ describe("globalSearch", () => {
     }
   });
 
-  it("respects maxCommunities limit", () => {
-    const result = globalSearch(store, {
+  it("respects maxCommunities limit", async () => {
+    const result = await globalSearch(store, {
       query: "payments billing",
       maxCommunities: 1,
     });
@@ -39,13 +39,13 @@ describe("globalSearch", () => {
     expect(result.communities.length).toBeLessThanOrEqual(1);
   });
 
-  it("returns empty for no matches", () => {
-    const result = globalSearch(store, { query: "zzz-nonexistent-xyz" });
+  it("returns empty for no matches", async () => {
+    const result = await globalSearch(store, { query: "zzz-nonexistent-xyz" });
     expect(result.communities).toHaveLength(0);
   });
 
-  it("filters by community level", () => {
-    const result = globalSearch(store, {
+  it("filters by community level", async () => {
+    const result = await globalSearch(store, {
       query: "payments",
       communityLevel: 0,
     });
@@ -53,6 +53,19 @@ describe("globalSearch", () => {
     for (const c of result.communities) {
       expect(c.level).toBe(0);
     }
+  });
+
+  it("returns topEntities matching the query", async () => {
+    const result = await globalSearch(store, { query: "payments gRPC" });
+
+    expect(result.topEntities.length).toBeGreaterThan(0);
+    expect(result.totalCommunities).toBeGreaterThan(0);
+  });
+
+  it("returns totalCommunities count", async () => {
+    const result = await globalSearch(store, { query: "payments" });
+
+    expect(result.totalCommunities).toBe(2); // sample store has 2 communities
   });
 });
 

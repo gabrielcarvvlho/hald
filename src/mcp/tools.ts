@@ -22,11 +22,14 @@ import {
 import { localSearch } from "../query/local-search.js";
 import type { LocalSearchResult } from "../query/local-search.js";
 import { globalSearch, classifyQuery } from "../query/global-search.js";
+import type { GlobalSearchResult } from "../query/global-search.js";
+import type { QueryEmbedder } from "../query/similarity.js";
 import { EntityType } from "../shared/types.js";
 
 type GetStore = () => Store;
+type GetQueryEmbedder = () => Promise<QueryEmbedder>;
 
-export function registerTools(server: McpServer, getStore: GetStore): void {
+export function registerTools(server: McpServer, getStore: GetStore, getQueryEmbedder: GetQueryEmbedder): void {
   // ================================================================
   // hald_query
   // ================================================================
@@ -65,15 +68,16 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     async ({ question, search_type }) => {
       try {
         const store = getStore();
+        const queryEmbedder = await getQueryEmbedder();
         const searchType = search_type === "auto" ? classifyQuery(question) : search_type;
 
         if (searchType === "global") {
-          const result = globalSearch(store, { query: question, maxCommunities: 10 });
+          const result = await globalSearch(store, { query: question, maxCommunities: 10, queryEmbedder });
           return {
             content: [
               {
                 type: "text" as const,
-                text: formatGlobalResult(result.communities),
+                text: formatGlobalResult(result),
               },
             ],
           };
@@ -84,6 +88,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           maxEntities: 15,
           maxRelations: 50,
           maxTextUnits: 20,
+          queryEmbedder,
         });
         return {
           content: [
@@ -216,6 +221,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
     async ({ topic }) => {
       try {
         const store = getStore();
+        const queryEmbedder = await getQueryEmbedder();
 
         // Search for DECISION entities matching the topic
         const result = await localSearch(store, {
@@ -224,6 +230,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
           maxRelations: 50,
           maxTextUnits: 20,
           entityTypes: [EntityType.DECISION],
+          queryEmbedder,
         });
 
         // Also do a broader search if no decisions found
@@ -233,6 +240,7 @@ export function registerTools(server: McpServer, getStore: GetStore): void {
             maxEntities: 15,
             maxRelations: 50,
             maxTextUnits: 20,
+            queryEmbedder,
           });
           return {
             content: [
@@ -1264,14 +1272,24 @@ function formatLocalResult(result: LocalSearchResult): string {
   return sections.join("\n");
 }
 
-function formatGlobalResult(communities: ReturnType<typeof globalSearch>["communities"]): string {
-  if (communities.length === 0) {
+function formatGlobalResult(result: GlobalSearchResult): string {
+  if (result.communities.length === 0) {
     return "No relevant community summaries found for this query.";
   }
 
   const sections: string[] = [];
-  for (const c of communities) {
-    sections.push(`## ${c.title}\n\n${c.summary}\n`);
+
+  if (result.topEntities.length > 0) {
+    sections.push("## Key Entities\n");
+    for (const e of result.topEntities) {
+      sections.push(`- **${e.name}** [${e.type}] — ${e.description}`);
+    }
+    sections.push("");
+  }
+
+  sections.push(`## Community Summaries (${result.communities.length} of ${result.totalCommunities})\n`);
+  for (const c of result.communities) {
+    sections.push(`### ${c.title}\n\n${c.summary}\n`);
   }
   return sections.join("\n");
 }

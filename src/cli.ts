@@ -15,6 +15,8 @@ import {
   formatCostEstimate,
 } from "./pipeline/cost-estimator.js";
 import { detectProvider } from "./llm/client.js";
+import { createEmbeddingClient } from "./llm/embeddings.js";
+import { QueryEmbedder } from "./query/similarity.js";
 
 const program = new Command();
 
@@ -186,17 +188,31 @@ program
 
       const searchType = opts.type === "auto" ? classifyQuery(question) : opts.type;
 
+      // Create QueryEmbedder if an embedding-capable provider is available
+      const detected = detectProvider();
+      const provider = detected?.provider ?? "auto";
+      const embeddingClient = await createEmbeddingClient({ provider, maxRetries: 2 });
+      const queryEmbedder = new QueryEmbedder(embeddingClient);
+
       console.log(`Search type: ${searchType}\n`);
 
       if (searchType === "global") {
-        const result = globalSearch(store, {
+        const result = await globalSearch(store, {
           query: question,
           maxCommunities: 5,
+          queryEmbedder,
         });
 
         if (result.communities.length === 0) {
           console.log("No relevant communities found.");
         } else {
+          if (result.topEntities.length > 0) {
+            console.log("### Key Entities");
+            for (const e of result.topEntities) {
+              console.log(`  [${e.type}] ${e.name} — ${e.description}`);
+            }
+            console.log("");
+          }
           for (const community of result.communities) {
             console.log(`## ${community.title}`);
             console.log(community.summary);
@@ -209,6 +225,7 @@ program
           maxEntities: 10,
           maxRelations: 20,
           maxTextUnits: 5,
+          queryEmbedder,
         });
 
         if (result.entities.length === 0) {
