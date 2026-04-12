@@ -28,7 +28,7 @@ describe("Migration framework", () => {
 
     runMigrations(db);
 
-    expect(getVersion(db)).toBe(3);
+    expect(getVersion(db)).toBe(4);
     expect(tableExists(db, "text_unit_entities")).toBe(true);
     expect(tableExists(db, "community_entities")).toBe(true);
     db.close();
@@ -107,6 +107,21 @@ describe("Migration framework", () => {
 
     expect(indexNames).toContain("idx_relations_source_type");
     expect(indexNames).toContain("idx_relations_target_type");
+    db.close();
+  });
+
+  it("adds embedding columns to entities and communities in v4 migration", () => {
+    const db = createV1Database();
+    runMigrations(db);
+
+    const entityCols = db.pragma("table_info(entities)") as { name: string }[];
+    const entityColNames = entityCols.map((c) => c.name);
+    expect(entityColNames).toContain("embedding");
+
+    const commCols = db.pragma("table_info(communities)") as { name: string }[];
+    const commColNames = commCols.map((c) => c.name);
+    expect(commColNames).toContain("embedding");
+
     db.close();
   });
 

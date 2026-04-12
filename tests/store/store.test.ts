@@ -11,6 +11,7 @@ import {
   type Community,
   type CommitData,
 } from "../../src/shared/types.js";
+import { createPopulatedStore } from "../helpers/sample-store.js";
 
 function createTestStore(): { db: Database.Database; store: Store } {
   const db = openDatabase(":memory:");
@@ -618,5 +619,92 @@ describe("Store — Transactions", () => {
 
     expect(result).not.toBeNull();
     expect(result!.name).toBe("Alice Chen");
+  });
+});
+
+describe("Store — Embeddings", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createPopulatedStore());
+  });
+  afterEach(() => db.close());
+
+  function makeEmbedding(seed: number): Buffer {
+    const arr = new Float32Array(4);
+    arr[0] = seed * 0.1;
+    arr[1] = seed * 0.2;
+    arr[2] = seed * 0.3;
+    arr[3] = seed * 0.4;
+    return Buffer.from(arr.buffer);
+  }
+
+  it("setEntityEmbedding + getEntityEmbedding roundtrip works", () => {
+    const embedding = makeEmbedding(1);
+    store.setEntityEmbedding("person:alice-chen", embedding);
+
+    const result = store.getEntityEmbedding("person:alice-chen");
+    expect(result).not.toBeNull();
+    expect(result!.equals(embedding)).toBe(true);
+  });
+
+  it("getEntityEmbedding returns null for entity without embedding", () => {
+    // person:carlos-ruiz has no embedding set
+    const result = store.getEntityEmbedding("person:carlos-ruiz");
+    expect(result).toBeNull();
+  });
+
+  it("getAllEntityEmbeddings returns only entities with embeddings", () => {
+    // Initially none have embeddings
+    expect(store.getAllEntityEmbeddings()).toHaveLength(0);
+
+    store.setEntityEmbedding("person:alice-chen", makeEmbedding(1));
+    store.setEntityEmbedding("module:src/payments", makeEmbedding(2));
+
+    const results = store.getAllEntityEmbeddings();
+    expect(results).toHaveLength(2);
+
+    const ids = results.map((r) => r.id).sort();
+    expect(ids).toEqual(["module:src/payments", "person:alice-chen"]);
+
+    // Verify the Buffer values round-trip correctly
+    const aliceResult = results.find((r) => r.id === "person:alice-chen")!;
+    expect(aliceResult.embedding.equals(makeEmbedding(1))).toBe(true);
+  });
+
+  it("setCommunityEmbedding + getCommunityEmbedding roundtrip works", () => {
+    const embedding = makeEmbedding(5);
+    store.setCommunityEmbedding("comm:0:0", embedding);
+
+    const result = store.getCommunityEmbedding("comm:0:0");
+    expect(result).not.toBeNull();
+    expect(result!.equals(embedding)).toBe(true);
+  });
+
+  it("getCommunityEmbedding returns null for community without embedding", () => {
+    const result = store.getCommunityEmbedding("comm:0:1");
+    expect(result).toBeNull();
+  });
+
+  it("getAllCommunityEmbeddings returns only communities with embeddings", () => {
+    // Initially none have embeddings
+    expect(store.getAllCommunityEmbeddings()).toHaveLength(0);
+
+    store.setCommunityEmbedding("comm:0:0", makeEmbedding(5));
+
+    const results = store.getAllCommunityEmbeddings();
+    expect(results).toHaveLength(1);
+    expect(results[0]!.id).toBe("comm:0:0");
+    expect(results[0]!.embedding.equals(makeEmbedding(5))).toBe(true);
+  });
+
+  it("getAllCommunities returns all communities", () => {
+    // sample-store populates 2 communities: comm:0:0 and comm:0:1
+    const all = store.getAllCommunities();
+    expect(all).toHaveLength(2);
+
+    const ids = all.map((c) => c.id).sort();
+    expect(ids).toEqual(["comm:0:0", "comm:0:1"]);
   });
 });

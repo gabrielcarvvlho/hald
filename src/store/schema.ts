@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import { logger } from "../shared/logger.js";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export function initSchema(db: Database.Database): void {
   db.exec(`
@@ -234,6 +234,16 @@ const MIGRATIONS: Migration[] = [
       db.exec(`
         CREATE INDEX IF NOT EXISTS idx_relations_source_type ON relations(source_id, type);
         CREATE INDEX IF NOT EXISTS idx_relations_target_type ON relations(target_id, type);
+      `);
+    },
+  },
+  {
+    version: 4,
+    description: "Add embedding columns for entities and communities",
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE entities ADD COLUMN embedding BLOB;
+        ALTER TABLE communities ADD COLUMN embedding BLOB;
       `);
     },
   },

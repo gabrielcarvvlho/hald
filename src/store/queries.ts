@@ -324,6 +324,57 @@ export class Store {
   }
 
   // ================================================================
+  // Embeddings
+  // ================================================================
+
+  setEntityEmbedding(entityId: EntityId, embedding: Buffer): void {
+    this.db
+      .prepare("UPDATE entities SET embedding = ? WHERE id = ?")
+      .run(embedding, entityId);
+  }
+
+  getEntityEmbedding(entityId: EntityId): Buffer | null {
+    const row = this.db
+      .prepare("SELECT embedding FROM entities WHERE id = ?")
+      .get(entityId) as { embedding: Buffer | null } | undefined;
+    return row?.embedding ?? null;
+  }
+
+  getAllEntityEmbeddings(): Array<{ id: EntityId; embedding: Buffer }> {
+    const rows = this.db
+      .prepare("SELECT id, embedding FROM entities WHERE embedding IS NOT NULL")
+      .all() as Array<{ id: string; embedding: Buffer }>;
+    return rows;
+  }
+
+  setCommunityEmbedding(communityId: CommunityId, embedding: Buffer): void {
+    this.db
+      .prepare("UPDATE communities SET embedding = ? WHERE id = ?")
+      .run(embedding, communityId);
+  }
+
+  getCommunityEmbedding(communityId: CommunityId): Buffer | null {
+    const row = this.db
+      .prepare("SELECT embedding FROM communities WHERE id = ?")
+      .get(communityId) as { embedding: Buffer | null } | undefined;
+    return row?.embedding ?? null;
+  }
+
+  getAllCommunityEmbeddings(): Array<{ id: CommunityId; embedding: Buffer }> {
+    const rows = this.db
+      .prepare("SELECT id, embedding FROM communities WHERE embedding IS NOT NULL")
+      .all() as Array<{ id: string; embedding: Buffer }>;
+    return rows;
+  }
+
+  getAllCommunities(): Community[] {
+    const rows = this.db
+      .prepare("SELECT * FROM communities")
+      .all() as CommunityRow[];
+    return rows.map(toCommunity);
+  }
+
+  // ================================================================
   // Lifecycle
   // ================================================================
 
