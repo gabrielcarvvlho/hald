@@ -9,7 +9,7 @@ describe("loadConfig", () => {
     const config = loadConfig();
 
     expect(config.branch).toBe("HEAD");
-    expect(config.commitsPerChunk).toBe(10);
+    expect(config.commitsPerChunk).toBe(7);
     expect(config.maxChunkTokens).toBe(5000);
     expect(config.provider).toBe("auto");
     expect(config.maxConcurrency).toBe(5);
@@ -145,7 +145,7 @@ describe("loadConfig", () => {
 
       // Should not throw, just use defaults
       const config = loadConfig({ repoPath: tmpDir });
-      expect(config.commitsPerChunk).toBe(10);
+      expect(config.commitsPerChunk).toBe(7);
     });
   });
 

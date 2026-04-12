@@ -6,7 +6,7 @@ import { logger } from "./logger.js";
 const defaults: HaldConfig = {
   repoPath: ".",
   branch: "HEAD",
-  commitsPerChunk: 10,
+  commitsPerChunk: 7,
   maxChunkTokens: 5000,
   maxDiffLines: 200,
   maxFilesShown: 50,
