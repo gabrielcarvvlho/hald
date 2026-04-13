@@ -57,6 +57,9 @@ export function detectProvider(): {
   if (googleKey) {
     return { provider: "google", apiKey: googleKey };
   }
+  if (process.env.ZHIPU_API_KEY) {
+    return { provider: "zhipu", apiKey: process.env.ZHIPU_API_KEY };
+  }
   return null;
 }
 
@@ -69,6 +72,8 @@ function getApiKeyForProvider(provider: LLMProvider): string | undefined {
       return process.env.OPENAI_API_KEY;
     case "google":
       return process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY;
+    case "zhipu":
+      return process.env.ZHIPU_API_KEY;
   }
 }
 
@@ -85,7 +90,7 @@ export async function createClient(config: LLMClientConfig): Promise<LLMClient> 
     const detected = detectProvider();
     if (!detected) {
       throw new NoProviderError(
-        "No LLM API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY. " +
+        "No LLM API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, or ZHIPU_API_KEY. " +
           "Alternatively, run indexing via the MCP tool from your coding agent.",
       );
     }
@@ -123,6 +128,17 @@ export async function createClient(config: LLMClientConfig): Promise<LLMClient> 
     case "google": {
       const { GoogleClient } = await import("./google.js");
       inner = new GoogleClient(apiKey, config.model, config.maxRetries);
+      break;
+    }
+    case "zhipu": {
+      // Zhipu AI (z.ai) GLM models — OpenAI-compatible API
+      const { OpenAIClient } = await import("./openai.js");
+      inner = new OpenAIClient(
+        apiKey,
+        config.model ?? "glm-4-flash",
+        config.baseUrl ?? "https://open.bigmodel.cn/api/paas/v4/",
+        config.maxRetries,
+      );
       break;
     }
   }

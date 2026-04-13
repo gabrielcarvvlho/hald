@@ -35,7 +35,7 @@ program
   .option("--full", "Force full re-index (ignore previous index)")
   .option("--max-commits <n>", "Limit number of commits to process", parseInt)
   .option("--since <date>", "Only index commits after this ISO date")
-  .option("--provider <name>", "LLM provider (anthropic|openai|google|auto)", "auto")
+  .option("--provider <name>", "LLM provider (anthropic|openai|google|zhipu|auto)", "auto")
   .option("-y, --yes", "Skip cost confirmation prompt")
   .action(async (opts) => {
     try {

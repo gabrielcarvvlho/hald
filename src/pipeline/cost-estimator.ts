@@ -9,6 +9,7 @@ const COST_PER_1M_TOKENS: Record<string, { input: number; output: number }> = {
   anthropic: { input: 3.0, output: 15.0 }, // Claude Sonnet
   openai: { input: 0.4, output: 1.6 }, // GPT-4.1-mini
   google: { input: 0.15, output: 0.6 }, // Gemini Flash
+  zhipu: { input: 0.07, output: 0.07 }, // GLM-4-Flash
 };
 
 /** Per-model pricing (USD per 1M tokens). Used for actual cost calculation. */
@@ -26,6 +27,10 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite-preview": { input: 0.25, output: 1.5 },
   "gemini-2.5-flash": { input: 0.15, output: 0.6 },
   "gemini-2.5-pro": { input: 1.25, output: 10.0 },
+  // Zhipu AI (z.ai)
+  "glm-4-flash": { input: 0.07, output: 0.07 },
+  "glm-4-air": { input: 0.14, output: 0.14 },
+  "glm-4-plus": { input: 0.7, output: 0.7 },
 };
 
 /** Default model for each provider — used when model is not specified. */
@@ -33,6 +38,7 @@ const DEFAULT_MODELS: Record<string, string> = {
   anthropic: "claude-sonnet-4-20250514",
   openai: "gpt-5.4-mini",
   google: "gemini-3.1-flash-lite-preview",
+  zhipu: "glm-4-flash",
 };
 
 export interface CostEstimate {
@@ -120,6 +126,8 @@ export function formatCostEstimate(estimate: CostEstimate): string {
     lines.push(`  (OpenAI GPT-4.1-mini)`);
   } else if (estimate.provider === "anthropic") {
     lines.push(`  (Anthropic Claude Sonnet)`);
+  } else if (estimate.provider === "zhipu") {
+    lines.push(`  (Zhipu GLM-4-Flash — very low cost)`);
   }
 
   lines.push(`  Estimate includes ~40% buffer for retries and gleaning passes`);

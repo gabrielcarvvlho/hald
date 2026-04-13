@@ -6,6 +6,7 @@ export const DEFAULT_RPM: Record<LLMProvider, number> = {
   anthropic: 40, // Tier 1 conservative
   openai: 200, // Tier 1 conservative
   google: 30, // Free tier conservative
+  zhipu: 60, // Zhipu AI conservative
 };
 
 /**

@@ -1,4 +1,4 @@
-export type LLMProvider = "anthropic" | "openai" | "google";
+export type LLMProvider = "anthropic" | "openai" | "google" | "zhipu";
 
 export interface LLMClient {
   readonly provider: LLMProvider;

@@ -109,7 +109,7 @@ export interface HaldConfig {
   /** Max commit message chars before truncation. Default: 500 */
   maxMessageChars: number;
 
-  provider: "anthropic" | "openai" | "google" | "auto";
+  provider: "anthropic" | "openai" | "google" | "zhipu" | "auto";
   model?: string;
   apiKey?: string;
   baseUrl?: string;

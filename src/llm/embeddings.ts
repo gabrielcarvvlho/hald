@@ -208,18 +208,32 @@ export async function createEmbeddingClient(
       }
       return new GoogleEmbeddingClient(apiKey, config.maxRetries);
     }
+    case "zhipu": {
+      const apiKey = config.apiKey ?? process.env.ZHIPU_API_KEY;
+      if (!apiKey) {
+        logger.info("No Zhipu API key for embeddings — skipping");
+        return null;
+      }
+      // Zhipu embedding API is OpenAI-compatible
+      return new OpenAIEmbeddingClient(
+        apiKey,
+        config.baseUrl ?? "https://open.bigmodel.cn/api/paas/v4/",
+        config.maxRetries,
+      );
+    }
   }
 }
 
 /**
  * Detect which embedding-capable provider is available.
- * Only OpenAI and Google support embeddings; Anthropic does not.
+ * Anthropic has no native embedding API; all others support embeddings.
  * Checks env vars first, then falls back to prefix-based inference from apiKey.
  */
 function detectEmbeddingProvider(apiKey?: string): LLMProvider | null {
   // Env vars take priority
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) return "google";
+  if (process.env.ZHIPU_API_KEY) return "zhipu";
 
   // If an explicit key was provided, infer provider from key prefix
   if (apiKey) {
