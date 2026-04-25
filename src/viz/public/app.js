@@ -23,12 +23,14 @@ const TYPE_COLORS = {
 const COLORS_LIGHT = {
   nodeFallback: "#94a3b8",                  // slate-400
   nodeBorder: "#ffffff",
-  edgeIntra: "rgba(100,116,139,0.55)",      // slate-500
-  edgeCross: "rgba(148,163,184,0.45)",      // slate-400
+  // intra bright + cross dim creates clear "this group is together"
+  // hierarchy without visual clutter from low-weight cross-cluster lines.
+  edgeIntra: "rgba(100,116,139,0.65)",      // slate-500, prominent
+  edgeCross: "rgba(148,163,184,0.22)",      // slate-400, recedes
   edgeDefault: "rgba(100,116,139,0.5)",
   labelText: "#1e293b",                     // slate-800
   dimNode: "#e2e8f0",                       // slate-200 — barely visible
-  dimEdge: "rgba(226,232,240,0.2)",
+  dimEdge: "rgba(226,232,240,0.18)",
   hoverEdge: "#94a3b8",
   typeColors: TYPE_COLORS,
 };
@@ -36,12 +38,12 @@ const COLORS_LIGHT = {
 const COLORS_DARK = {
   nodeFallback: "#64748b",                  // slate-500
   nodeBorder: "#0b1220",                    // matches dark bg, blends border
-  edgeIntra: "rgba(148,163,184,0.55)",      // slate-400 (lighter)
-  edgeCross: "rgba(100,116,139,0.45)",      // slate-500
-  edgeDefault: "rgba(148,163,184,0.5)",
+  edgeIntra: "rgba(148,163,184,0.55)",      // slate-400, prominent against dark bg
+  edgeCross: "rgba(100,116,139,0.18)",      // slate-500, very subtle
+  edgeDefault: "rgba(148,163,184,0.4)",
   labelText: "#f1f5f9",                     // slate-100
   dimNode: "#1f2937",                       // gray-800 — barely visible against dark bg
-  dimEdge: "rgba(31,41,55,0.4)",
+  dimEdge: "rgba(31,41,55,0.35)",
   hoverEdge: "#94a3b8",
   typeColors: TYPE_COLORS,
 };
@@ -155,12 +157,14 @@ function buildGraph(data) {
     state.communityColors[c.id] = c.color;
   }
 
-  // Add nodes
+  // Add nodes. Sizes are tuned so big hubs stand out without
+  // overwhelming the canvas — small range (2.5 → 9) lets edges
+  // breathe and prevents label collisions in dense clusters.
   for (const node of data.nodes) {
     const color = node.communityId
       ? (state.communityColors[node.communityId] || COLORS.nodeFallback)
       : COLORS.nodeFallback;
-    const size = 4 + Math.min(16, Math.log(node.frequency + 1) * 4);
+    const size = 2.5 + Math.min(6.5, Math.log(node.frequency + 1) * 1.8);
 
     graph.addNode(node.id, {
       x: node.x,
@@ -189,7 +193,7 @@ function buildGraph(data) {
 
     try {
       graph.addEdge(edge.source, edge.target, {
-        size: 0.5 + Math.min(3, Math.log(edge.weight + 1)),
+        size: 0.35 + Math.min(2, Math.log(edge.weight + 1) * 0.6),
         color: isCross ? COLORS.edgeCross : COLORS.edgeIntra,
         edgeType: edge.type,
       });
@@ -203,14 +207,14 @@ function buildGraph(data) {
     state.neighbors.set(node, new Set(graph.neighbors(node)));
   });
 
-  // Force-label the top 5 most-connected nodes so they're always visible —
-  // gives newcomers an anchor instead of a wall of unlabeled dots.
+  // Force-label only the top 3 most-connected nodes — they act as
+  // anchors. The rest reveal on hover/search. Whisper until asked.
   const ranked = [];
   graph.forEachNode((node) => {
     ranked.push({ node, degree: graph.degree(node) });
   });
   ranked.sort((a, b) => b.degree - a.degree);
-  for (const { node } of ranked.slice(0, 5)) {
+  for (const { node } of ranked.slice(0, 3)) {
     graph.setNodeAttribute(node, "forceLabel", true);
   }
 
@@ -228,8 +232,13 @@ function createRenderer() {
     defaultEdgeColor: COLORS.edgeDefault,
     labelFont: "system-ui, sans-serif",
     labelColor: { color: COLORS.labelText },
-    labelSize: 12,
-    labelRenderedSizeThreshold: 8,
+    labelSize: 11,
+    // Only auto-label nodes whose rendered size is large — at the new
+    // size scale (~2.5–9) this means almost no labels show until the
+    // user zooms in or hovers, which keeps the default view calm.
+    labelRenderedSizeThreshold: 7,
+    labelDensity: 0.5,
+    labelGridCellSize: 80,
     nodeProgramClasses: {},
     nodeReducer: nodeReducer,
     edgeReducer: edgeReducer,
@@ -240,12 +249,13 @@ function createRenderer() {
 
   state.renderer = renderer;
 
-  // Brief settle animation on first paint — gives the user a sense of motion
-  // and confirms "the graph is loading" rather than a static dump.
+  // Brief settle animation on first paint — leave ~30% padding around
+  // the graph so users don't feel boxed in. The slight zoom-in starting
+  // state pulls back to give a sense of "settling into view."
   const camera = renderer.getCamera();
-  camera.setState({ x: 0.5, y: 0.5, ratio: 1.6, angle: 0 });
+  camera.setState({ x: 0.5, y: 0.5, ratio: 1.5, angle: 0 });
   requestAnimationFrame(() => {
-    camera.animate({ x: 0.5, y: 0.5, ratio: 1.05, angle: 0 }, { duration: 600 });
+    camera.animate({ x: 0.5, y: 0.5, ratio: 1.3, angle: 0 }, { duration: 700 });
   });
 }
 
@@ -891,7 +901,9 @@ function setupCommunityLabels(graphData) {
   state.communityLabels = [];
   for (const community of graphData.communities) {
     const members = graphData.nodes.filter((n) => n.communityId === community.id);
-    if (members.length === 0) continue;
+    // Skip singletons and pairs — too small to deserve a floating label
+    // and they just add visual clutter on dense graphs.
+    if (members.length < 3) continue;
 
     let sumX = 0;
     let sumY = 0;

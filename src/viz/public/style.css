@@ -445,10 +445,16 @@ html, body {
   position: absolute;
   top: 0;
   left: 0;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: -0.01em;
-  white-space: nowrap;
+  /* Allow line breaks so multi-word titles like "Core Pipeline and
+     Search Standards" wrap into a tight 2-3 line block instead of a
+     wide single line that overlaps neighboring nodes. */
+  white-space: normal;
+  text-align: center;
+  max-width: 160px;
+  line-height: 1.2;
   cursor: pointer;
   pointer-events: auto;
   user-select: none;

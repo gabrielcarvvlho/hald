@@ -161,11 +161,23 @@ function computeLayout(
     }
   }
 
-  // Run ForceAtlas2 synchronously
+  // Run ForceAtlas2 synchronously.
+  //   - Lower gravity (less pull toward center) + higher scalingRatio
+  //     give clusters room to breathe instead of melting together.
+  //   - More iterations let the layout actually converge — at ~150 nodes
+  //     the previous 100 iterations was visibly under-converged.
+  //   - slowDown smooths the final settle so small graphs don't oscillate.
   if (graph.size > 0) {
+    const n = entities.length;
+    const iterations = n < 50 ? 600 : n < 200 ? 400 : n < 1000 ? 250 : 150;
     forceAtlas2.assign(graph, {
-      iterations: entities.length < 100 ? 200 : 100,
-      settings: { gravity: 1, scalingRatio: 10, barnesHutOptimize: entities.length > 200 },
+      iterations,
+      settings: {
+        gravity: 0.4,
+        scalingRatio: 20,
+        slowDown: 5,
+        barnesHutOptimize: n > 200,
+      },
     });
   }
 
