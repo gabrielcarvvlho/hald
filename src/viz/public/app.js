@@ -15,6 +15,17 @@ const COLORS = {
   dimNode: "#e2e8f0",                         // dimmed during search/hover
   dimEdge: "rgba(226,232,240,0.2)",
   hoverEdge: "#94a3b8",
+  // Type chip colors. Unknown types fall back to nodeFallback.
+  typeColors: {
+    PERSON: "#3b82f6",
+    MODULE: "#10b981",
+    TECHNOLOGY: "#f59e0b",
+    DECISION: "#8b5cf6",
+    PATTERN: "#ec4899",
+    CONCEPT: "#14b8a6",
+    RISK: "#ef4444",
+    PROCESS: "#f97316",
+  },
 };
 
 // ================================================================
@@ -68,6 +79,7 @@ async function init() {
     // Build graph + render
     buildGraph(graphData);
     createRenderer();
+    setupTypeChips(graphData);
     setupEvents();
     setupSearch();
     setupFilters();
@@ -482,6 +494,31 @@ function setupSearch() {
       }
     }
   });
+}
+
+// ================================================================
+// Type chips — schema-driven from actual entity types in the graph.
+// Avoids the bug where index.html lists 5 hardcoded types but the
+// extractor schema can grow (CONCEPT, RISK, PROCESS, ...).
+// Per /plan-eng-review A3 (compute client-side, zero API change).
+// ================================================================
+
+function setupTypeChips(graphData) {
+  const container = document.getElementById("filter-chips");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const types = Array.from(new Set(graphData.nodes.map((n) => n.type))).sort();
+  for (const type of types) {
+    const chip = document.createElement("button");
+    chip.className = "filter-chip active";
+    chip.dataset.type = type;
+    const color = COLORS.typeColors[type] || COLORS.nodeFallback;
+    chip.style.setProperty("--chip-color", color);
+    // PERSON → Person, TECHNOLOGY → Technology
+    chip.textContent = type.charAt(0) + type.slice(1).toLowerCase();
+    container.appendChild(chip);
+  }
 }
 
 // ================================================================
