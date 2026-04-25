@@ -7,28 +7,49 @@ import { parseHash, serializeState } from "./url-state.js";
 // All sigma renderer + reducer colors must read from here.
 // ================================================================
 
-const COLORS = {
-  nodeFallback: "#94a3b8",                    // node with no community
+// Type chip colors stay the same in both themes — saturated enough
+// to read against either bg. Defined once.
+const TYPE_COLORS = {
+  PERSON: "#3b82f6",
+  MODULE: "#10b981",
+  TECHNOLOGY: "#f59e0b",
+  DECISION: "#8b5cf6",
+  PATTERN: "#ec4899",
+  CONCEPT: "#14b8a6",
+  RISK: "#ef4444",
+  PROCESS: "#f97316",
+};
+
+const COLORS_LIGHT = {
+  nodeFallback: "#94a3b8",                  // slate-400
   nodeBorder: "#ffffff",
-  edgeIntra: "rgba(100,116,139,0.55)",        // within community
-  edgeCross: "rgba(148,163,184,0.45)",        // crossing communities
-  edgeDefault: "rgba(100,116,139,0.5)",       // sigma defaultEdgeColor
-  labelText: "#1e293b",
-  dimNode: "#e2e8f0",                         // dimmed during search/hover
+  edgeIntra: "rgba(100,116,139,0.55)",      // slate-500
+  edgeCross: "rgba(148,163,184,0.45)",      // slate-400
+  edgeDefault: "rgba(100,116,139,0.5)",
+  labelText: "#1e293b",                     // slate-800
+  dimNode: "#e2e8f0",                       // slate-200 — barely visible
   dimEdge: "rgba(226,232,240,0.2)",
   hoverEdge: "#94a3b8",
-  // Type chip colors. Unknown types fall back to nodeFallback.
-  typeColors: {
-    PERSON: "#3b82f6",
-    MODULE: "#10b981",
-    TECHNOLOGY: "#f59e0b",
-    DECISION: "#8b5cf6",
-    PATTERN: "#ec4899",
-    CONCEPT: "#14b8a6",
-    RISK: "#ef4444",
-    PROCESS: "#f97316",
-  },
+  typeColors: TYPE_COLORS,
 };
+
+const COLORS_DARK = {
+  nodeFallback: "#64748b",                  // slate-500
+  nodeBorder: "#0b1220",                    // matches dark bg, blends border
+  edgeIntra: "rgba(148,163,184,0.55)",      // slate-400 (lighter)
+  edgeCross: "rgba(100,116,139,0.45)",      // slate-500
+  edgeDefault: "rgba(148,163,184,0.5)",
+  labelText: "#f1f5f9",                     // slate-100
+  dimNode: "#1f2937",                       // gray-800 — barely visible against dark bg
+  dimEdge: "rgba(31,41,55,0.4)",
+  hoverEdge: "#94a3b8",
+  typeColors: TYPE_COLORS,
+};
+
+// Mutable reference. setupTheme() / applyTheme() swap this between
+// light and dark; nodeReducer/edgeReducer read it at render time so
+// dim/hover colors update on theme change without rebuilding.
+let COLORS = COLORS_LIGHT;
 
 // ================================================================
 // State
@@ -94,6 +115,7 @@ async function init() {
     setupCommunityLabels(graphData);
     setupScreenshot();
     setupKeyboardShortcuts();
+    setupTheme();
 
     // Restore selected node if URL had one and it exists in the graph.
     if (initialState.node && state.graph.hasNode(initialState.node)) {
@@ -643,6 +665,79 @@ function setupKeyboardShortcuts() {
         { x: cs.x + dx, y: cs.y + dy, ratio: cs.ratio, angle: cs.angle },
         { duration: 180 },
       );
+    }
+  });
+}
+
+// ================================================================
+// Theme — light / dark, persisted to localStorage, default from
+// prefers-color-scheme. Sigma settings (defaultEdgeColor, labelColor)
+// must be re-applied on theme change because sigma reads them once
+// at renderer creation. Per-edge stored colors also need refresh.
+// ================================================================
+
+const THEME_KEY = "hald-theme";
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  COLORS = theme === "dark" ? COLORS_DARK : COLORS_LIGHT;
+  if (!state.renderer || !state.graph) return;
+
+  state.renderer.setSetting("defaultNodeColor", COLORS.nodeFallback);
+  state.renderer.setSetting("defaultEdgeColor", COLORS.edgeDefault);
+  state.renderer.setSetting("labelColor", { color: COLORS.labelText });
+
+  // Re-apply per-edge colors (intra/cross). Per-node colors come from
+  // community palette which is theme-stable.
+  state.graph.forEachEdge((edge) => {
+    const sourceCommunity = state.graph.getNodeAttribute(
+      state.graph.source(edge),
+      "communityId",
+    );
+    const targetCommunity = state.graph.getNodeAttribute(
+      state.graph.target(edge),
+      "communityId",
+    );
+    const isCross = sourceCommunity !== targetCommunity;
+    state.graph.setEdgeAttribute(
+      edge,
+      "color",
+      isCross ? COLORS.edgeCross : COLORS.edgeIntra,
+    );
+  });
+
+  // Refresh node border in case theme inverts it (light=white, dark=bg).
+  state.graph.forEachNode((node) => {
+    state.graph.setNodeAttribute(node, "borderColor", COLORS.nodeBorder);
+  });
+
+  state.renderer.refresh();
+}
+
+function setupTheme() {
+  let initial;
+  try {
+    initial = localStorage.getItem(THEME_KEY);
+  } catch (_e) {
+    // localStorage may be blocked in some contexts; ignore.
+  }
+  if (initial !== "light" && initial !== "dark") {
+    initial = window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  applyTheme(initial);
+
+  const btn = document.getElementById("btn-theme");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const current = document.documentElement.dataset.theme || "light";
+    const next = current === "dark" ? "light" : "dark";
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (_e) {
+      // ignore
     }
   });
 }
