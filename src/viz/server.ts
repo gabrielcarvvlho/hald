@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
@@ -16,9 +17,20 @@ const MIME_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-// Resolve public dir: from dist/cli.js → ../src/viz/public/
+// Resolve public dir. Tries two candidates so we work both from the
+// compiled bundle (dist/<chunk>.js) and from the TypeScript source
+// (vitest, dev). First match wins.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = join(__dirname, "..", "src", "viz", "public");
+const PUBLIC_DIR = (() => {
+  const candidates = [
+    join(__dirname, "..", "src", "viz", "public"), // when in dist/<chunk>.js
+    join(__dirname, "public"), // when in src/viz/server.ts (vitest)
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, "index.html"))) return c;
+  }
+  return candidates[0];
+})();
 
 function sendJson(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, {
