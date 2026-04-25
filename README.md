@@ -10,6 +10,14 @@ GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git h
   <a href="https://github.com/gabrielcarvvlho/hald/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
 </p>
 
+<p align="center">
+  <a href="docs/assets/hero.gif">
+    <img src="docs/assets/hero.gif" alt="Hald viz: communities, summaries, click-to-explain" width="820">
+  </a>
+</p>
+
+> Run `hald scan` once. Then `hald graph` opens an interactive view of your codebase as a knowledge graph — communities labeled with LLM-generated summaries, top experts highlighted, click any cluster to explain it.
+
 ## Quick Start
 
 ```bash
@@ -55,6 +63,24 @@ Your AI Agent     (synthesizes answers using its own tokens)
 ```
 
 Scanning costs tokens. Querying is always free — tools return structured graph data and your agent does the reasoning.
+
+## Visual Explorer
+
+```bash
+hald graph
+```
+
+Opens an interactive visualization in your browser. Built-in:
+
+- **Communities labeled with LLM summaries** — each cluster has a one-line title floating at the centroid; hover for the full summary, click to open a detail card with the top 5 entities in the cluster.
+- **Top experts surfaced by default** — the 5 most-connected nodes are labeled on first paint so you have anchors immediately.
+- **Search and filter** — `/` focuses search, type chips toggle entity types on/off, `Esc` closes panels.
+- **Light + dark mode** — follows your system preference, toggleable in the header.
+- **Shareable URLs** — selected node and active filters persist in the URL hash. Copy and paste to send a specific view to a teammate.
+- **PNG export** — one click to save the current view as an image.
+- **Keyboard nav** — arrow keys pan, `/` searches, `Esc` closes.
+
+Works fully offline — no CDN dependencies.
 
 ## What You Can Ask
 
