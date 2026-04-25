@@ -1,5 +1,7 @@
 /* global graphology, Sigma */
 
+import { parseHash, serializeState } from "./url-state.js";
+
 // ================================================================
 // Colors — centralized so dark mode (item #7) is a swap, not a hunt.
 // All sigma renderer + reducer colors must read from here.
@@ -76,6 +78,12 @@ async function init() {
     // Remove loading
     loadingEl.remove();
 
+    // Restore state from URL hash before chips/filters render so the
+    // "active" markers match. selected node is restored AFTER renderer
+    // is wired (selectNode needs renderer).
+    const initialState = parseHash(window.location.hash);
+    for (const t of initialState.hide) state.hiddenTypes.add(t);
+
     // Build graph + render
     buildGraph(graphData);
     createRenderer();
@@ -85,6 +93,11 @@ async function init() {
     setupFilters();
     setupCommunityLabels(graphData);
     setupScreenshot();
+
+    // Restore selected node if URL had one and it exists in the graph.
+    if (initialState.node && state.graph.hasNode(initialState.node)) {
+      selectNode(initialState.node);
+    }
   } catch (err) {
     loadingEl.textContent = "Failed to load graph data: " + err.message;
     loadingEl.classList.add("error");
@@ -330,6 +343,7 @@ function setupEvents() {
 function selectNode(nodeId) {
   state.selectedNode = nodeId;
   state.renderer.refresh();
+  scheduleUrlUpdate();
 
   // Fly-to node
   const nodePos = state.renderer.getNodeDisplayData(nodeId);
@@ -355,6 +369,7 @@ function closeSidebar() {
   state.selectedNode = null;
   document.getElementById("sidebar").classList.remove("open");
   state.renderer.refresh();
+  scheduleUrlUpdate();
 }
 
 function renderSidebar(detail) {
@@ -512,7 +527,9 @@ function setupTypeChips(graphData) {
   const types = Array.from(new Set(graphData.nodes.map((n) => n.type))).sort();
   for (const type of types) {
     const chip = document.createElement("button");
-    chip.className = "filter-chip active";
+    // Honor initial state restored from URL hash.
+    const hidden = state.hiddenTypes.has(type);
+    chip.className = "filter-chip" + (hidden ? "" : " active");
     chip.dataset.type = type;
     const color = COLORS.typeColors[type] || COLORS.nodeFallback;
     chip.style.setProperty("--chip-color", color);
@@ -538,8 +555,33 @@ function setupFilters() {
         chip.classList.remove("active");
       }
       state.renderer.refresh();
+      scheduleUrlUpdate();
     });
   });
+}
+
+// ================================================================
+// URL state sync — debounced writes to history.replaceState so
+// rapid filter toggles or search keystrokes don't spam the address
+// bar (per /plan-eng-review P1, 200ms matches the search debounce).
+// ================================================================
+
+let urlUpdateTimer = null;
+function scheduleUrlUpdate() {
+  if (urlUpdateTimer) clearTimeout(urlUpdateTimer);
+  urlUpdateTimer = setTimeout(writeUrl, 200);
+}
+
+function writeUrl() {
+  urlUpdateTimer = null;
+  const payload = serializeState({
+    node: state.selectedNode,
+    hide: Array.from(state.hiddenTypes),
+  });
+  const url = payload
+    ? window.location.pathname + window.location.search + "#" + payload
+    : window.location.pathname + window.location.search;
+  history.replaceState(null, "", url);
 }
 
 // ================================================================
