@@ -43,7 +43,12 @@ export class OpenAIClient implements LLMClient {
         const response = await client.chat.completions.create({
           model: this.model,
           temperature: options?.temperature ?? 0,
-          max_tokens: options?.maxTokens ?? 4096,
+          // GPT-5 / o1 family rejected the legacy `max_tokens`. Use
+          // `max_completion_tokens` — canonical since o1 (late 2024) and
+          // accepted by gpt-4o family too. If you hit a third-party
+          // OpenAI-compatible endpoint that requires `max_tokens`, set
+          // HALD_MODEL to a model name that endpoint understands.
+          max_completion_tokens: options?.maxTokens ?? 4096,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
