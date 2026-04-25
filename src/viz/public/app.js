@@ -84,6 +84,7 @@ async function init() {
     setupSearch();
     setupFilters();
     setupCommunityLabels(graphData);
+    setupScreenshot();
   } catch (err) {
     loadingEl.textContent = "Failed to load graph data: " + err.message;
     loadingEl.classList.add("error");
@@ -587,7 +588,13 @@ function setupCommunityLabels(graphData) {
     label.appendChild(tip);
 
     layer.appendChild(label);
-    state.communityLabels.push({ el: label, gx: cx, gy: cy });
+    state.communityLabels.push({
+      el: label,
+      gx: cx,
+      gy: cy,
+      title: community.title,
+      color: community.color,
+    });
   }
 
   // Reposition on every render. RAF-batched to coalesce zoom/pan bursts.
@@ -613,6 +620,92 @@ function setupCommunityLabels(graphData) {
   }
   state.renderer.on("afterRender", schedule);
   update();
+}
+
+// ================================================================
+// Screenshot — composite sigma's canvas layers into a single PNG
+// and download. Includes community labels rendered onto the canvas
+// (they live as DOM divs in the live UI but need to be baked into
+// the image for share-ability).
+//
+// Disabled when graph is empty (per /plan-eng-review C7).
+// ================================================================
+
+function captureScreenshotCanvas() {
+  const canvases = state.renderer.getCanvases();
+  // Sigma 3 layer names — composite in z-order.
+  const layerOrder = ["edges", "nodes", "labels", "hovers", "edgeLabels"];
+  const sample = canvases[layerOrder[0]] || Object.values(canvases)[0];
+  if (!sample) return null;
+
+  const out = document.createElement("canvas");
+  out.width = sample.width;
+  out.height = sample.height;
+  const ctx = out.getContext("2d");
+  if (!ctx) return null;
+
+  // Background — match the body bg so transparency doesn't surprise viewers.
+  const bg = getComputedStyle(document.body).backgroundColor || "#f8fafc";
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, out.width, out.height);
+
+  // Composite sigma layers
+  for (const layer of layerOrder) {
+    const c = canvases[layer];
+    if (c) ctx.drawImage(c, 0, 0);
+  }
+
+  // Render community labels onto the canvas (DPR-aware)
+  const dpr = window.devicePixelRatio || 1;
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.font =
+    'bold 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const l of state.communityLabels || []) {
+    const pt = state.renderer.graphToViewport({ x: l.gx, y: l.gy });
+    // White halo (3 strokes for solid look)
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#ffffff";
+    ctx.strokeText(l.title, pt.x, pt.y);
+    // Title in the community's color
+    ctx.fillStyle = l.color || COLORS.labelText;
+    ctx.fillText(l.title, pt.x, pt.y);
+  }
+  ctx.restore();
+
+  return out;
+}
+
+function setupScreenshot() {
+  const btn = document.getElementById("btn-screenshot");
+  if (!btn) return;
+
+  // Empty graph → button stays disabled (HTML default already has it).
+  if (!state.graph || state.graph.order === 0) {
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+
+  btn.addEventListener("click", () => {
+    const canvas = captureScreenshotCanvas();
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const date = new Date().toISOString().slice(0, 10);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "hald-graph-" + date + ".png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Defer revoke until next tick so the browser commits the download.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, "image/png");
+  });
 }
 
 // ================================================================
