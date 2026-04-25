@@ -23,7 +23,7 @@ async function init() {
   const loadingEl = document.getElementById("loading");
 
   if (typeof graphology === "undefined" || typeof Sigma === "undefined") {
-    loadingEl.textContent = "Failed to load dependencies. Check your internet connection.";
+    loadingEl.textContent = "Failed to load graph engine. Try rebuilding with `npm run build`.";
     loadingEl.classList.add("error");
     return;
   }

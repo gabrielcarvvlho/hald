@@ -76,6 +76,7 @@
     "openai": "^4.80.0",
     "ora": "^8.0.0",
     "p-limit": "^6.0.0",
+    "sigma": "^3.0.2",
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
