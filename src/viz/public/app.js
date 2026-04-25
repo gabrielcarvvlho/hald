@@ -132,6 +132,17 @@ function buildGraph(data) {
     state.neighbors.set(node, new Set(graph.neighbors(node)));
   });
 
+  // Force-label the top 5 most-connected nodes so they're always visible —
+  // gives newcomers an anchor instead of a wall of unlabeled dots.
+  const ranked = [];
+  graph.forEachNode((node) => {
+    ranked.push({ node, degree: graph.degree(node) });
+  });
+  ranked.sort((a, b) => b.degree - a.degree);
+  for (const { node } of ranked.slice(0, 5)) {
+    graph.setNodeAttribute(node, "forceLabel", true);
+  }
+
   state.graph = graph;
 }
 
@@ -157,6 +168,14 @@ function createRenderer() {
   });
 
   state.renderer = renderer;
+
+  // Brief settle animation on first paint — gives the user a sense of motion
+  // and confirms "the graph is loading" rather than a static dump.
+  const camera = renderer.getCamera();
+  camera.setState({ x: 0.5, y: 0.5, ratio: 1.6, angle: 0 });
+  requestAnimationFrame(() => {
+    camera.animate({ x: 0.5, y: 0.5, ratio: 1.05, angle: 0 }, { duration: 600 });
+  });
 }
 
 // ================================================================
