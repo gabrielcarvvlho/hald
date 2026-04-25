@@ -61,6 +61,15 @@
     <div id="sidebar-content"></div>
   </aside>
 
+  <!-- Cluster overlay (Explain this cluster) -->
+  <div id="cluster-overlay" class="cluster-overlay" hidden>
+    <div class="cluster-overlay-backdrop"></div>
+    <div class="cluster-overlay-card" role="dialog" aria-labelledby="cluster-title-anchor" aria-modal="true">
+      <button class="cluster-overlay-close" aria-label="Close">&times;</button>
+      <div id="cluster-content"></div>
+    </div>
+  </div>
+
   <!-- Dependencies: graphology first (peer dep), then sigma. Vendored locally to work offline. -->
   <script src="/assets/vendor/graphology.umd.min.js"></script>
   <script src="/assets/vendor/sigma.min.js"></script>

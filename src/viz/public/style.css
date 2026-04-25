@@ -494,6 +494,168 @@ html, body {
 }
 
 /* ================================================================
+   Cluster overlay (Explain this cluster, item #9)
+   ================================================================ */
+
+.cluster-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cluster-overlay[hidden] {
+  display: none;
+}
+
+.cluster-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.cluster-overlay-card {
+  position: relative;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  background: var(--bg-card);
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+  padding: 24px 28px;
+  overflow-y: auto;
+  animation: cluster-card-in 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes cluster-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.cluster-overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--hover-bg);
+  border-radius: 6px;
+  font-size: 18px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cluster-overlay-close:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.cluster-loading,
+.cluster-error {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  padding: 8px 0;
+}
+
+.cluster-error {
+  color: var(--error);
+}
+
+.cluster-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+  padding-right: 32px;
+}
+
+.cluster-summary {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 20px;
+}
+
+.cluster-summary.cluster-empty {
+  font-style: italic;
+  color: var(--text-tertiary);
+  background: var(--hover-bg);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.cluster-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-quaternary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.cluster-entities {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cluster-entity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-size: 13px;
+}
+
+.cluster-entity:hover {
+  background: var(--hover-bg);
+}
+
+.cluster-entity-type {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  width: 70px;
+}
+
+.cluster-entity-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-entity-freq {
+  font-size: 11px;
+  color: var(--text-quaternary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ================================================================
    Empty State
    ================================================================ */
 
