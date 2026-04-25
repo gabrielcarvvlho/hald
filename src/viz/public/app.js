@@ -1,6 +1,23 @@
 /* global graphology, Sigma */
 
 // ================================================================
+// Colors — centralized so dark mode (item #7) is a swap, not a hunt.
+// All sigma renderer + reducer colors must read from here.
+// ================================================================
+
+const COLORS = {
+  nodeFallback: "#94a3b8",                    // node with no community
+  nodeBorder: "#ffffff",
+  edgeIntra: "rgba(100,116,139,0.55)",        // within community
+  edgeCross: "rgba(148,163,184,0.45)",        // crossing communities
+  edgeDefault: "rgba(100,116,139,0.5)",       // sigma defaultEdgeColor
+  labelText: "#1e293b",
+  dimNode: "#e2e8f0",                         // dimmed during search/hover
+  dimEdge: "rgba(226,232,240,0.2)",
+  hoverEdge: "#94a3b8",
+};
+
+// ================================================================
 // State
 // ================================================================
 
@@ -88,7 +105,9 @@ function buildGraph(data) {
 
   // Add nodes
   for (const node of data.nodes) {
-    const color = node.communityId ? (state.communityColors[node.communityId] || "#94a3b8") : "#94a3b8";
+    const color = node.communityId
+      ? (state.communityColors[node.communityId] || COLORS.nodeFallback)
+      : COLORS.nodeFallback;
     const size = 4 + Math.min(16, Math.log(node.frequency + 1) * 4);
 
     graph.addNode(node.id, {
@@ -100,7 +119,7 @@ function buildGraph(data) {
       // Custom data for filtering/display
       nodeType: node.type,
       communityId: node.communityId,
-      borderColor: "#ffffff",
+      borderColor: COLORS.nodeBorder,
     });
   }
 
@@ -119,7 +138,7 @@ function buildGraph(data) {
     try {
       graph.addEdge(edge.source, edge.target, {
         size: 0.5 + Math.min(3, Math.log(edge.weight + 1)),
-        color: isCross ? "rgba(148,163,184,0.45)" : "rgba(100,116,139,0.55)",
+        color: isCross ? COLORS.edgeCross : COLORS.edgeIntra,
         edgeType: edge.type,
       });
     } catch (e) {
@@ -153,10 +172,10 @@ function buildGraph(data) {
 function createRenderer() {
   const container = document.getElementById("graph-container");
   const renderer = new Sigma(state.graph, container, {
-    defaultNodeColor: "#94a3b8",
-    defaultEdgeColor: "rgba(100,116,139,0.5)",
+    defaultNodeColor: COLORS.nodeFallback,
+    defaultEdgeColor: COLORS.edgeDefault,
     labelFont: "system-ui, sans-serif",
-    labelColor: { color: "#1e293b" },
+    labelColor: { color: COLORS.labelText },
     labelSize: 12,
     labelRenderedSizeThreshold: 8,
     nodeProgramClasses: {},
@@ -195,7 +214,7 @@ function nodeReducer(node, data) {
   if (state.searchQuery) {
     const matches = data.label.toLowerCase().includes(state.searchQuery);
     if (!matches) {
-      res.color = "#e2e8f0";
+      res.color = COLORS.dimNode;
       res.label = "";
       res.zIndex = 0;
     } else {
@@ -216,7 +235,7 @@ function nodeReducer(node, data) {
       if (neighbors && neighbors.has(node)) {
         res.zIndex = 1;
       } else {
-        res.color = "#e2e8f0";
+        res.color = COLORS.dimNode;
         res.label = "";
         res.zIndex = 0;
       }
@@ -236,11 +255,11 @@ function edgeReducer(edge, data) {
     const target = graph.target(edge);
 
     if (source === activeNode || target === activeNode) {
-      res.color = "#94a3b8";
+      res.color = COLORS.hoverEdge;
       res.size = Math.max(data.size, 1.5);
       res.zIndex = 1;
     } else {
-      res.color = "rgba(226,232,240,0.2)";
+      res.color = COLORS.dimEdge;
       res.zIndex = 0;
     }
   }
@@ -352,7 +371,7 @@ function renderSidebar(detail) {
   if (detail.communities.length > 0) {
     html += '<div class="section-title">Community</div>';
     for (const c of detail.communities) {
-      const color = state.communityColors[c.id] || "#94a3b8";
+      const color = state.communityColors[c.id] || COLORS.nodeFallback;
       html +=
         '<div class="community-item">' +
         '<div class="community-dot" style="background:' + color + '"></div>' +
