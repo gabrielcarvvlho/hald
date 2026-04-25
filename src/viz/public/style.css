@@ -348,6 +348,68 @@ html, body {
 }
 
 /* ================================================================
+   Community Labels (floating, transform-positioned)
+   ================================================================ */
+
+#community-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.community-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  /* white halo so the title reads against any node cluster */
+  text-shadow:
+    0 0 4px #fff,
+    0 0 4px #fff,
+    0 0 6px #fff;
+  transition: opacity 0.18s ease;
+  will-change: transform;
+}
+
+.community-label[data-faded="true"] {
+  opacity: 0.35;
+}
+
+.community-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  padding: 10px 12px;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 6px;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.45;
+  text-shadow: none;
+  letter-spacing: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  z-index: 11;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
+  white-space: normal;
+}
+
+.community-label:hover .community-tooltip {
+  opacity: 1;
+}
+
+/* ================================================================
    Empty State
    ================================================================ */
 

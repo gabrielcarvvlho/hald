@@ -71,6 +71,7 @@ async function init() {
     setupEvents();
     setupSearch();
     setupFilters();
+    setupCommunityLabels(graphData);
   } catch (err) {
     loadingEl.textContent = "Failed to load graph data: " + err.message;
     loadingEl.classList.add("error");
@@ -501,6 +502,80 @@ function setupFilters() {
       state.renderer.refresh();
     });
   });
+}
+
+// ================================================================
+// Community labels — floating divs at cluster centroids.
+// Each label shows the LLM-generated title + summary on hover.
+// Position is recomputed on every render via afterRender, batched in
+// requestAnimationFrame for GPU-friendly transform updates (per P3).
+// ================================================================
+
+function setupCommunityLabels(graphData) {
+  const container = document.getElementById("graph-container");
+  let layer = document.getElementById("community-labels");
+  if (!layer) {
+    layer = document.createElement("div");
+    layer.id = "community-labels";
+    container.appendChild(layer);
+  } else {
+    layer.innerHTML = "";
+  }
+
+  state.communityLabels = [];
+  for (const community of graphData.communities) {
+    const members = graphData.nodes.filter((n) => n.communityId === community.id);
+    if (members.length === 0) continue;
+
+    let sumX = 0;
+    let sumY = 0;
+    for (const n of members) {
+      sumX += n.x;
+      sumY += n.y;
+    }
+    const cx = sumX / members.length;
+    const cy = sumY / members.length;
+
+    const label = document.createElement("div");
+    label.className = "community-label";
+    label.style.color = community.color;
+    label.dataset.communityId = community.id;
+    label.textContent = community.title;
+
+    const tip = document.createElement("div");
+    tip.className = "community-tooltip";
+    tip.textContent =
+      community.summary ||
+      "No summary available — re-run hald scan with summarization.";
+    label.appendChild(tip);
+
+    layer.appendChild(label);
+    state.communityLabels.push({ el: label, gx: cx, gy: cy });
+  }
+
+  // Reposition on every render. RAF-batched to coalesce zoom/pan bursts.
+  let raf = null;
+  function update() {
+    raf = null;
+    const ratio = state.renderer.getCamera().getState().ratio;
+    // Fade community labels at high zoom — node labels take over.
+    const faded = ratio < 0.5;
+    for (const l of state.communityLabels) {
+      const pt = state.renderer.graphToViewport({ x: l.gx, y: l.gy });
+      l.el.style.transform =
+        "translate(" + pt.x + "px, " + pt.y + "px) translate(-50%, -50%)";
+      if (faded) {
+        l.el.setAttribute("data-faded", "true");
+      } else {
+        l.el.removeAttribute("data-faded");
+      }
+    }
+  }
+  function schedule() {
+    if (!raf) raf = requestAnimationFrame(update);
+  }
+  state.renderer.on("afterRender", schedule);
+  update();
 }
 
 // ================================================================
