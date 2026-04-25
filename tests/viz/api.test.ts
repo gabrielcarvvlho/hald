@@ -11,7 +11,12 @@ import {
   type Community,
   type CommitData,
 } from "../../src/shared/types.js";
-import { getGraphData, getEntityDetail, getStatsData } from "../../src/viz/api.js";
+import {
+  getGraphData,
+  getEntityDetail,
+  getStatsData,
+  getCommunityDetail,
+} from "../../src/viz/api.js";
 
 function createFixtureStore(): { db: Database.Database; store: Store } {
   const db = openDatabase(":memory:");
@@ -323,5 +328,156 @@ describe("getStatsData", () => {
     expect(result.relations).toBe(3);
     expect(result.communities).toBe(1);
     expect(result.commits).toBe(3);
+  });
+});
+
+// ================================================================
+// getCommunityDetail (Explain cluster overlay)
+// ================================================================
+
+describe("getCommunityDetail", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createFixtureStore());
+  });
+  afterEach(() => db.close());
+
+  it("returns null for unknown community ID", () => {
+    expect(getCommunityDetail(store, "comm:unknown")).toBeNull();
+  });
+
+  it("returns id, title, summary for a known community", () => {
+    const result = getCommunityDetail(store, "comm:1");
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe("comm:1");
+    expect(result!.title).toBe("Auth & Identity");
+    expect(result!.summary).toContain("authentication");
+  });
+
+  it("returns top entities sorted by frequency desc", () => {
+    const result = getCommunityDetail(store, "comm:1");
+
+    expect(result).not.toBeNull();
+    // Fixture has alice (42), auth (28), jwt (lower)
+    expect(result!.topEntities.length).toBeGreaterThan(0);
+    expect(result!.topEntities[0].name).toBe("Alice");
+    expect(result!.topEntities[0].frequency).toBe(42);
+    // Sorted desc
+    for (let i = 1; i < result!.topEntities.length; i++) {
+      expect(result!.topEntities[i - 1].frequency).toBeGreaterThanOrEqual(
+        result!.topEntities[i].frequency,
+      );
+    }
+  });
+
+  it("ties broken by name ascending for deterministic ordering", () => {
+    // Add a community with two entities at the same frequency.
+    const charlie: Entity = {
+      id: "person:charlie",
+      type: EntityType.PERSON,
+      name: "Charlie",
+      aliases: [],
+      description: "",
+      firstSeen: "2025-01-01",
+      lastSeen: "2025-12-01",
+      frequency: 10,
+      metadata: {},
+    };
+    const bob: Entity = {
+      id: "person:bob",
+      type: EntityType.PERSON,
+      name: "Bob",
+      aliases: [],
+      description: "",
+      firstSeen: "2025-01-01",
+      lastSeen: "2025-12-01",
+      frequency: 10,
+      metadata: {},
+    };
+    store.upsertEntity(charlie);
+    store.upsertEntity(bob);
+
+    const tieComm: Community = {
+      id: "comm:tie",
+      level: 0,
+      title: "Ties",
+      summary: "",
+      entityIds: ["person:charlie", "person:bob"],
+      childIds: [],
+    };
+    store.upsertCommunity(tieComm);
+
+    const result = getCommunityDetail(store, "comm:tie");
+    expect(result!.topEntities[0].name).toBe("Bob");
+    expect(result!.topEntities[1].name).toBe("Charlie");
+  });
+
+  it("caps top entities at 5 even if community has more", () => {
+    // Add 7 entities to a single community.
+    const ids: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const e: Entity = {
+        id: `person:e${i}`,
+        type: EntityType.PERSON,
+        name: `Entity${i}`,
+        aliases: [],
+        description: "",
+        firstSeen: "2025-01-01",
+        lastSeen: "2025-12-01",
+        frequency: 100 - i, // decreasing frequency
+        metadata: {},
+      };
+      store.upsertEntity(e);
+      ids.push(e.id);
+    }
+    const big: Community = {
+      id: "comm:big",
+      level: 0,
+      title: "Big",
+      summary: "",
+      entityIds: ids,
+      childIds: [],
+    };
+    store.upsertCommunity(big);
+
+    const result = getCommunityDetail(store, "comm:big");
+    expect(result!.topEntities).toHaveLength(5);
+    // Highest frequency first
+    expect(result!.topEntities[0].name).toBe("Entity0");
+  });
+
+  it("returns empty topEntities when community has zero entities", () => {
+    const empty: Community = {
+      id: "comm:empty",
+      level: 0,
+      title: "Empty",
+      summary: "Lonely cluster",
+      entityIds: [],
+      childIds: [],
+    };
+    store.upsertCommunity(empty);
+
+    const result = getCommunityDetail(store, "comm:empty");
+    expect(result).not.toBeNull();
+    expect(result!.topEntities).toEqual([]);
+  });
+
+  it("skips entities that no longer exist in the store", () => {
+    const ghost: Community = {
+      id: "comm:ghost",
+      level: 0,
+      title: "Ghost",
+      summary: "",
+      entityIds: ["person:alice", "person:nonexistent"],
+      childIds: [],
+    };
+    store.upsertCommunity(ghost);
+
+    const result = getCommunityDetail(store, "comm:ghost");
+    expect(result!.topEntities).toHaveLength(1);
+    expect(result!.topEntities[0].id).toBe("person:alice");
   });
 });

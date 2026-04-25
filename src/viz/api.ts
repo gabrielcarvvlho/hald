@@ -290,6 +290,55 @@ export function getEntityDetail(store: Store, entityId: string): EntityDetailRes
 }
 
 // ================================================================
+// Community Detail (cluster explain overlay)
+// ================================================================
+
+export interface CommunityTopEntity {
+  id: string;
+  name: string;
+  type: string;
+  frequency: number;
+}
+
+export interface CommunityDetailResponse {
+  id: string;
+  title: string;
+  summary: string;
+  topEntities: CommunityTopEntity[];
+}
+
+const TOP_ENTITIES_PER_COMMUNITY = 5;
+
+export function getCommunityDetail(
+  store: Store,
+  communityId: string,
+): CommunityDetailResponse | null {
+  const community = store.getCommunity(communityId);
+  if (!community) return null;
+
+  const entityMap = store.getEntitiesByIds(community.entityIds);
+  const entities: CommunityTopEntity[] = [];
+  for (const id of community.entityIds) {
+    const e = entityMap.get(id);
+    if (!e) continue;
+    entities.push({ id: e.id, name: e.name, type: e.type, frequency: e.frequency });
+  }
+
+  // Sort by frequency desc; ties broken by name asc for deterministic ordering.
+  entities.sort((a, b) => {
+    if (b.frequency !== a.frequency) return b.frequency - a.frequency;
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    id: community.id,
+    title: community.title,
+    summary: community.summary,
+    topEntities: entities.slice(0, TOP_ENTITIES_PER_COMMUNITY),
+  };
+}
+
+// ================================================================
 // Stats (header)
 // ================================================================
 

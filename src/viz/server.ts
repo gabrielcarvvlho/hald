@@ -4,7 +4,7 @@ import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
 import type { Store } from "../store/queries.js";
-import { getGraphData, getEntityDetail, getStatsData } from "./api.js";
+import { getGraphData, getEntityDetail, getStatsData, getCommunityDetail } from "./api.js";
 import type { GraphResponse, StatsResponse } from "./api.js";
 
 const MIME_TYPES: Record<string, string> = {
@@ -64,6 +64,14 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
         const entityId = decodeURIComponent(entityMatch[1]);
         const detail = getEntityDetail(store, entityId);
         if (!detail) return send404(res, `Entity "${entityId}" not found`);
+        return sendJson(res, detail);
+      }
+
+      const communityMatch = pathname.match(/^\/api\/community\/(.+)$/);
+      if (communityMatch) {
+        const communityId = decodeURIComponent(communityMatch[1]);
+        const detail = getCommunityDetail(store, communityId);
+        if (!detail) return send404(res, `Community "${communityId}" not found`);
         return sendJson(res, detail);
       }
 

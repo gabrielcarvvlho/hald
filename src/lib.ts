@@ -23,7 +23,12 @@ export { localSearch } from "./query/local-search.js";
 export { globalSearch, classifyQuery } from "./query/global-search.js";
 
 // Viz / Graph export
-export { getGraphData, getEntityDetail, getStatsData } from "./viz/api.js";
+export {
+  getGraphData,
+  getEntityDetail,
+  getStatsData,
+  getCommunityDetail,
+} from "./viz/api.js";
 
 // Enums (runtime values, not type-only)
 export { EntityType, RelationType } from "./shared/types.js";
@@ -69,4 +74,6 @@ export type {
   GraphCommunity,
   EntityDetailResponse,
   StatsResponse,
+  CommunityDetailResponse,
+  CommunityTopEntity,
 } from "./viz/api.js";
