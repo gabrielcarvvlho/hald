@@ -162,20 +162,23 @@ function computeLayout(
   }
 
   // Run ForceAtlas2 synchronously.
-  //   - Lower gravity (less pull toward center) + higher scalingRatio
-  //     give clusters room to breathe instead of melting together.
-  //   - More iterations let the layout actually converge — at ~150 nodes
-  //     the previous 100 iterations was visibly under-converged.
-  //   - slowDown smooths the final settle so small graphs don't oscillate.
+  //   - Very low gravity so clusters don't all melt toward the center.
+  //   - High scalingRatio gives nodes large repulsion → real whitespace.
+  //   - linLogMode squeezes high-degree hubs and spreads peripheral
+  //     nodes more, which suits hub-and-spoke graphs like git-author /
+  //     module relationships.
+  //   - More iterations for small graphs so they fully settle (visual
+  //     convergence matters more than raw speed at <500 nodes).
   if (graph.size > 0) {
     const n = entities.length;
-    const iterations = n < 50 ? 600 : n < 200 ? 400 : n < 1000 ? 250 : 150;
+    const iterations = n < 50 ? 1000 : n < 200 ? 800 : n < 1000 ? 400 : 200;
     forceAtlas2.assign(graph, {
       iterations,
       settings: {
-        gravity: 0.4,
-        scalingRatio: 20,
-        slowDown: 5,
+        gravity: 0.08,
+        scalingRatio: 50,
+        slowDown: 8,
+        linLogMode: true,
         barnesHutOptimize: n > 200,
       },
     });

@@ -235,7 +235,7 @@ html, body {
   position: fixed;
   top: 92px;
   right: 0;
-  width: 360px;
+  width: 340px;
   height: calc(100vh - 92px);
   background: var(--bg-card);
   box-shadow: var(--shadow-sidebar);
@@ -243,7 +243,7 @@ html, body {
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow-y: auto;
   z-index: 15;
-  padding: 20px;
+  padding: 18px;
 }
 
 #sidebar.open {
@@ -276,34 +276,37 @@ html, body {
 /* Sidebar content */
 
 .entity-name {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-strong);
   margin-bottom: 2px;
   padding-right: 32px;
+  letter-spacing: -0.01em;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .entity-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .entity-description {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.5;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-quaternary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
-  padding-top: 16px;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  padding-top: 12px;
   border-top: 1px solid var(--hover-bg);
 }
 
@@ -313,12 +316,12 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   margin: 0 -8px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.12s;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .relation-item:hover {
@@ -327,12 +330,12 @@ html, body {
 
 .relation-arrow {
   color: var(--text-quaternary);
-  font-size: 12px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
 .relation-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
   flex: 1;
   overflow: hidden;
@@ -375,15 +378,16 @@ html, body {
 }
 
 .community-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--text-primary);
+  letter-spacing: -0.005em;
 }
 
 .community-summary {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-tertiary);
-  line-height: 1.4;
+  line-height: 1.45;
   margin-top: 2px;
 }
 
@@ -445,27 +449,30 @@ html, body {
   position: absolute;
   top: 0;
   left: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  /* Allow line breaks so multi-word titles like "Core Pipeline and
-     Search Standards" wrap into a tight 2-3 line block instead of a
-     wide single line that overlaps neighboring nodes. */
+  letter-spacing: 0;
+  /* Wrap multi-word titles into a compact 2-line block. */
   white-space: normal;
   text-align: center;
-  max-width: 160px;
-  line-height: 1.2;
+  max-width: 130px;
+  line-height: 1.25;
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
   /* halo so the title reads against any cluster — uses bg color so it
      adapts in dark mode. */
   text-shadow:
-    0 0 4px var(--halo),
-    0 0 4px var(--halo),
-    0 0 6px var(--halo);
+    0 0 3px var(--halo),
+    0 0 3px var(--halo),
+    0 0 5px var(--halo);
   transition: opacity 0.18s ease;
   will-change: transform;
+  opacity: 0.85;
+}
+
+.community-label:hover {
+  opacity: 1;
 }
 
 .community-label[data-faded="true"] {

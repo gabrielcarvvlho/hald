@@ -157,14 +157,15 @@ function buildGraph(data) {
     state.communityColors[c.id] = c.color;
   }
 
-  // Add nodes. Sizes are tuned so big hubs stand out without
-  // overwhelming the canvas — small range (2.5 → 9) lets edges
-  // breathe and prevents label collisions in dense clusters.
+  // Add nodes. Tight size range so non-hub nodes are dots (1.8px)
+  // and only the highest-frequency entities pop up to ~7px.
+  // The visual story is "communities of dots with a few anchors,"
+  // not "everything is a labeled blob."
   for (const node of data.nodes) {
     const color = node.communityId
       ? (state.communityColors[node.communityId] || COLORS.nodeFallback)
       : COLORS.nodeFallback;
-    const size = 2.5 + Math.min(6.5, Math.log(node.frequency + 1) * 1.8);
+    const size = 1.8 + Math.min(5.2, Math.log(node.frequency + 1) * 1.5);
 
     graph.addNode(node.id, {
       x: node.x,
@@ -193,7 +194,7 @@ function buildGraph(data) {
 
     try {
       graph.addEdge(edge.source, edge.target, {
-        size: 0.35 + Math.min(2, Math.log(edge.weight + 1) * 0.6),
+        size: 0.25 + Math.min(1.4, Math.log(edge.weight + 1) * 0.45),
         color: isCross ? COLORS.edgeCross : COLORS.edgeIntra,
         edgeType: edge.type,
       });
@@ -233,12 +234,12 @@ function createRenderer() {
     labelFont: "system-ui, sans-serif",
     labelColor: { color: COLORS.labelText },
     labelSize: 11,
-    // Only auto-label nodes whose rendered size is large — at the new
-    // size scale (~2.5–9) this means almost no labels show until the
-    // user zooms in or hovers, which keeps the default view calm.
-    labelRenderedSizeThreshold: 7,
-    labelDensity: 0.5,
-    labelGridCellSize: 80,
+    // Hard threshold: only nodes rendered ≥12px get auto-labels. With
+    // size range 1.8–7px, this means the only labels visible by
+    // default are the top-3 forced ones. Hover reveals everything.
+    labelRenderedSizeThreshold: 12,
+    labelDensity: 0.4,
+    labelGridCellSize: 100,
     nodeProgramClasses: {},
     nodeReducer: nodeReducer,
     edgeReducer: edgeReducer,
