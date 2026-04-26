@@ -26,6 +26,10 @@
   --tooltip-bg: #1e293b;
   --tooltip-text: #e2e8f0;
   --halo: #ffffff;
+  /* Path highlighting accent — used by the floating banner that shows
+     a cmd-clicked path through the graph. Matches pathEdge in app.js. */
+  --path-color: #d97706;            /* amber-600 */
+  --path-color-soft: rgba(217, 119, 6, 0.10);
   --shadow-sidebar: 0 4px 24px rgba(0, 0, 0, 0.08);
   --shadow-tooltip: 0 4px 18px rgba(15, 23, 42, 0.18);
 }
@@ -51,6 +55,8 @@
   --tooltip-bg: #f1f5f9;
   --tooltip-text: #1e293b;
   --halo: #0b1220;
+  --path-color: #fbbf24;            /* amber-300 — pops on dark slate */
+  --path-color-soft: rgba(251, 191, 36, 0.14);
   --shadow-sidebar: -4px 0 28px rgba(0, 0, 0, 0.4);
   --shadow-tooltip: 0 4px 22px rgba(0, 0, 0, 0.35);
 }
@@ -688,6 +694,143 @@ html, body {
   color: var(--text-quaternary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+/* ================================================================
+   Path banner — floating top-of-canvas trace summary
+   ================================================================ */
+
+.path-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.10);
+  z-index: 13;
+  max-width: calc(100% - 80px);
+  /* The amber accent stripe on the leading edge tells you at a glance
+     "this is the path widget" — same hue as the highlighted edges. */
+  border-left: 3px solid var(--path-color);
+}
+
+.path-banner[hidden] {
+  display: none;
+}
+
+[data-theme="dark"] .path-banner {
+  box-shadow: 0 4px 22px rgba(0, 0, 0, 0.45);
+}
+
+.path-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.path-banner-step {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, color 0.15s;
+}
+
+.path-banner-step:hover {
+  background: var(--hover-bg);
+}
+
+.path-banner-step.is-endpoint {
+  color: var(--path-color);
+  background: var(--path-color-soft);
+  font-weight: 600;
+}
+
+.path-banner-step.is-error {
+  color: var(--text-tertiary);
+  cursor: default;
+  font-weight: 400;
+}
+
+.path-banner-step.is-error:hover {
+  background: transparent;
+}
+
+.path-banner-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-quaternary);
+  font-size: 11px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* Tiny relation-type pill between hop names. Reads "lowercase, calm"
+   so it informs without competing with the entity names. The amber
+   tint borrows from --path-color to feel like part of the path
+   widget, but stays soft so it doesn't outshine the endpoints. */
+.path-banner-edgetype {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  background: var(--path-color-soft);
+  border-radius: 999px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-banner-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  margin-left: 2px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-banner-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--hover-bg);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.path-banner-close:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.path-banner.is-error {
+  border-left-color: var(--text-quaternary);
 }
 
 /* ================================================================

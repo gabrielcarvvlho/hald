@@ -36,6 +36,10 @@ const COLORS_LIGHT = {
   // hierarchy collapses.
   edgeIntraRgb: [100, 116, 139],            // slate-500
   edgeCrossRgb: [148, 163, 184],            // slate-400
+  // Path-highlighting accent — distinct from any community color so
+  // the "thread" through the graph reads as a separate semantic layer.
+  pathEdge: "rgba(217,119,6,0.90)",         // amber-600 against light bg
+  pathNodeRing: "#d97706",                  // amber-600 — for path-node ring
   labelText: "#1e293b",                     // slate-800
   // Hover label "pill" — sigma's default is hardcoded white, which collides
   // with light-text label colors in dark mode. We draw it ourselves; these
@@ -58,6 +62,10 @@ const COLORS_DARK = {
   edgeDefault: "rgba(148,163,184,0.4)",
   edgeIntraRgb: [148, 163, 184],            // slate-400
   edgeCrossRgb: [100, 116, 139],            // slate-500
+  // Path accent in dark mode — brighter amber so it pops against the
+  // slate-blue background. Same hue family as the light-mode token.
+  pathEdge: "rgba(251,191,36,0.92)",        // amber-300
+  pathNodeRing: "#fbbf24",                  // amber-300
   labelText: "#f1f5f9",                     // slate-100
   // Dark-mode hover pill: dark surface + light text. Sigma's built-in
   // hover renderer uses white bg unconditionally, which made highlighted
@@ -98,6 +106,11 @@ let COLORS = COLORS_LIGHT;
 // a NodeProgram subclass into the vendored sigma UMD.
 
 const HALO_PREFIX = "__halo__";
+// Tuned to read as a refined selection RING, not a spotlight. Real
+// node sits on top at zIndex 1, so the visible halo is just the
+// outer annulus — ~0.7× the node radius wide, low alpha. Anything
+// larger or more opaque started feeling like a target reticle around
+// small dots.
 const HALO_SIZE_MULT = 1.6;       // halo radius = 1.6× node radius
 const HALO_ALPHA_ACTIVE = 0.20;   // hover/select — present but quiet
 const HALO_ACTIVE_GROW = 1.08;    // tiny extra grow on the active node so hover registers as motion
@@ -213,6 +226,21 @@ const state = {
     baselines: new Map(), // realNodeId → {x, y} at layout time
     phases: new Map(),    // realNodeId → {fx, fy, phx, phy, ax, ay}
     pulses: new Map(),    // realNodeId → start ms (hover ripple)
+  },
+  // Path highlighting — populated when user cmd-clicks a second node
+  // while one is selected. nodeSet/edgeSet exist for O(1) lookups in
+  // the per-frame reducer + edge drawer. edgeTypes is parallel to the
+  // gaps between nodes (length === nodes.length - 1) and powers the
+  // semantic banner label between hops.
+  path: {
+    active: false,
+    nodes: [],            // ordered: [from, ..., to]
+    edgeTypes: [],        // edgeType per gap; null when edge is missing
+    nodeSet: new Set(),
+    edgeSet: new Set(),
+    fromId: null,
+    toId: null,
+    errorTimerId: null,
   },
 };
 
@@ -531,6 +559,237 @@ function pulseSizeMult(realId, nowMs) {
 }
 
 // ================================================================
+// Path highlighting — cmd/ctrl-click two nodes to trace shortest path
+// ================================================================
+//
+// UX: click selects a node. Cmd-click (mac) / Ctrl-click (other) on
+// a SECOND node while one is already selected triggers a BFS from the
+// first to the second. The path is rendered as:
+//   - Path nodes lifted (size boost, forceLabel) and undimmed
+//   - Path edges in amber, drawn AFTER non-path edges so they sit on top
+//   - Non-path nodes/edges dimmed so the thread reads cleanly
+//   - Floating banner at top with clickable hop list + close
+//
+// Why client-side BFS: graphology's UMD doesn't bundle shortest-path
+// helpers. The graph is in memory anyway, so a 20-line BFS is simpler
+// than wiring an /api/path endpoint and avoids a round trip. O(V+E)
+// is fine well past the practical viz size ceiling.
+
+const PATH_AUTO_DISMISS_ERROR_MS = 2500;
+
+function findShortestPath(graph, src, tgt) {
+  if (!graph || !graph.hasNode(src) || !graph.hasNode(tgt)) return null;
+  if (src === tgt) return [src];
+  const visited = new Set([src]);
+  const parent = new Map();
+  const queue = [src];
+  while (queue.length) {
+    const node = queue.shift();
+    const neighbors = graph.neighbors(node);
+    for (const n of neighbors) {
+      if (visited.has(n)) continue;
+      // Halos have no edges, but defend in case future code adds them.
+      if (isHalo(n)) continue;
+      visited.add(n);
+      parent.set(n, node);
+      if (n === tgt) {
+        // Reconstruct path back to src.
+        const path = [tgt];
+        let cur = tgt;
+        while (parent.has(cur)) {
+          cur = parent.get(cur);
+          path.unshift(cur);
+        }
+        return path;
+      }
+      queue.push(n);
+    }
+  }
+  return null;
+}
+
+function buildPathEdgeSet(graph, pathNodes) {
+  const set = new Set();
+  for (let i = 0; i < pathNodes.length - 1; i++) {
+    const e = graph.edge(pathNodes[i], pathNodes[i + 1]);
+    if (e) set.add(e);
+  }
+  return set;
+}
+
+// Walk the path and grab the edgeType of the connecting edge for each
+// pair. Length always === pathNodes.length - 1. Null entries mean the
+// edge wasn't found in the graph (defensive — shouldn't happen for a
+// path produced by BFS, but guards against drift).
+function buildPathEdgeTypes(graph, pathNodes) {
+  const out = [];
+  for (let i = 0; i < pathNodes.length - 1; i++) {
+    const e = graph.edge(pathNodes[i], pathNodes[i + 1]);
+    if (!e) {
+      out.push(null);
+      continue;
+    }
+    const t = graph.getEdgeAttribute(e, "edgeType");
+    out.push(typeof t === "string" ? t : null);
+  }
+  return out;
+}
+
+function clearPath() {
+  if (state.path.errorTimerId !== null) {
+    clearTimeout(state.path.errorTimerId);
+    state.path.errorTimerId = null;
+  }
+  state.path.active = false;
+  state.path.nodes = [];
+  state.path.edgeTypes = [];
+  state.path.nodeSet = new Set();
+  state.path.edgeSet = new Set();
+  state.path.fromId = null;
+  state.path.toId = null;
+  hidePathBanner();
+  if (state.renderer) state.renderer.refresh();
+}
+
+function setPath(srcId, tgtId) {
+  const nodes = findShortestPath(state.graph, srcId, tgtId);
+  if (!nodes || nodes.length < 2) {
+    showPathBannerError(srcId, tgtId);
+    return false;
+  }
+  if (state.path.errorTimerId !== null) {
+    clearTimeout(state.path.errorTimerId);
+    state.path.errorTimerId = null;
+  }
+  state.path.active = true;
+  state.path.nodes = nodes;
+  state.path.edgeTypes = buildPathEdgeTypes(state.graph, nodes);
+  state.path.nodeSet = new Set(nodes);
+  state.path.edgeSet = buildPathEdgeSet(state.graph, nodes);
+  state.path.fromId = srcId;
+  state.path.toId = tgtId;
+  showPathBanner(nodes);
+  state.renderer.refresh();
+  return true;
+}
+
+// ================================================================
+// Path banner — floating top-of-canvas summary with clickable hops
+// ================================================================
+
+function ensurePathBanner() {
+  let banner = document.getElementById("path-banner");
+  if (banner) return banner;
+  const container = document.getElementById("graph-container");
+  banner = document.createElement("div");
+  banner.id = "path-banner";
+  banner.className = "path-banner";
+  banner.hidden = true;
+  banner.innerHTML =
+    '<div class="path-banner-content"></div>' +
+    '<button class="path-banner-close" aria-label="Clear path" title="Clear path (Esc)">&times;</button>';
+  banner.querySelector(".path-banner-close").addEventListener("click", clearPath);
+  container.appendChild(banner);
+  return banner;
+}
+
+function nodeLabelOrId(id) {
+  if (state.graph && state.graph.hasNode(id)) {
+    const lbl = state.graph.getNodeAttribute(id, "label");
+    if (lbl) return lbl;
+  }
+  return id;
+}
+
+function showPathBanner(pathNodes) {
+  const banner = ensurePathBanner();
+  const content = banner.querySelector(".path-banner-content");
+  content.innerHTML = "";
+  const len = pathNodes.length;
+
+  for (let i = 0; i < len; i++) {
+    const id = pathNodes[i];
+    const isEnd = i === 0 || i === len - 1;
+    const step = document.createElement("span");
+    step.className = "path-banner-step" + (isEnd ? " is-endpoint" : "");
+    step.textContent = nodeLabelOrId(id);
+    step.title = nodeLabelOrId(id);
+    step.addEventListener("click", () => {
+      // Banner clicks bypass the canvas click handler, so calling
+      // selectNode directly preserves the path mode (only the
+      // modifier-click handler in setupEvents calls clearPath).
+      selectNode(id);
+    });
+    content.appendChild(step);
+
+    if (i < len - 1) {
+      // Connector between hops shows the relation type — turns the
+      // path from "graph theory" into "story": Alice ─authored→
+      // src/extractor ─uses→ src/store. The edge type comes from the
+      // extractor's relation classification (AUTHORED, USES,
+      // DEPENDS_ON, CO_CHANGED, DECIDED, ...). When the type is
+      // missing we fall back to a plain arrow so we never show a
+      // broken connector.
+      const arrow = document.createElement("span");
+      arrow.className = "path-banner-arrow";
+      const edgeType = state.path.edgeTypes[i];
+      if (edgeType) {
+        const label = document.createElement("span");
+        label.className = "path-banner-edgetype";
+        label.textContent = edgeType.toLowerCase().replace(/_/g, " ");
+        arrow.appendChild(label);
+        arrow.appendChild(document.createTextNode("→"));
+      } else {
+        arrow.textContent = "→";
+      }
+      content.appendChild(arrow);
+    }
+  }
+
+  const meta = document.createElement("span");
+  meta.className = "path-banner-meta";
+  const hops = len - 1;
+  meta.textContent = "· " + hops + " hop" + (hops === 1 ? "" : "s");
+  content.appendChild(meta);
+
+  banner.classList.remove("is-error");
+  banner.hidden = false;
+}
+
+function showPathBannerError(srcId, tgtId) {
+  const banner = ensurePathBanner();
+  const content = banner.querySelector(".path-banner-content");
+  content.innerHTML = "";
+  const msg = document.createElement("span");
+  msg.className = "path-banner-step is-error";
+  msg.textContent =
+    'No connection between "' +
+    nodeLabelOrId(srcId) +
+    '" and "' +
+    nodeLabelOrId(tgtId) +
+    '"';
+  content.appendChild(msg);
+  banner.classList.add("is-error");
+  banner.hidden = false;
+
+  if (state.path.errorTimerId !== null) clearTimeout(state.path.errorTimerId);
+  state.path.errorTimerId = setTimeout(() => {
+    state.path.errorTimerId = null;
+    // Only auto-dismiss the error if no real path got set in the
+    // meantime (defensive — user could cmd-click again before timer).
+    if (!state.path.active) hidePathBanner();
+  }, PATH_AUTO_DISMISS_ERROR_MS);
+}
+
+function hidePathBanner() {
+  const banner = document.getElementById("path-banner");
+  if (banner) {
+    banner.hidden = true;
+    banner.classList.remove("is-error");
+  }
+}
+
+// ================================================================
 // Zoom-driven label density
 // ================================================================
 // Sigma's labelRenderedSizeThreshold gates which nodes draw a label.
@@ -647,41 +906,18 @@ function drawCurvedEdges() {
   const g = state.graph;
   const renderer = state.renderer;
   const activeNode = state.hoveredNode || state.selectedNode;
+  const pathActive = state.path.active;
 
   ctx.lineCap = "round";
 
-  g.forEachEdge((edge, attrs, src, tgt, srcAttrs, tgtAttrs) => {
-    // Halo nodes have no edges, but defend anyway in case future
-    // code adds halo-side edges accidentally.
-    if (isHalo(src) || isHalo(tgt)) return;
-    // Hide edges that connect to a type-filtered node.
-    if (
-      state.hiddenTypes.has(srcAttrs.nodeType) ||
-      state.hiddenTypes.has(tgtAttrs.nodeType)
-    ) {
-      return;
-    }
-
-    let color = attrs.color;
-    let size = attrs.size || 1;
-
-    // Hover/select dim — same logic as the old edgeReducer used.
-    if (activeNode) {
-      if (src === activeNode || tgt === activeNode) {
-        color = COLORS.hoverEdge;
-        size = Math.max(size, 1.5);
-      } else {
-        color = COLORS.dimEdge;
-      }
-    }
-
+  // Inline draw helper — used for both passes. Captures ctx + renderer
+  // via closure so we don't re-resolve them per edge.
+  function drawOne(srcAttrs, tgtAttrs, color, size) {
     const sP = renderer.graphToViewport({ x: srcAttrs.x, y: srcAttrs.y });
     const tP = renderer.graphToViewport({ x: tgtAttrs.x, y: tgtAttrs.y });
-
     const dx = tP.x - sP.x;
     const dy = tP.y - sP.y;
     const len = Math.sqrt(dx * dx + dy * dy);
-
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
     ctx.beginPath();
@@ -690,8 +926,7 @@ function drawCurvedEdges() {
       ctx.lineTo(tP.x, tP.y);
     } else {
       // Quadratic bezier with perpendicular offset (90° CCW from
-      // S→T direction). Same side for every edge → consistent
-      // curve aesthetic. Sagitta is EDGE_CURVE_AMOUNT × chord len.
+      // S→T direction). Sagitta is EDGE_CURVE_AMOUNT × chord len.
       const px = -dy / len;
       const py = dx / len;
       const cx = (sP.x + tP.x) / 2 + px * len * EDGE_CURVE_AMOUNT;
@@ -699,7 +934,58 @@ function drawCurvedEdges() {
       ctx.quadraticCurveTo(cx, cy, tP.x, tP.y);
     }
     ctx.stroke();
+  }
+
+  // Pass 1: non-path edges. When path is active, these are dimmed
+  // hard so the highlighted thread reads cleanly.
+  g.forEachEdge((edge, attrs, src, tgt, srcAttrs, tgtAttrs) => {
+    if (isHalo(src) || isHalo(tgt)) return;
+    if (
+      state.hiddenTypes.has(srcAttrs.nodeType) ||
+      state.hiddenTypes.has(tgtAttrs.nodeType)
+    ) {
+      return;
+    }
+    if (pathActive && state.path.edgeSet.has(edge)) return; // drawn in pass 2
+
+    let color = attrs.color;
+    let size = attrs.size || 1;
+
+    if (pathActive) {
+      // Path mode dominant — every non-path edge dims to the same
+      // value so the amber thread doesn't compete with hover dim.
+      color = COLORS.dimEdge;
+    } else if (activeNode) {
+      if (src === activeNode || tgt === activeNode) {
+        color = COLORS.hoverEdge;
+        size = Math.max(size, 1.5);
+      } else {
+        color = COLORS.dimEdge;
+      }
+    }
+
+    drawOne(srcAttrs, tgtAttrs, color, size);
   });
+
+  // Pass 2: path edges drawn ON TOP, in amber, thicker. Skipped
+  // entirely when no path is active.
+  if (pathActive) {
+    g.forEachEdge((edge, attrs, src, tgt, srcAttrs, tgtAttrs) => {
+      if (!state.path.edgeSet.has(edge)) return;
+      if (isHalo(src) || isHalo(tgt)) return;
+      if (
+        state.hiddenTypes.has(srcAttrs.nodeType) ||
+        state.hiddenTypes.has(tgtAttrs.nodeType)
+      ) {
+        return;
+      }
+      // Path edge thickness: 2× baseline with a hard cap so heavy
+      // edges don't become absurd lines. Min floor 1.5 ensures even
+      // the lightest connection reads as a deliberate thread.
+      const size = Math.min(5, Math.max(attrs.size || 1, 1.5) * 2);
+      drawOne(srcAttrs, tgtAttrs, COLORS.pathEdge, size);
+    });
+  }
 }
 
 function setupCurvedEdges() {
@@ -862,31 +1148,61 @@ function nodeReducer(node, data) {
     return res;
   }
 
-  // Search dimming
-  if (state.searchQuery) {
-    const matches = data.label.toLowerCase().includes(state.searchQuery);
-    if (!matches) {
+  // Path mode is the dominant baseline when active. Path nodes lift
+  // and force their label; non-path nodes dim and lose their label.
+  // Hover/select can still apply on top (halo, ripple) but cannot
+  // un-dim non-path nodes — the path is the dominant focus.
+  const pathActive = state.path.active;
+  const inPath = pathActive && state.path.nodeSet.has(node);
+  let pathLift = 1;
+  if (pathActive) {
+    if (inPath) {
+      pathLift =
+        node === state.path.fromId || node === state.path.toId ? 1.30 : 1.12;
+      res.size = data.size * pathLift;
+      res.zIndex = 3;
+      res.forceLabel = true;
+    } else {
       res.color = COLORS.dimNode;
       res.label = "";
       res.zIndex = 0;
-    } else {
-      res.highlighted = true;
-      res.zIndex = 2;
     }
   }
 
-  // Hover / selection highlight
+  // Search dimming. Path nodes are exempt from search-dim so the
+  // thread stays visible while you scan within it.
+  if (state.searchQuery) {
+    const matches = data.label.toLowerCase().includes(state.searchQuery);
+    if (!matches) {
+      if (!inPath) {
+        res.color = COLORS.dimNode;
+        res.label = "";
+        res.zIndex = 0;
+      }
+    } else {
+      res.highlighted = true;
+      res.zIndex = Math.max(res.zIndex || 0, 2);
+    }
+  }
+
+  // Hover / selection highlight. Active node always lifts and undims.
+  // Non-active path nodes never re-dim from a hover on something else.
   const activeNode = state.hoveredNode || state.selectedNode;
   if (activeNode) {
     if (node === activeNode) {
       res.highlighted = true;
-      res.size = data.size * 1.4;
-      res.zIndex = 2;
+      res.size = data.size * 1.4 * pathLift;
+      res.zIndex = Math.max(res.zIndex || 0, 2);
+      // Active node is never dimmed even outside the path.
+      if (res.color === COLORS.dimNode) res.color = data.color;
+      if (res.label === "") res.label = data.label;
     } else {
       const neighbors = state.neighbors.get(activeNode);
       if (neighbors && neighbors.has(node)) {
-        res.zIndex = 1;
-      } else {
+        res.zIndex = Math.max(res.zIndex || 0, 1);
+      } else if (!inPath) {
+        // Non-path, non-neighbor — dim it. Path nodes were already
+        // handled above and stay lit.
         res.color = COLORS.dimNode;
         res.label = "";
         res.zIndex = 0;
@@ -952,16 +1268,35 @@ function setupEvents() {
     }
   });
 
-  // Click node → open sidebar
-  renderer.on("clickNode", ({ node }) => {
+  // Click node → select, OR cmd/ctrl-click → trace shortest path from
+  // the previously selected node to this one. Sigma 3 wraps the native
+  // event under `event.original`. On macOS, ctrl-click is right-click
+  // (a different sigma event), so accepting both metaKey and ctrlKey
+  // means mac users use ⌘ and linux/win users use Ctrl, both safe.
+  renderer.on("clickNode", (payload) => {
+    const node = payload && payload.node;
+    if (!node) return;
+    const original = payload.event && payload.event.original;
+    const isMod = !!(original && (original.metaKey || original.ctrlKey));
+
     const realId = isHalo(node)
       ? state.graph.getNodeAttribute(node, "_haloOf")
       : node;
-    if (realId) selectNode(realId);
+    if (!realId) return;
+
+    if (isMod && state.selectedNode && state.selectedNode !== realId) {
+      setPath(state.selectedNode, realId);
+      return;
+    }
+
+    // Regular click — clear any active path then select normally.
+    if (state.path.active) clearPath();
+    selectNode(realId);
   });
 
-  // Click empty space → close sidebar
+  // Click empty space → clear path + close sidebar (deselect-all gesture).
   renderer.on("clickStage", () => {
+    if (state.path.active) clearPath();
     closeSidebar();
   });
 
@@ -1222,10 +1557,28 @@ function setupFilters() {
         state.hiddenTypes.add(type);
         chip.classList.remove("active");
       }
+      // If the active path runs through a now-hidden type, the
+      // visualization would render a broken thread (some hops gone,
+      // banner still claims they're there). Clear the path on filter
+      // change rather than show a misleading half-view; user can
+      // re-trace with the new filter set if they still want to.
+      if (state.path.active && pathTouchesHiddenType()) {
+        clearPath();
+      }
       state.renderer.refresh();
       scheduleUrlUpdate();
     });
   });
+}
+
+function pathTouchesHiddenType() {
+  if (!state.path.active || !state.graph) return false;
+  for (const id of state.path.nodes) {
+    if (!state.graph.hasNode(id)) continue;
+    const t = state.graph.getNodeAttribute(id, "nodeType");
+    if (state.hiddenTypes.has(t)) return true;
+  }
+  return false;
 }
 
 // ================================================================
@@ -1279,13 +1632,17 @@ function setupKeyboardShortcuts() {
       return;
     }
 
-    // Escape priority: search blur > overlay close > sidebar close.
+    // Escape priority: search blur > overlay close > path clear > sidebar close.
+    // Path is dismissed before sidebar so the user can clear the
+    // highlight without losing the entity panel they're reading.
     if (e.key === "Escape") {
       const searchEl = document.getElementById("search-input");
       if (document.activeElement === searchEl) {
         searchEl.blur();
       } else if (state.overlayOpen) {
         closeClusterOverlay();
+      } else if (state.path.active) {
+        clearPath();
       } else if (state.selectedNode) {
         closeSidebar();
       }
