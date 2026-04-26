@@ -267,6 +267,7 @@ async function init() {
     setupKeyboardShortcuts();
     setupTheme();
     setupClusterOverlay();
+    setupZoomDensity();
     // Curved edges layer — must come AFTER createRenderer so sigma's
     // canvases exist (we insert ours as a sibling at the front) and
     // BEFORE motion starts so the first breathing frame already has
@@ -527,6 +528,50 @@ function pulseSizeMult(realId, nowMs) {
   if (t <= 0 || t >= 1) return 1;
   const wave = t < 0.5 ? smoothstep(t * 2) : smoothstep((1 - t) * 2);
   return 1 + MOTION_PULSE_PEAK * wave;
+}
+
+// ================================================================
+// Zoom-driven label density
+// ================================================================
+// Sigma's labelRenderedSizeThreshold gates which nodes draw a label.
+// Default 12px means only the top-3 force-labeled anchors show under
+// normal zoom — the rest reveal on hover. Tying threshold to the
+// camera ratio gives Obsidian-style progressive disclosure: zoom in,
+// more labels appear; zoom out, only the cluster names remain.
+
+const ZOOM_LABEL_BUCKETS = [
+  // [maxRatio, threshold]  — first bucket whose ratio matches wins
+  [0.35, 3],   // very zoomed in: label nearly every node
+  [0.55, 6],
+  [0.85, 9],
+  [1.30, 12],  // default desktop zoom
+  [2.00, 20],  // zooming out: fewer labels
+  [Infinity, 999], // far out: communities only
+];
+
+function thresholdForRatio(ratio) {
+  for (const [max, t] of ZOOM_LABEL_BUCKETS) {
+    if (ratio < max) return t;
+  }
+  return 999;
+}
+
+function setupZoomDensity() {
+  if (!state.renderer) return;
+  const camera = state.renderer.getCamera();
+  let lastThreshold = -1;
+
+  const apply = () => {
+    const r = camera.getState().ratio;
+    const t = thresholdForRatio(r);
+    if (t !== lastThreshold) {
+      state.renderer.setSetting("labelRenderedSizeThreshold", t);
+      lastThreshold = t;
+    }
+  };
+
+  camera.on("updated", apply);
+  apply(); // initial
 }
 
 // ================================================================
@@ -1039,9 +1084,26 @@ function renderSidebar(detail) {
 // Search
 // ================================================================
 
+// Lazily create the inline "0 matches for X" banner. Lives inside
+// #graph-container at top-center so it doesn't fight the toolbar
+// or sidebar for space. pointer-events:none so the canvas under it
+// stays interactive.
+function ensureSearchEmptyEl() {
+  let el = document.getElementById("search-empty");
+  if (el) return el;
+  const container = document.getElementById("graph-container");
+  el = document.createElement("div");
+  el.id = "search-empty";
+  el.className = "search-empty";
+  el.style.display = "none";
+  container.appendChild(el);
+  return el;
+}
+
 function setupSearch() {
   const input = document.getElementById("search-input");
   let debounceTimer = null;
+  const emptyEl = ensureSearchEmptyEl();
 
   input.addEventListener("input", () => {
     clearTimeout(debounceTimer);
@@ -1049,29 +1111,47 @@ function setupSearch() {
       state.searchQuery = input.value.trim().toLowerCase();
       state.renderer.refresh();
 
-      // Fly to first match
-      if (state.searchQuery) {
-        const graph = state.graph;
-        let bestNode = null;
-        let bestSize = 0;
-        graph.forEachNode((node, attrs) => {
-          if (
-            attrs.label.toLowerCase().includes(state.searchQuery) &&
-            !state.hiddenTypes.has(attrs.nodeType) &&
-            attrs.size > bestSize
-          ) {
-            bestNode = node;
-            bestSize = attrs.size;
-          }
-        });
-        if (bestNode) {
-          const pos = state.renderer.getNodeDisplayData(bestNode);
-          if (pos) {
-            state.renderer.getCamera().animate(
-              { x: pos.x, y: pos.y, ratio: 0.5 },
-              { duration: 300 },
-            );
-          }
+      // Combined pass: pick the best (largest visible match) AND
+      // count total matches — same iteration, two outputs. Empty
+      // search clears both the empty-state banner and any prior fly.
+      if (!state.searchQuery) {
+        emptyEl.style.display = "none";
+        return;
+      }
+
+      const graph = state.graph;
+      let bestNode = null;
+      let bestSize = 0;
+      let matchCount = 0;
+      graph.forEachNode((node, attrs) => {
+        if (isHalo(node)) return;
+        if (state.hiddenTypes.has(attrs.nodeType)) return;
+        if (!attrs.label || !attrs.label.toLowerCase().includes(state.searchQuery)) return;
+        matchCount++;
+        if (attrs.size > bestSize) {
+          bestNode = node;
+          bestSize = attrs.size;
+        }
+      });
+
+      if (matchCount === 0) {
+        // Inline empty state — quoted query, dismissible by clearing
+        // the input. Pointer-events disabled so it never blocks clicks
+        // on the canvas behind it.
+        emptyEl.textContent = `0 matches for "${input.value.trim()}"`;
+        emptyEl.style.display = "block";
+      } else {
+        emptyEl.style.display = "none";
+      }
+
+      // Fly to first match (largest matching node).
+      if (bestNode) {
+        const pos = state.renderer.getNodeDisplayData(bestNode);
+        if (pos) {
+          state.renderer.getCamera().animate(
+            { x: pos.x, y: pos.y, ratio: 0.5 },
+            { duration: 300 },
+          );
         }
       }
     }, 300);
@@ -1464,15 +1544,6 @@ function setupCommunityLabels(graphData) {
     // and they just add visual clutter on dense graphs.
     if (members.length < 3) continue;
 
-    let sumX = 0;
-    let sumY = 0;
-    for (const n of members) {
-      sumX += n.x;
-      sumY += n.y;
-    }
-    const cx = sumX / members.length;
-    const cy = sumY / members.length;
-
     const label = document.createElement("div");
     label.className = "community-label";
     label.style.color = community.color;
@@ -1487,27 +1558,78 @@ function setupCommunityLabels(graphData) {
     label.appendChild(tip);
 
     layer.appendChild(label);
+    // Store member IDs so the per-render positioner can project LIVE
+    // sigma graph coords (not the stale API snapshot), making labels
+    // follow the cluster as it breathes/drifts under motion. Falling
+    // back to the API x/y if a node ever disappears keeps positions
+    // sane during transitions.
     state.communityLabels.push({
       el: label,
-      gx: cx,
-      gy: cy,
+      memberIds: members.map((n) => n.id),
+      memberFallback: members.map((n) => ({ x: n.x, y: n.y })),
       title: community.title,
       color: community.color,
     });
   }
 
   // Reposition on every render. RAF-batched to coalesce zoom/pan bursts.
+  // Strategy: project every cluster member to screen, anchor the label
+  // at the TOPMOST projected member with a small upward offset so the
+  // text never sits on top of a node. The previous version anchored at
+  // the centroid which guaranteed overlap with whichever node was
+  // closest to the cluster's geometric center.
+  const LABEL_OFFSET_PX = 18;
   let raf = null;
   function update() {
     raf = null;
     const ratio = state.renderer.getCamera().getState().ratio;
-    // Fade community labels at high zoom — node labels take over.
-    const faded = ratio < 0.5;
+    // Smooth fade as we zoom in. node labels take over below ratio 0.5.
+    // 0.4 → 0% opacity, 0.7 → 100% opacity, linear ramp between.
+    const fadeOpacity = Math.max(0, Math.min(1, (ratio - 0.4) / 0.3));
     for (const l of state.communityLabels) {
-      const pt = state.renderer.graphToViewport({ x: l.gx, y: l.gy });
+      let topX = 0;
+      let topY = Infinity;
+      let anyVisible = false;
+      for (let i = 0; i < l.memberIds.length; i++) {
+        const id = l.memberIds[i];
+        let gx;
+        let gy;
+        if (state.graph && state.graph.hasNode(id)) {
+          // Skip members hidden by type filters — labels should anchor
+          // only to currently-visible nodes.
+          const nodeType = state.graph.getNodeAttribute(id, "nodeType");
+          if (state.hiddenTypes.has(nodeType)) continue;
+          gx = state.graph.getNodeAttribute(id, "x");
+          gy = state.graph.getNodeAttribute(id, "y");
+        } else {
+          gx = l.memberFallback[i].x;
+          gy = l.memberFallback[i].y;
+        }
+        const pt = state.renderer.graphToViewport({ x: gx, y: gy });
+        if (pt.y < topY) {
+          topY = pt.y;
+          topX = pt.x;
+          anyVisible = true;
+        }
+      }
+      if (!anyVisible) {
+        l.el.style.display = "none";
+        continue;
+      }
+      l.el.style.display = "";
+      // Anchor the bottom-center of the label LABEL_OFFSET_PX above
+      // the topmost cluster node. translate(-50%, -100%) shifts the
+      // label so its baseline sits at the offset point.
       l.el.style.transform =
-        "translate(" + pt.x + "px, " + pt.y + "px) translate(-50%, -50%)";
-      if (faded) {
+        "translate(" +
+        Math.round(topX) +
+        "px, " +
+        Math.round(topY - LABEL_OFFSET_PX) +
+        "px) translate(-50%, -100%)";
+      // Smooth opacity per zoom — overrides the binary data-faded
+      // attribute so we get a gentle ramp instead of a snap.
+      l.el.style.opacity = String(fadeOpacity);
+      if (fadeOpacity < 0.5) {
         l.el.setAttribute("data-faded", "true");
       } else {
         l.el.removeAttribute("data-faded");
@@ -1561,8 +1683,14 @@ function captureScreenshotCanvas() {
     if (c) ctx.drawImage(c, 0, 0);
   }
 
-  // Render community labels onto the canvas (DPR-aware)
+  // Render community labels onto the canvas using the DOM label's
+  // current position (which is computed from the topmost cluster
+  // member each frame). Reading getBoundingClientRect keeps the
+  // screenshot in lockstep with the live UI no matter how the
+  // positioning logic evolves.
   const dpr = window.devicePixelRatio || 1;
+  const container = document.getElementById("graph-container");
+  const cRect = container ? container.getBoundingClientRect() : { left: 0, top: 0 };
   ctx.save();
   ctx.scale(dpr, dpr);
   ctx.font =
@@ -1570,14 +1698,16 @@ function captureScreenshotCanvas() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (const l of state.communityLabels || []) {
-    const pt = state.renderer.graphToViewport({ x: l.gx, y: l.gy });
-    // White halo (3 strokes for solid look)
+    if (!l.el || l.el.style.display === "none") continue;
+    const r = l.el.getBoundingClientRect();
+    const cx = r.left + r.width / 2 - cRect.left;
+    const cy = r.top + r.height / 2 - cRect.top;
+    // White halo so titles read against any cluster color.
     ctx.lineWidth = 4;
     ctx.strokeStyle = "#ffffff";
-    ctx.strokeText(l.title, pt.x, pt.y);
-    // Title in the community's color
+    ctx.strokeText(l.title, cx, cy);
     ctx.fillStyle = l.color || COLORS.labelText;
-    ctx.fillText(l.title, pt.x, pt.y);
+    ctx.fillText(l.title, cx, cy);
   }
   ctx.restore();
 
