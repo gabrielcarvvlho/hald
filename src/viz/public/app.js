@@ -29,6 +29,13 @@ const COLORS_LIGHT = {
   edgeCross: "rgba(148,163,184,0.22)",      // slate-400, recedes
   edgeDefault: "rgba(100,116,139,0.5)",
   labelText: "#1e293b",                     // slate-800
+  // Hover label "pill" — sigma's default is hardcoded white, which collides
+  // with light-text label colors in dark mode. We draw it ourselves; these
+  // tokens give it a contrasting bg + text per theme.
+  hoverLabelBg: "#ffffff",
+  hoverLabelText: "#0f172a",                // slate-900
+  hoverLabelBorder: "rgba(15,23,42,0.10)",
+  hoverShadow: "rgba(15,23,42,0.18)",
   dimNode: "#e2e8f0",                       // slate-200 — barely visible
   dimEdge: "rgba(226,232,240,0.18)",
   hoverEdge: "#94a3b8",
@@ -42,6 +49,13 @@ const COLORS_DARK = {
   edgeCross: "rgba(100,116,139,0.18)",      // slate-500, very subtle
   edgeDefault: "rgba(148,163,184,0.4)",
   labelText: "#f1f5f9",                     // slate-100
+  // Dark-mode hover pill: dark surface + light text. Sigma's built-in
+  // hover renderer uses white bg unconditionally, which made highlighted
+  // labels unreadable in dark mode (white text on white pill).
+  hoverLabelBg: "#1e293b",                  // slate-800
+  hoverLabelText: "#f8fafc",                // slate-50
+  hoverLabelBorder: "rgba(148,163,184,0.25)",
+  hoverShadow: "rgba(0,0,0,0.55)",
   dimNode: "#1f2937",                       // gray-800 — barely visible against dark bg
   dimEdge: "rgba(31,41,55,0.35)",
   hoverEdge: "#94a3b8",
@@ -243,6 +257,11 @@ function createRenderer() {
     nodeProgramClasses: {},
     nodeReducer: nodeReducer,
     edgeReducer: edgeReducer,
+    // Override sigma's default hover renderer. The built-in one paints a
+    // hardcoded white pill behind the label, so in dark mode (with light
+    // label text) the highlighted node became unreadable: white text on
+    // white pill. Our renderer reads from the active COLORS palette.
+    defaultDrawNodeHover: drawNodeHover,
     zIndex: true,
     minCameraRatio: 0.02,
     maxCameraRatio: 10,
@@ -258,6 +277,70 @@ function createRenderer() {
   requestAnimationFrame(() => {
     camera.animate({ x: 0.5, y: 0.5, ratio: 1.3, angle: 0 }, { duration: 700 });
   });
+}
+
+// ================================================================
+// Custom node-hover renderer
+// ================================================================
+// Sigma's default hover renderer hardcodes the label-pill background
+// to white — fine in light mode, unreadable in dark mode (light label
+// text on a white pill). This renderer mirrors the original geometry
+// (rounded pill aligned to the node disc) but pulls every color from
+// the active COLORS palette, so dark mode gets a slate-800 pill with
+// slate-50 text.
+function drawNodeHover(ctx, data, settings) {
+  const size = settings.labelSize;
+  const font = settings.labelFont;
+  const weight = settings.labelWeight ?? "";
+  const padX = 5;
+  const padY = 2;
+
+  ctx.font = `${weight} ${size}px ${font}`.trim();
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 1;
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = COLORS.hoverShadow;
+  ctx.fillStyle = COLORS.hoverLabelBg;
+
+  if (typeof data.label === "string" && data.label) {
+    const textWidth = ctx.measureText(data.label).width;
+    const pillWidth = Math.round(textWidth + padX);
+    const pillHeight = Math.round(size + 2 * padY);
+    const radius = Math.max(data.size, size / 2) + padY;
+    const angle = Math.asin(pillHeight / 2 / radius);
+    const arcEdgeX = Math.sqrt(Math.abs(radius * radius - (pillHeight / 2) * (pillHeight / 2)));
+
+    ctx.beginPath();
+    ctx.moveTo(data.x + arcEdgeX, data.y + pillHeight / 2);
+    ctx.lineTo(data.x + radius + pillWidth, data.y + pillHeight / 2);
+    ctx.lineTo(data.x + radius + pillWidth, data.y - pillHeight / 2);
+    ctx.lineTo(data.x + arcEdgeX, data.y - pillHeight / 2);
+    ctx.arc(data.x, data.y, radius, angle, -angle);
+    ctx.closePath();
+    ctx.fill();
+
+    // Subtle border separates the pill from same-tone backgrounds
+    // (mostly noticeable in dark mode against the canvas bg).
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = COLORS.hoverLabelBorder;
+    ctx.stroke();
+
+    // Label text — theme-aware, drawn last so it sits on top.
+    ctx.fillStyle = COLORS.hoverLabelText;
+    ctx.fillText(data.label, data.x + data.size + 3, data.y + size / 3);
+  } else {
+    // No label: keep sigma's halo behavior (a slightly bigger disc).
+    ctx.beginPath();
+    ctx.arc(data.x, data.y, data.size + padY, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowBlur = 0;
+  }
 }
 
 // ================================================================
