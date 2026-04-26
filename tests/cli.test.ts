@@ -91,10 +91,13 @@ describe("CLI — stats", () => {
       HALD_REPO: emptyDir,
     });
     expect(exitCode).toBe(0);
-    // Should show stats with zero counts rather than crash
-    expect(stdout).toContain("Entities:");
+    // Card shows the expected labels and zero counts, with a "(none)" marker
+    // for the missing last-indexed-commit instead of crashing.
+    expect(stdout).toContain("Entities");
+    expect(stdout).toContain("Relations");
+    expect(stdout).toContain("Communities");
     expect(stdout).toContain("0");
-    expect(stdout).toContain("Last indexed commit: none");
+    expect(stdout).toContain("(none)");
   });
 
   it("stats on populated index shows counts", () => {
@@ -122,8 +125,10 @@ describe("CLI — stats", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Entities:");
+    expect(stdout).toContain("Entities");
+    // Short hash (7 chars) — current data only has 6 chars so the full hash appears
     expect(stdout).toContain("abc123");
+    expect(stdout).toContain("Last commit");
   });
 });
 

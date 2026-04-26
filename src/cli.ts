@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { join } from "node:path";
+import chalk from "chalk";
 import { Command } from "commander";
 import { loadConfig } from "./shared/config.js";
 import { openDatabase } from "./store/db.js";
@@ -276,26 +277,70 @@ program
       return;
     }
 
+    // Silence INFO-level migration logs in TTY mode so they don't print above
+    // the card. Errors and warnings still surface. Same gating as scan.
+    const isPretty =
+      process.stderr.isTTY === true && !process.env.HALD_JSON_LOGS && !process.env.CI;
+    if (isPretty) logger.setLevel(LogLevel.WARN);
+
     const store = new Store(db);
     const stats = store.getStats();
     const lastCommit = store.getMeta("last_indexed_commit");
     const lastIndexed = store.getMeta("last_indexed_at");
-
-    console.log("\n◉ Hald Index Statistics");
-    console.log("======================");
-    console.log(`  Entities:    ${stats.entities}`);
-    console.log(`  Relations:   ${stats.relations}`);
-    console.log(`  Text Units:  ${stats.textUnits}`);
-    console.log(`  Communities: ${stats.communities}`);
-    console.log(`  Commits:     ${stats.commits}`);
-    console.log("");
-    console.log(`  Last indexed commit: ${lastCommit ?? "none"}`);
-    console.log(`  Last indexed at:     ${lastIndexed ?? "never"}`);
-    console.log(`  Storage:             ${config.storagePath}`);
-    console.log("");
-
     store.close();
+
+    const rows: [string, string][] = [
+      ["Entities", stats.entities.toLocaleString()],
+      ["Relations", stats.relations.toLocaleString()],
+      ["Text units", stats.textUnits.toLocaleString()],
+      ["Communities", stats.communities.toLocaleString()],
+      ["Commits", stats.commits.toLocaleString()],
+    ];
+    const sepIdx = rows.length;
+    if (lastCommit) {
+      const shortHash = lastCommit.slice(0, 7);
+      const rel = lastIndexed ? formatRelative(lastIndexed) : "";
+      rows.push(["Last commit", rel ? `${shortHash} ${chalk.dim("· " + rel)}` : shortHash]);
+    } else {
+      rows.push(["Last commit", chalk.dim("(none)")]);
+    }
+    rows.push(["Storage", chalk.dim(config.storagePath)]);
+
+    const labelWidth = Math.max(...rows.map(([k]) => k.length));
+    process.stdout.write(
+      `\n${chalk.bold("◉ Hald")} ${chalk.dim("— index for " + config.repoPath)}\n\n`,
+    );
+    rows.forEach(([k, v], i) => {
+      if (i === sepIdx) process.stdout.write("\n");
+      process.stdout.write(`  ${chalk.dim(k.padEnd(labelWidth))}  ${v}\n`);
+    });
+    process.stdout.write("\n");
   });
+
+/**
+ * Format an ISO timestamp as a short, human-friendly relative string.
+ * Falls back to a localized date for anything older than 30 days, and
+ * returns the original input if parsing fails.
+ */
+function formatRelative(isoTimestamp: string): string {
+  const then = new Date(isoTimestamp).getTime();
+  if (Number.isNaN(then)) return isoTimestamp;
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return "in the future";
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(isoTimestamp).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
 
 // ================================================================
 // graph
