@@ -267,6 +267,11 @@ async function init() {
     setupKeyboardShortcuts();
     setupTheme();
     setupClusterOverlay();
+    // Curved edges layer — must come AFTER createRenderer so sigma's
+    // canvases exist (we insert ours as a sibling at the front) and
+    // BEFORE motion starts so the first breathing frame already has
+    // curves drawn.
+    setupCurvedEdges();
     // Start the breathing/ripple RAF loop. No-ops if the user has
     // prefers-reduced-motion: reduce. Must come after createRenderer
     // so state.renderer is set and the camera's intro animation has
@@ -525,6 +530,143 @@ function pulseSizeMult(realId, nowMs) {
 }
 
 // ================================================================
+// Curved edges — 2D canvas overlay below sigma's WebGL
+// ================================================================
+//
+// Why an overlay instead of a sigma EdgeProgram subclass:
+//   - The vendored sigma is a minified UMD; subclassing its internal
+//     program base class is brittle across versions.
+//   - @sigma/edge-curve doesn't ship a UMD we can drop-in; bundling
+//     it would add build complexity for one feature.
+//   - A 2D canvas under sigma's WebGL canvas costs ~ms per frame for
+//     <2k edges, gives full control over curve shape, and keeps the
+//     WebGL pipeline doing what it does best (nodes + halos).
+//
+// Layering: our canvas is inserted as the FIRST child of
+// #graph-container. Sigma's canvases are added after, so they paint
+// ON TOP of ours. Our curves show through the transparent regions
+// of sigma's canvases — i.e., everywhere except where nodes are
+// drawn. Effect: nodes naturally cover edge endpoints.
+//
+// Sigma's own edge rendering is disabled by edgeReducer returning
+// hidden:true for every edge. We replicate dim/hover/type-filter
+// logic in this drawer.
+
+const EDGE_CURVE_AMOUNT = 0.12;       // sagitta as fraction of chord length
+const EDGE_CURVE_MIN_LEN = 8;         // below this (in screen px), draw straight
+
+function ensureEdgeOverlay() {
+  let canvas = document.getElementById("edge-overlay");
+  if (canvas) return canvas;
+  const container = document.getElementById("graph-container");
+  canvas = document.createElement("canvas");
+  canvas.id = "edge-overlay";
+  canvas.style.position = "absolute";
+  canvas.style.inset = "0";
+  canvas.style.pointerEvents = "none";
+  // Z-index 0 + first-child DOM position keeps us under sigma's
+  // canvases regardless of what z-indexes sigma assigns its layers.
+  canvas.style.zIndex = "0";
+  // Insert at the front so sigma's canvases (added after) stack on top.
+  container.insertBefore(canvas, container.firstChild);
+  return canvas;
+}
+
+function sizeEdgeOverlay(canvas) {
+  const container = canvas.parentElement;
+  if (!container) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+}
+
+function drawCurvedEdges() {
+  const canvas = ensureEdgeOverlay();
+  sizeEdgeOverlay(canvas);
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  // Clear in CSS pixels (transform is DPR-scaled).
+  const cssW = canvas.width / dpr;
+  const cssH = canvas.height / dpr;
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  if (!state.graph || !state.renderer) return;
+  const g = state.graph;
+  const renderer = state.renderer;
+  const activeNode = state.hoveredNode || state.selectedNode;
+
+  ctx.lineCap = "round";
+
+  g.forEachEdge((edge, attrs, src, tgt, srcAttrs, tgtAttrs) => {
+    // Halo nodes have no edges, but defend anyway in case future
+    // code adds halo-side edges accidentally.
+    if (isHalo(src) || isHalo(tgt)) return;
+    // Hide edges that connect to a type-filtered node.
+    if (
+      state.hiddenTypes.has(srcAttrs.nodeType) ||
+      state.hiddenTypes.has(tgtAttrs.nodeType)
+    ) {
+      return;
+    }
+
+    let color = attrs.color;
+    let size = attrs.size || 1;
+
+    // Hover/select dim — same logic as the old edgeReducer used.
+    if (activeNode) {
+      if (src === activeNode || tgt === activeNode) {
+        color = COLORS.hoverEdge;
+        size = Math.max(size, 1.5);
+      } else {
+        color = COLORS.dimEdge;
+      }
+    }
+
+    const sP = renderer.graphToViewport({ x: srcAttrs.x, y: srcAttrs.y });
+    const tP = renderer.graphToViewport({ x: tgtAttrs.x, y: tgtAttrs.y });
+
+    const dx = tP.x - sP.x;
+    const dy = tP.y - sP.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size;
+    ctx.beginPath();
+    ctx.moveTo(sP.x, sP.y);
+    if (len < EDGE_CURVE_MIN_LEN) {
+      ctx.lineTo(tP.x, tP.y);
+    } else {
+      // Quadratic bezier with perpendicular offset (90° CCW from
+      // S→T direction). Same side for every edge → consistent
+      // curve aesthetic. Sagitta is EDGE_CURVE_AMOUNT × chord len.
+      const px = -dy / len;
+      const py = dx / len;
+      const cx = (sP.x + tP.x) / 2 + px * len * EDGE_CURVE_AMOUNT;
+      const cy = (sP.y + tP.y) / 2 + py * len * EDGE_CURVE_AMOUNT;
+      ctx.quadraticCurveTo(cx, cy, tP.x, tP.y);
+    }
+    ctx.stroke();
+  });
+}
+
+function setupCurvedEdges() {
+  if (!state.renderer) return;
+  ensureEdgeOverlay();
+  state.renderer.on("afterRender", drawCurvedEdges);
+  // Initial draw so curves appear before sigma's intro animation
+  // first frame fires afterRender.
+  drawCurvedEdges();
+}
+
+// ================================================================
 // Create Renderer
 // ================================================================
 
@@ -721,33 +863,11 @@ function nodeReducer(node, data) {
 }
 
 function edgeReducer(edge, data) {
-  const res = { ...data };
-  const activeNode = state.hoveredNode || state.selectedNode;
-
-  if (activeNode) {
-    const graph = state.graph;
-    const source = graph.source(edge);
-    const target = graph.target(edge);
-
-    if (source === activeNode || target === activeNode) {
-      res.color = COLORS.hoverEdge;
-      res.size = Math.max(data.size, 1.5);
-      res.zIndex = 1;
-    } else {
-      res.color = COLORS.dimEdge;
-      res.zIndex = 0;
-    }
-  }
-
-  // Hide edges connected to hidden nodes
-  const graph = state.graph;
-  const sourceType = graph.getNodeAttribute(graph.source(edge), "nodeType");
-  const targetType = graph.getNodeAttribute(graph.target(edge), "nodeType");
-  if (state.hiddenTypes.has(sourceType) || state.hiddenTypes.has(targetType)) {
-    res.hidden = true;
-  }
-
-  return res;
+  // Edges are rendered by the 2D curved-edge overlay (drawCurvedEdges).
+  // Telling sigma to skip its WebGL edge pass entirely avoids a double
+  // render — straight WebGL line under our curve. All previous logic
+  // (dim on hover, hide on type-filter) lives in drawCurvedEdges now.
+  return { ...data, hidden: true };
 }
 
 // ================================================================
@@ -1427,6 +1547,13 @@ function captureScreenshotCanvas() {
   const bg = getComputedStyle(document.body).backgroundColor || "#f8fafc";
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, out.width, out.height);
+
+  // Composite the curved-edges overlay BEFORE sigma's layers so
+  // curves sit under nodes. Force a re-draw first to ensure the
+  // overlay matches current camera state at capture time.
+  drawCurvedEdges();
+  const overlay = document.getElementById("edge-overlay");
+  if (overlay) ctx.drawImage(overlay, 0, 0, out.width, out.height);
 
   // Composite sigma layers
   for (const layer of layerOrder) {
