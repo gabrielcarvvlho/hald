@@ -28,10 +28,18 @@ import { embedEntitiesAndCommunities } from "./embedder.js";
 import { calculateActualCost } from "./cost-estimator.js";
 import { logger } from "../shared/logger.js";
 import { safeJsonParse } from "../shared/utils.js";
+import type { Presenter } from "../shared/presenter.js";
 
 export interface IndexOptions {
   full?: boolean;
   onProgress?: (stage: string, done: number, total: number) => void;
+  /**
+   * Optional UI presenter for stage events. When omitted, behavior is identical
+   * to before — this option is purely additive. The CLI uses this to render
+   * a pretty pipeline view in TTY mode while preserving JSON-to-stderr logging
+   * for non-TTY environments.
+   */
+  presenter?: Presenter;
 }
 
 export interface IndexResult {
@@ -74,6 +82,8 @@ async function runPipeline(
   options: IndexOptions,
   progress: (stage: string, done: number, total: number) => void,
 ): Promise<IndexResult> {
+  const presenter = options.presenter;
+
   // 2. Determine what to index
   let sinceCommit: string | undefined;
   if (!options.full) {
@@ -82,6 +92,7 @@ async function runPipeline(
 
   // 3. Read commits
   progress("reading commits", 0, 0);
+  presenter?.stageStart("reading");
 
   const commits: CommitData[] = [];
   for await (const commit of readCommits({
@@ -96,6 +107,15 @@ async function runPipeline(
 
   if (commits.length === 0) {
     logger.info("orchestrator: no new commits to index");
+    presenter?.stageEnd("reading", "0 commits (up to date)");
+    // Resolve remaining stages so any pretty renderer doesn't hang on early-return.
+    presenter?.stageEnd("chunking");
+    presenter?.stageEnd("extracting");
+    presenter?.stageEnd("resolving");
+    presenter?.stageEnd("building");
+    presenter?.stageEnd("clustering");
+    presenter?.stageEnd("summarizing");
+    presenter?.stageEnd("embedding");
     const stats = store.getStats();
     return {
       commitsProcessed: 0,
@@ -109,9 +129,11 @@ async function runPipeline(
   }
 
   logger.info("orchestrator: commits read", { count: commits.length });
+  presenter?.stageEnd("reading", `${commits.length} commits`);
 
   // 4. Chunk
   progress("chunking", 0, 0);
+  presenter?.stageStart("chunking");
   const textUnits = chunk(commits, {
     commitsPerChunk: config.commitsPerChunk,
     maxChunkTokens: config.maxChunkTokens,
@@ -120,6 +142,7 @@ async function runPipeline(
     maxMessageChars: config.maxMessageChars,
   });
   logger.info("orchestrator: chunked", { textUnits: textUnits.length });
+  presenter?.stageEnd("chunking", `${textUnits.length} text units`);
 
   // 5. Create LLM client
   const client = await createClient({
@@ -142,12 +165,16 @@ async function runPipeline(
   };
   let failedChunks = 0;
 
+  presenter?.stageStart("extracting");
   for await (const { textUnitId, result, failed } of extractBatch(textUnits, client, {
     concurrency: config.maxConcurrency,
     enableGleaning: true,
     gleaningMinCommits: config.gleaningMinCommits,
     gleaningMaxEntitiesRatio: config.gleaningMaxEntitiesRatio,
-    onProgress: (done, total) => progress("extracting", done, total),
+    onProgress: (done, total) => {
+      progress("extracting", done, total);
+      presenter?.stageUpdate("extracting", done, total);
+    },
     tokenUsage,
   })) {
     if (failed) failedChunks++;
@@ -158,6 +185,7 @@ async function runPipeline(
 
   if (failedChunks > 0) {
     logger.warn(`orchestrator: ${failedChunks}/${textUnits.length} chunks failed extraction`);
+    presenter?.stageWarn("extracting", `${failedChunks}/${textUnits.length} chunks failed`);
   }
 
   logger.info("orchestrator: extracted", {
@@ -167,9 +195,14 @@ async function runPipeline(
     outputTokens: tokenUsage.outputTokens,
     failedChunks,
   });
+  presenter?.stageEnd(
+    "extracting",
+    `${allExtractedEntities.length} entities, ${allExtractedRelations.length} relations`,
+  );
 
   // 7. Resolve (deduplicate) entities
   progress("resolving", 0, 0);
+  presenter?.stageStart("resolving");
   const resolvedEntities = resolve(allExtractedEntities, {
     threshold: config.entityResolutionThreshold,
     moduleDepth: config.moduleDepth,
@@ -177,6 +210,7 @@ async function runPipeline(
   logger.info("orchestrator: resolved", {
     entities: resolvedEntities.length,
   });
+  presenter?.stageEnd("resolving", `${resolvedEntities.length} unique entities`);
 
   // 8. Convert extracted relations to resolved relations (name → ID)
   const resolvedRelations = resolveExtractedRelations(
@@ -187,6 +221,7 @@ async function runPipeline(
 
   // 9. Build graph
   progress("building graph", 0, 0);
+  presenter?.stageStart("building");
   build(store, {
     textUnits,
     entities: resolvedEntities,
@@ -195,6 +230,7 @@ async function runPipeline(
     commits,
     moduleDepth: config.moduleDepth,
   });
+  presenter?.stageEnd("building");
 
   // 10. Snapshot old communities (membership + summaries for reuse)
   const existingCommunities = [
@@ -211,6 +247,7 @@ async function runPipeline(
 
   // 11. Cluster communities on the full graph
   progress("clustering", 0, 0);
+  presenter?.stageStart("clustering");
   const allEntities = store.getAllEntities();
   const allRelations = store.getAllRelations();
   const communities = cluster(
@@ -226,6 +263,7 @@ async function runPipeline(
   logger.info("orchestrator: clustered", {
     communities: communities.length,
   });
+  presenter?.stageEnd("clustering", `${communities.length} communities`);
 
   // 12. Smart re-summarization: reuse summaries for unchanged communities
   const communitiesToSummarize: Community[] = [];
@@ -284,8 +322,10 @@ async function runPipeline(
   }
 
   // Summarize only the changed/new communities
+  presenter?.stageStart("summarizing");
   let summarized = 0;
   if (communitiesToSummarize.length > 0) {
+    presenter?.stageUpdate("summarizing", 0, communitiesToSummarize.length);
     const summarizedCommunities: Community[] = [];
 
     for await (const { communityId, result } of summarizeBatch(
@@ -302,6 +342,7 @@ async function runPipeline(
         summarizedCommunities.push(community);
         summarized++;
         progress("summarizing", summarized, communitiesToSummarize.length);
+        presenter?.stageUpdate("summarizing", summarized, communitiesToSummarize.length);
       }
     }
 
@@ -313,9 +354,20 @@ async function runPipeline(
       });
     }
   }
+  {
+    const reusedSummaries = communities.length - communitiesToSummarize.length;
+    const note =
+      communitiesToSummarize.length === 0
+        ? `${reusedSummaries} reused, 0 new`
+        : reusedSummaries > 0
+          ? `${summarized} new, ${reusedSummaries} reused`
+          : `${summarized} summarized`;
+    presenter?.stageEnd("summarizing", note);
+  }
 
   // 13. Generate embeddings (optional — skipped if provider doesn't support it)
   progress("embedding", 0, 0);
+  presenter?.stageStart("embedding");
   const detected = detectProvider();
   const embeddingClient = detected
     ? await createEmbeddingClient({
@@ -332,6 +384,12 @@ async function runPipeline(
       entities: embeddingResult.entitiesEmbedded,
       communities: embeddingResult.communitiesEmbedded,
     });
+    presenter?.stageEnd(
+      "embedding",
+      `${embeddingResult.entitiesEmbedded} entities, ${embeddingResult.communitiesEmbedded} communities`,
+    );
+  } else {
+    presenter?.stageEnd("embedding", "skipped (no embedding provider)");
   }
 
   // 14. Update metadata

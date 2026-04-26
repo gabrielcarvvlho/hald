@@ -73,6 +73,7 @@
     "graphology-components": "^1.5.4",
     "graphology-layout-forceatlas2": "^0.10.1",
     "graphology-metrics": "^2.3.0",
+    "listr2": "^10.2.1",
     "openai": "^4.80.0",
     "ora": "^8.0.0",
     "p-limit": "^6.0.0",

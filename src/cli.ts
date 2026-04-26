@@ -17,6 +17,8 @@ import {
 import { detectProvider } from "./llm/client.js";
 import { createEmbeddingClient } from "./llm/embeddings.js";
 import { QueryEmbedder } from "./query/similarity.js";
+import { selectPresenter, PrettyPresenter, type Presenter } from "./shared/presenter.js";
+import { logger, LogLevel } from "./shared/logger.js";
 
 const program = new Command();
 
@@ -38,6 +40,7 @@ program
   .option("--provider <name>", "LLM provider (anthropic|openai|google|zhipu|auto)", "auto")
   .option("-y, --yes", "Skip cost confirmation prompt")
   .action(async (opts) => {
+    let presenter: Presenter | undefined;
     try {
       const config = loadConfig({
         maxCommits: opts.maxCommits,
@@ -55,9 +58,6 @@ program
       );
 
       // Step 1: Read commits (fast, no LLM cost)
-      const spinnerText = (text: string) => process.stderr.write(`\r  ${text}${"".padEnd(20)}`);
-
-      spinnerText("Reading commits...");
       let sinceCommit: string | undefined;
       if (!opts.full) {
         try {
@@ -82,7 +82,6 @@ program
       }
 
       if (commits.length === 0) {
-        process.stderr.write("\r");
         console.log("  No new commits to index. Index is up to date.\n");
         return;
       }
@@ -97,7 +96,6 @@ program
       });
 
       // Step 3: Show cost estimate
-      process.stderr.write("\r");
       const estimatedEntities = Math.round(commits.length * 1.5);
       const estimatedCommunities = estimateCommunityCount(estimatedEntities);
       const cost = estimateCost(textUnits, estimatedCommunities, providerName);
@@ -128,37 +126,27 @@ program
 
       console.log("");
 
-      // Step 5: Run full pipeline
+      // Step 5: Run pipeline with a presenter that adapts to the environment.
+      // - TTY: PrettyPresenter (listr2/ora). Logger is silenced to WARN so info
+      //   spew doesn't clobber the live UI.
+      // - Non-TTY / CI / HALD_JSON_LOGS=1: JsonPresenter. Logger keeps emitting
+      //   JSON to stderr exactly as before; final summary prints to stdout
+      //   matching the legacy console.log format byte-for-byte.
+      presenter = selectPresenter();
+      const isPretty = presenter instanceof PrettyPresenter;
+      if (isPretty) logger.setLevel(LogLevel.WARN);
+
+      const startMs = Date.now();
       const result = await indexRepository(config, {
         full: opts.full,
-        onProgress: (stage, done, total) => {
-          if (total > 0) {
-            process.stderr.write(`\r  ${stage}: ${done}/${total}${"".padEnd(10)}`);
-          } else {
-            process.stderr.write(`\r  ${stage}...${"".padEnd(10)}`);
-          }
-        },
+        presenter,
       });
 
-      process.stderr.write("\r");
-      console.log(`  Done!`);
-      console.log(`  Commits processed:       ${result.commitsProcessed}`);
-      console.log(`  Entities:                ${result.entitiesFound}`);
-      console.log(`  Relations:               ${result.relationsFound}`);
-      console.log(`  Communities:             ${result.communitiesFound}`);
-      console.log(`  Communities summarized:  ${result.communitiesSummarized}`);
-      if (result.tokenUsage.requests > 0) {
-        console.log(
-          `  LLM requests:            ${result.tokenUsage.requests} (${result.tokenUsage.failures} failed)`,
-        );
-        console.log(
-          `  Tokens:                  ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`,
-        );
-        console.log(`  Cost:                    $${result.actualCostUsd.toFixed(4)}`);
-      }
-      console.log("");
+      await presenter.final(result, Date.now() - startMs);
     } catch (err) {
-      process.stderr.write("\r");
+      if (presenter) presenter.abort(err);
+      // Restore logger so the error message itself is never swallowed.
+      logger.setLevel(LogLevel.INFO);
       console.error(`\nIndexing failed: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);
     }
