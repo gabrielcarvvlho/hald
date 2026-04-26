@@ -318,8 +318,21 @@ program
   .description("Open an interactive graph visualization in the browser")
   .option("--port <number>", "HTTP server port", (v) => parseInt(v, 10), 3742)
   .option("--no-open", "Don't auto-open the browser")
+  .option("--mock", "Use built-in mock data (skip the index — useful for visual iteration)")
   .action(async (opts) => {
     try {
+      const { startVizServer } = await import("./viz/server.js");
+
+      if (opts.mock) {
+        const { createMockProvider } = await import("./viz/mock.js");
+        await startVizServer({
+          provider: createMockProvider(),
+          port: opts.port,
+          open: opts.open,
+        });
+        return;
+      }
+
       const config = loadConfig();
 
       let db;
@@ -338,9 +351,9 @@ program
         process.exit(1);
       }
 
-      const { startVizServer } = await import("./viz/server.js");
+      const { createStoreProvider } = await import("./viz/provider.js");
       await startVizServer({
-        store,
+        provider: createStoreProvider(store),
         port: opts.port,
         open: opts.open,
       });

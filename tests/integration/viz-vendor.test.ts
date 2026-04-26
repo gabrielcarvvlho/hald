@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, statSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AddressInfo } from "node:net";
 import { startVizServer } from "../../src/viz/server.js";
+import { createStoreProvider } from "../../src/viz/provider.js";
 import { openDatabase } from "../../src/store/db.js";
 import { Store } from "../../src/store/queries.js";
 
@@ -69,7 +69,7 @@ describe("viz vendor bundling — HTTP routing", () => {
     store = new Store(db);
     // Pick a high random port to avoid collisions with the CLI default.
     port = 35000 + Math.floor(Math.random() * 5000);
-    await startVizServer({ store, port, open: false });
+    await startVizServer({ provider: createStoreProvider(store), port, open: false });
     serverUrl = `http://127.0.0.1:${port}`;
   });
 

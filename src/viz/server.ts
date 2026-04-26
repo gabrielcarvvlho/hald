@@ -4,9 +4,8 @@ import { existsSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
-import type { Store } from "../store/queries.js";
-import { getGraphData, getEntityDetail, getStatsData, getCommunityDetail } from "./api.js";
 import type { GraphResponse, StatsResponse } from "./api.js";
+import type { VizDataProvider } from "./provider.js";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -45,17 +44,17 @@ function send404(res: ServerResponse, message = "Not found"): void {
 }
 
 export interface VizServerOptions {
-  store: Store;
+  provider: VizDataProvider;
   port: number;
   open?: boolean;
 }
 
 export async function startVizServer(options: VizServerOptions): Promise<void> {
-  const { store, open = true } = options;
+  const { provider, open = true } = options;
 
   // Pre-compute graph data and stats at startup (data is static)
-  const graphData: GraphResponse = getGraphData(store);
-  const statsData: StatsResponse = getStatsData(store);
+  const graphData: GraphResponse = provider.getGraph();
+  const statsData: StatsResponse = provider.getStats();
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -74,7 +73,7 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
       const entityMatch = pathname.match(/^\/api\/entity\/(.+)$/);
       if (entityMatch) {
         const entityId = decodeURIComponent(entityMatch[1]);
-        const detail = getEntityDetail(store, entityId);
+        const detail = provider.getEntity(entityId);
         if (!detail) return send404(res, `Entity "${entityId}" not found`);
         return sendJson(res, detail);
       }
@@ -82,7 +81,7 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
       const communityMatch = pathname.match(/^\/api\/community\/(.+)$/);
       if (communityMatch) {
         const communityId = decodeURIComponent(communityMatch[1]);
-        const detail = getCommunityDetail(store, communityId);
+        const detail = provider.getCommunity(communityId);
         if (!detail) return send404(res, `Community "${communityId}" not found`);
         return sendJson(res, detail);
       }
@@ -154,7 +153,7 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
   const shutdown = () => {
     console.log("\n  Shutting down...");
     server.close();
-    store.close();
+    provider.close();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
