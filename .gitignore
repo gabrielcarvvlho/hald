@@ -27,4 +27,4 @@ progress/
 docs/_internal/
 .superpowers/
 
-.git-oracle/
+.gstack/
