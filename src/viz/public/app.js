@@ -25,9 +25,17 @@ const COLORS_LIGHT = {
   nodeBorder: "#ffffff",
   // intra bright + cross dim creates clear "this group is together"
   // hierarchy without visual clutter from low-weight cross-cluster lines.
+  // Edge color is now computed per-edge from weight; these stay as fallback
+  // and as the `defaultEdgeColor` for sigma's settings (avg-weight color).
   edgeIntra: "rgba(100,116,139,0.65)",      // slate-500, prominent
   edgeCross: "rgba(148,163,184,0.22)",      // slate-400, recedes
   edgeDefault: "rgba(100,116,139,0.5)",
+  // RGB tuples (no alpha) — used by edgeColor() to mix per-edge alpha
+  // proportional to weight. Keeps low-weight edges quiet, lets heavy ones
+  // sing. Without this, every edge reads with the same visual weight and
+  // hierarchy collapses.
+  edgeIntraRgb: [100, 116, 139],            // slate-500
+  edgeCrossRgb: [148, 163, 184],            // slate-400
   labelText: "#1e293b",                     // slate-800
   // Hover label "pill" — sigma's default is hardcoded white, which collides
   // with light-text label colors in dark mode. We draw it ourselves; these
@@ -48,6 +56,8 @@ const COLORS_DARK = {
   edgeIntra: "rgba(148,163,184,0.55)",      // slate-400, prominent against dark bg
   edgeCross: "rgba(100,116,139,0.18)",      // slate-500, very subtle
   edgeDefault: "rgba(148,163,184,0.4)",
+  edgeIntraRgb: [148, 163, 184],            // slate-400
+  edgeCrossRgb: [100, 116, 139],            // slate-500
   labelText: "#f1f5f9",                     // slate-100
   // Dark-mode hover pill: dark surface + light text. Sigma's built-in
   // hover renderer uses white bg unconditionally, which made highlighted
@@ -66,6 +76,73 @@ const COLORS_DARK = {
 // light and dark; nodeReducer/edgeReducer read it at render time so
 // dim/hover colors update on theme change without rebuilding.
 let COLORS = COLORS_LIGHT;
+
+// ================================================================
+// Halo layer + color helpers
+// ================================================================
+// Obsidian-style hover: the active node lights up with a soft glow,
+// every other node stays clean. We get that with duplicate "halo"
+// nodes co-located with each real node — drawn at a lower zIndex
+// and HIDDEN BY DEFAULT. The reducer reveals the halo only for the
+// node currently being hovered or selected. Resting state has zero
+// halos visible, which keeps clusters reading as clusters of small
+// dots, not as overlapping donuts.
+//
+// Halos are ignored by search, type filters, the sidebar, and click
+// events (clicks/hovers remap halo → real so the larger hit area
+// still feels like interacting with the underlying node).
+//
+// Future option: soft Gaussian glow via a custom WebGL fragment
+// shader. Would let us bring back ambient halos without the
+// hard-edge donut artifact. Deferred — needs build infra to inject
+// a NodeProgram subclass into the vendored sigma UMD.
+
+const HALO_PREFIX = "__halo__";
+const HALO_SIZE_MULT = 1.6;       // halo radius = 1.6× node radius
+const HALO_ALPHA_ACTIVE = 0.20;   // hover/select — present but quiet
+const HALO_ACTIVE_GROW = 1.08;    // tiny extra grow on the active node so hover registers as motion
+
+function isHalo(nodeId) {
+  return typeof nodeId === "string" && nodeId.startsWith(HALO_PREFIX);
+}
+
+// Convert hex (#rgb / #rrggbb) to rgba(r,g,b,a). Falls back to slate-400
+// if input is unparseable so a bad community color can never break render.
+function hexToRgba(hex, alpha) {
+  if (typeof hex !== "string") return `rgba(148,163,184,${alpha})`;
+  let h = hex.trim().replace("#", "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (h.length !== 6) return `rgba(148,163,184,${alpha})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return `rgba(148,163,184,${alpha})`;
+  }
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Per-edge alpha based on weight. Light, infrequent connections recede;
+// heavy ones stand out. Cross-cluster edges start dimmer than intra so
+// the visual story is "communities are tight, bridges are real but quiet".
+function edgeAlphaFor(weight, isCross) {
+  const base = isCross ? 0.16 : 0.42;
+  const boost = Math.min(0.42, Math.log((weight ?? 1) + 1) * 0.12);
+  return Math.min(0.88, base + boost);
+}
+
+function edgeColorFor(weight, isCross, palette) {
+  const rgb = isCross ? palette.edgeCrossRgb : palette.edgeIntraRgb;
+  const a = edgeAlphaFor(weight, isCross);
+  return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
+}
+
+// Edge size scales log-monotonically with weight. Range 0.5–3.0 px:
+// dot edges for w=1, beefy lines for w≥30. Old range topped out at
+// 1.65 which made the heaviest connections still feel thin.
+function edgeSizeFor(weight) {
+  return 0.5 + Math.min(2.5, Math.log((weight ?? 1) + 1) * 0.7);
+}
 
 // ================================================================
 // State
@@ -194,7 +271,9 @@ function buildGraph(data) {
     });
   }
 
-  // Add edges
+  // Add edges. Each edge stores its raw weight as an attribute so
+  // applyTheme() can recompute color (alpha depends on weight + theme)
+  // without re-running the whole build path.
   for (const edge of data.edges) {
     let sourceCommunity = null;
     let targetCommunity = null;
@@ -208,22 +287,26 @@ function buildGraph(data) {
 
     try {
       graph.addEdge(edge.source, edge.target, {
-        size: 0.25 + Math.min(1.4, Math.log(edge.weight + 1) * 0.45),
-        color: isCross ? COLORS.edgeCross : COLORS.edgeIntra,
+        size: edgeSizeFor(edge.weight),
+        color: edgeColorFor(edge.weight, isCross, COLORS),
         edgeType: edge.type,
+        weight: edge.weight,
       });
     } catch (e) {
       // Skip duplicate edges
     }
   }
 
-  // Pre-compute neighbor sets for hover effects
+  // Pre-compute neighbor sets for hover effects.
+  // IMPORTANT: this runs BEFORE halos are added — halos must not
+  // appear in any neighbor set or hover dim/lift logic gets confused.
   graph.forEachNode((node) => {
     state.neighbors.set(node, new Set(graph.neighbors(node)));
   });
 
   // Force-label only the top 3 most-connected nodes — they act as
   // anchors. The rest reveal on hover/search. Whisper until asked.
+  // Also runs BEFORE halos so they never get force-labeled.
   const ranked = [];
   graph.forEachNode((node) => {
     ranked.push({ node, degree: graph.degree(node) });
@@ -231,6 +314,40 @@ function buildGraph(data) {
   ranked.sort((a, b) => b.degree - a.degree);
   for (const { node } of ranked.slice(0, 3)) {
     graph.setNodeAttribute(node, "forceLabel", true);
+  }
+
+  // Lift real nodes above halos. Sigma's renderer respects zIndex
+  // when `zIndex: true` is in settings.
+  graph.forEachNode((node) => {
+    graph.setNodeAttribute(node, "zIndex", 1);
+  });
+
+  // Halo layer — drawn behind every real node. Same x/y, larger size,
+  // low-alpha color. Halo IDs are prefixed so we can detect them in
+  // event handlers and reducers without leaking into search/sidebar.
+  const realIds = [];
+  graph.forEachNode((id) => {
+    if (!isHalo(id)) realIds.push(id);
+  });
+  for (const id of realIds) {
+    const a = graph.getNodeAttributes(id);
+    graph.addNode(HALO_PREFIX + id, {
+      x: a.x,
+      y: a.y,
+      size: a.size * HALO_SIZE_MULT,
+      // Resting halo color is fully transparent — the reducer
+      // overrides it with HALO_ALPHA_ACTIVE only when the parent
+      // node becomes active. Sigma still needs a valid color string.
+      color: hexToRgba(a.color, 0),
+      label: "",
+      // nodeType uses an unmatchable sentinel so type filters never
+      // accidentally hide/show halos through the chip path.
+      nodeType: "__halo__",
+      communityId: a.communityId,
+      _halo: true,
+      _haloOf: id,
+      zIndex: 0,
+    });
   }
 
   state.graph = graph;
@@ -348,6 +465,37 @@ function drawNodeHover(ctx, data, settings) {
 // ================================================================
 
 function nodeReducer(node, data) {
+  // Halo branch. Halos are HIDDEN by default — only the currently
+  // active (hovered or selected) node's halo renders. This keeps
+  // resting state clean (no donut/bullseye look from overlapping
+  // discs) while still giving hover its lift. Sigma's disc shader is
+  // hard-edged so multiple translucent halos compound visually; one
+  // halo at a time avoids that compounding entirely.
+  if (data._halo) {
+    const activeNode = state.hoveredNode || state.selectedNode;
+    if (!activeNode || data._haloOf !== activeNode) {
+      return { ...data, hidden: true };
+    }
+    const g = state.graph;
+    if (!g || !g.hasNode(activeNode)) return { ...data, hidden: true };
+    const real = g.getNodeAttributes(activeNode);
+    // Even when active, mirror hide-by-type and search dim so the
+    // halo doesn't pop on a node that's been filtered out.
+    if (state.hiddenTypes.has(real.nodeType)) return { ...data, hidden: true };
+    if (state.searchQuery) {
+      const matches =
+        typeof real.label === "string" &&
+        real.label.toLowerCase().includes(state.searchQuery);
+      if (!matches) return { ...data, hidden: true };
+    }
+    return {
+      ...data,
+      size: data.size * HALO_ACTIVE_GROW,
+      color: hexToRgba(real.color, HALO_ALPHA_ACTIVE),
+      zIndex: 0,
+    };
+  }
+
   const res = { ...data };
 
   // Type filtering
@@ -428,22 +576,38 @@ function edgeReducer(edge, data) {
 function setupEvents() {
   const renderer = state.renderer;
 
-  // Hover
+  // Hover. Halos are concentric oversized siblings of real nodes;
+  // remap halo → real so hovering the glow feels like hovering the
+  // node. leaveNode only clears if the leaving node maps to the
+  // currently-active hover — prevents a halo leave from clearing
+  // hover state when the cursor has already entered the real node.
   renderer.on("enterNode", ({ node }) => {
-    state.hoveredNode = node;
+    const realId = isHalo(node)
+      ? state.graph.getNodeAttribute(node, "_haloOf")
+      : node;
+    if (!realId) return;
+    state.hoveredNode = realId;
     document.body.style.cursor = "pointer";
     renderer.refresh();
   });
 
-  renderer.on("leaveNode", () => {
-    state.hoveredNode = null;
-    document.body.style.cursor = "default";
-    renderer.refresh();
+  renderer.on("leaveNode", ({ node }) => {
+    const realId = isHalo(node)
+      ? state.graph.getNodeAttribute(node, "_haloOf")
+      : node;
+    if (state.hoveredNode === realId) {
+      state.hoveredNode = null;
+      document.body.style.cursor = "default";
+      renderer.refresh();
+    }
   });
 
   // Click node → open sidebar
   renderer.on("clickNode", ({ node }) => {
-    selectNode(node);
+    const realId = isHalo(node)
+      ? state.graph.getNodeAttribute(node, "_haloOf")
+      : node;
+    if (realId) selectNode(realId);
   });
 
   // Click empty space → close sidebar
@@ -785,8 +949,11 @@ function applyTheme(theme) {
   state.renderer.setSetting("defaultEdgeColor", COLORS.edgeDefault);
   state.renderer.setSetting("labelColor", { color: COLORS.labelText });
 
-  // Re-apply per-edge colors (intra/cross). Per-node colors come from
-  // community palette which is theme-stable.
+  // Re-apply per-edge colors. Color is now weight-aware and theme-aware,
+  // so we rebuild it from the stored `weight` attribute set in buildGraph.
+  // Per-node base colors come from the community palette (theme-stable),
+  // so real nodes don't need re-coloring; halos read from real nodes via
+  // the reducer at draw time.
   state.graph.forEachEdge((edge) => {
     const sourceCommunity = state.graph.getNodeAttribute(
       state.graph.source(edge),
@@ -797,15 +964,18 @@ function applyTheme(theme) {
       "communityId",
     );
     const isCross = sourceCommunity !== targetCommunity;
+    const weight = state.graph.getEdgeAttribute(edge, "weight") ?? 1;
     state.graph.setEdgeAttribute(
       edge,
       "color",
-      isCross ? COLORS.edgeCross : COLORS.edgeIntra,
+      edgeColorFor(weight, isCross, COLORS),
     );
   });
 
   // Refresh node border in case theme inverts it (light=white, dark=bg).
+  // Skip halos — they stay borderless across themes.
   state.graph.forEachNode((node) => {
+    if (isHalo(node)) return;
     state.graph.setNodeAttribute(node, "borderColor", COLORS.nodeBorder);
   });
 

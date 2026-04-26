@@ -7,6 +7,12 @@
 :root {
   --bg: #f8fafc;
   --bg-card: #ffffff;
+  /* Graph canvas atmosphere — slight radial gradient breaks the flat-color
+     "diagram" feel and gives the cluster layout a sense of depth. Subtle in
+     light mode (paper-like), more pronounced in dark mode (Obsidian-like). */
+  --bg-glow-center: #ffffff;
+  --bg-glow-mid: #f3f6fb;
+  --bg-glow-edge: #dde4ee;
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
   --hover-bg: #f1f5f9;
@@ -27,6 +33,11 @@
 [data-theme="dark"] {
   --bg: #0b1220;
   --bg-card: #111827;
+  /* Dark-mode atmosphere: slate-blue glow at center fading to near-black at
+     edges. Gives nodes a "floating in space" feel without obvious vignetting. */
+  --bg-glow-center: #11203a;
+  --bg-glow-mid: #0a1322;
+  --bg-glow-edge: #04060c;
   --border: #1f2937;
   --border-strong: #334155;
   --hover-bg: #1e293b;
@@ -211,7 +222,18 @@ html, body {
   left: 0;
   right: 0;
   bottom: 0;
+  /* Solid fallback for browsers without radial-gradient (rare). */
   background: var(--bg);
+  /* Atmospheric radial — center is slightly brighter, edges fade darker.
+     The 80%/55% stops keep the bright spot under the cluster mass without
+     advertising a vignette. */
+  background:
+    radial-gradient(
+      ellipse 85% 75% at 50% 48%,
+      var(--bg-glow-center) 0%,
+      var(--bg-glow-mid) 55%,
+      var(--bg-glow-edge) 100%
+    );
 }
 
 #loading {
