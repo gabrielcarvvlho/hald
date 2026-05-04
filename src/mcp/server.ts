@@ -9,6 +9,7 @@ import { registerResources } from "./resources.js";
 import { createEmbeddingClient } from "../llm/embeddings.js";
 import { detectProvider } from "../llm/client.js";
 import { QueryEmbedder } from "../query/similarity.js";
+import { VERSION } from "../shared/version.js";
 
 /**
  * Create and configure the MCP server with all tools and resources.
@@ -17,7 +18,7 @@ import { QueryEmbedder } from "../query/similarity.js";
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "hald",
-    version: "0.1.0",
+    version: VERSION,
   });
 
   // Lazy store — initialized on first use

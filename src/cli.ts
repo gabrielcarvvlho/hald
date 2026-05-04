@@ -20,13 +20,14 @@ import { createEmbeddingClient } from "./llm/embeddings.js";
 import { QueryEmbedder } from "./query/similarity.js";
 import { selectPresenter, PrettyPresenter, type Presenter } from "./shared/presenter.js";
 import { logger, LogLevel } from "./shared/logger.js";
+import { VERSION } from "./shared/version.js";
 
 const program = new Command();
 
 program
   .name("hald")
   .description("Your codebase, held. GraphRAG-powered codebase intelligence for git repositories.")
-  .version("0.1.0");
+  .version(VERSION);
 
 // ================================================================
 // index
