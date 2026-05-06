@@ -1025,9 +1025,9 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
 
       try {
         const { existsSync, unlinkSync } = await import("node:fs");
-        const { join } = await import("node:path");
+        const { resolveDbPath } = await import("../store/db.js");
         const config = loadConfig();
-        const dbPath = join(config.storagePath, "oracle.db");
+        const dbPath = resolveDbPath(config.storagePath);
 
         if (!existsSync(dbPath)) {
           return {

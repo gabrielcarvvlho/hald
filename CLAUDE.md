@@ -53,7 +53,7 @@ Follow the 30-step implementation order in ARCHITECTURE.md § "Implementation Or
 - **TypeScript only** — Single runtime (Node.js), natural for the plugin ecosystem.
 - **Multi-platform** — Follows the Superpowers pattern: one set of skills + one MCP server + platform-specific shims for Claude Code, Cursor, OpenCode, Codex, and Gemini CLI.
 - **Provider-agnostic LLM** — Auto-detects API keys from environment. Supports Anthropic (Claude), OpenAI (GPT + compatible endpoints like Ollama/OpenRouter), and Google (Gemini). Same prompts work across all providers.
-- **SQLite + FTS5** — Zero infrastructure. Database lives in `.hald/oracle.db`.
+- **SQLite + FTS5** — Zero infrastructure. Database lives in `.hald/hald.db` (legacy `oracle.db` migrated automatically on first open).
 - **better-sqlite3** — Synchronous SQLite driver. Fast, no native build issues.
 - **graphology** — Pure JS graph library for Louvain community detection.
 - **simple-git** — Git operations wrapper. Streams commits via async iterators.

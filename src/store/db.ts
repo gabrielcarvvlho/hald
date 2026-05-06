@@ -1,12 +1,35 @@
 import Database from "better-sqlite3";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../shared/logger.js";
 import { initSchema, runMigrations } from "./schema.js";
 
+const DB_FILENAME = "hald.db";
+const LEGACY_DB_FILENAME = "oracle.db";
+
+/**
+ * Resolves the active DB path inside `storagePath`.
+ *
+ * Prefers `hald.db`. Falls back to legacy `oracle.db` only when the new file
+ * is absent and the legacy file exists — so callers (e.g. the reset command)
+ * can still locate a pre-rename index without triggering migration.
+ */
+export function resolveDbPath(storagePath: string): string {
+  const haldPath = join(storagePath, DB_FILENAME);
+  if (existsSync(haldPath)) return haldPath;
+  const legacyPath = join(storagePath, LEGACY_DB_FILENAME);
+  if (existsSync(legacyPath)) return legacyPath;
+  return haldPath;
+}
+
 /**
  * Opens (or creates) the SQLite database and initializes the schema.
  * For tests, pass ":memory:" as storagePath.
+ *
+ * Performs a one-time migration from `oracle.db` → `hald.db` if the legacy
+ * file is found alongside no new file. Renames journal siblings (-shm, -wal)
+ * best-effort. On rename failure, keeps using the legacy filename to avoid
+ * data loss.
  */
 export function openDatabase(storagePath: string): Database.Database {
   let db: Database.Database;
@@ -14,11 +37,11 @@ export function openDatabase(storagePath: string): Database.Database {
   if (storagePath === ":memory:") {
     db = new Database(":memory:");
   } else {
-    const dbPath = join(storagePath, "oracle.db");
-
     if (!existsSync(storagePath)) {
       mkdirSync(storagePath, { recursive: true });
     }
+
+    const dbPath = migrateLegacyDbFile(storagePath);
 
     db = new Database(dbPath);
     logger.debug("Database opened", { path: dbPath });
@@ -31,4 +54,35 @@ export function openDatabase(storagePath: string): Database.Database {
   runMigrations(db);
 
   return db;
+}
+
+function migrateLegacyDbFile(storagePath: string): string {
+  const haldPath = join(storagePath, DB_FILENAME);
+  const legacyPath = join(storagePath, LEGACY_DB_FILENAME);
+
+  if (existsSync(haldPath) || !existsSync(legacyPath)) {
+    return haldPath;
+  }
+
+  try {
+    renameSync(legacyPath, haldPath);
+    for (const suffix of ["-shm", "-wal"]) {
+      const from = legacyPath + suffix;
+      const to = haldPath + suffix;
+      if (existsSync(from)) {
+        try {
+          renameSync(from, to);
+        } catch {
+          // Journal files may be locked or missing — non-fatal.
+        }
+      }
+    }
+    logger.info("Migrated database file: oracle.db → hald.db", { storagePath });
+    return haldPath;
+  } catch (err) {
+    logger.warn("Could not migrate oracle.db → hald.db; using legacy filename", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return legacyPath;
+  }
 }

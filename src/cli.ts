@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { join } from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
 import { loadConfig } from "./shared/config.js";
@@ -408,7 +407,8 @@ program
   .action(async (opts) => {
     const config = loadConfig();
     const { existsSync, unlinkSync } = await import("node:fs");
-    const dbPath = join(config.storagePath, "oracle.db");
+    const { resolveDbPath } = await import("./store/db.js");
+    const dbPath = resolveDbPath(config.storagePath);
 
     if (!existsSync(dbPath)) {
       console.log("No index found. Nothing to reset.");

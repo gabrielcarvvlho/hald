@@ -1098,7 +1098,7 @@ The `.hald/` directory contains:
 ```
 .hald/
 ├── config.json       # Index configuration
-├── oracle.db         # SQLite database
+├── hald.db           # SQLite database (auto-migrated from legacy oracle.db on first open)
 └── meta.json         # Index metadata (version, last commit, stats)
 ```
 
