@@ -25,4 +25,24 @@ export default tseslint.config(
       "@typescript-eslint/no-dynamic-delete": "off",
     },
   },
+  {
+    // OpenCode loads plugins as CommonJS — keep require/module.exports allowed here.
+    files: [".opencode/plugins/**/*.js"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: {
+        require: "readonly",
+        module: "readonly",
+        exports: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        console: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 );
