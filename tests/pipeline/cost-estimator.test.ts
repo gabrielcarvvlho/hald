@@ -78,10 +78,17 @@ describe("estimateCost", () => {
 describe("calculateActualCost", () => {
   it("calculates cost from real token counts with known model", () => {
     // Claude Sonnet: $3/1M input, $15/1M output
-    const result = calculateActualCost(100_000, 50_000, "anthropic", "claude-sonnet-4-20250514");
+    const result = calculateActualCost(100_000, 50_000, "anthropic", "claude-sonnet-4-6");
     expect(result.costUsd).toBeCloseTo(0.3 + 0.75, 4); // 1.05
-    expect(result.model).toBe("claude-sonnet-4-20250514");
+    expect(result.model).toBe("claude-sonnet-4-6");
     expect(result.provider).toBe("anthropic");
+  });
+
+  it("retains pricing for legacy claude-sonnet-4-20250514 default", () => {
+    // Older indexes record the pre-refresh default — back-compat is required.
+    const result = calculateActualCost(100_000, 50_000, "anthropic", "claude-sonnet-4-20250514");
+    expect(result.costUsd).toBeCloseTo(0.3 + 0.75, 4);
+    expect(result.model).toBe("claude-sonnet-4-20250514");
   });
 
   it("uses provider-level fallback for unknown model", () => {

@@ -15,7 +15,8 @@ const COST_PER_1M_TOKENS: Record<string, { input: number; output: number }> = {
 /** Per-model pricing (USD per 1M tokens). Used for actual cost calculation. */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // Anthropic
-  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
+  "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 }, // legacy default — kept for back-compat with older indexes
   "claude-haiku-4-5-20251001": { input: 0.8, output: 4.0 },
   // OpenAI
   "gpt-5.4-mini": { input: 0.75, output: 4.5 },
@@ -35,7 +36,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 
 /** Default model for each provider — used when model is not specified. */
 const DEFAULT_MODELS: Record<string, string> = {
-  anthropic: "claude-sonnet-4-20250514",
+  anthropic: "claude-sonnet-4-6",
   openai: "gpt-5.4-mini",
   google: "gemini-3.1-flash-lite-preview",
   zhipu: "glm-4-flash",

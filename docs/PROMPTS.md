@@ -4,7 +4,7 @@
 
 These prompts are used during the indexing pipeline to extract structured knowledge from git commit data. They are domain-tuned for git history (not general documents) and use XML structured output for reliable parsing.
 
-All prompts target `claude-sonnet-4-20250514` for the best cost/quality tradeoff.
+All prompts target `claude-sonnet-4-6` for the best cost/quality tradeoff.
 
 ---
 

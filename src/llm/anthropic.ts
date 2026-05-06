@@ -1,7 +1,7 @@
 import type { LLMClient, LLMRequestOptions, LLMResponse } from "./types.js";
 import { withRetry } from "./retry.js";
 
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 export class AnthropicClient implements LLMClient {
   readonly provider = "anthropic" as const;

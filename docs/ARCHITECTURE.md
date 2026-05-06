@@ -459,7 +459,7 @@ interface Extractor {
 - Runs up to `maxConcurrency` parallel API calls.
 - Implements exponential backoff on rate limit errors.
 - Reports progress via callback for CLI display.
-- Each extraction call uses `claude-sonnet-4-20250514` (fast + cheap) — not Opus.
+- Each extraction call uses `claude-sonnet-4-6` (fast + cheap) — not Opus.
 - Gleaning: optionally makes a second pass asking "did you miss anything?" to catch low-salience entities.
 
 ### 4. Resolver (`src/pipeline/resolver.ts`)
@@ -967,7 +967,7 @@ Each provider lives in its own file and implements `LLMClient`:
 
 | File | Provider | SDK | Env Var | Default Model |
 |------|----------|-----|---------|---------------|
-| `anthropic.ts` | Anthropic | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
+| `anthropic.ts` | Anthropic | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
 | `openai.ts` | OpenAI-compatible | `openai` | `OPENAI_API_KEY` | `gpt-5.4-mini` |
 | `google.ts` | Google | `@google/genai` | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | `gemini-3.1-flash-lite-preview` |
 

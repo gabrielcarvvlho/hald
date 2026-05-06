@@ -108,7 +108,7 @@ hald auto-detects your available API key. Set one of these before running `hald 
 
 | Provider | Env Var | Default Model | Cost per 1k commits |
 |---|---|---|---|
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 | ~$0.50-$1.00 |
+| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-6 | ~$0.50-$1.00 |
 | OpenAI | `OPENAI_API_KEY` | gpt-5.4-mini | ~$0.50-$1.00 |
 | Google | `GOOGLE_API_KEY` | gemini-3.1-flash-lite-preview | ~$0.15-$0.40 |
 | Ollama (local) | `OPENAI_API_KEY` + `HALD_BASE_URL` | configurable | $0.00 |
