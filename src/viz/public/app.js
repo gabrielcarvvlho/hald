@@ -1,5 +1,3 @@
-/* global graphology, Sigma */
-
 // ================================================================
 // Thin orchestrator. The graph viz is split into native ES modules
 // (state, colors, halo, motion, path, renderer, curved-edges, sidebar,

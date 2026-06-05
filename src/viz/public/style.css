@@ -1419,6 +1419,14 @@ kbd {
     font-size: 11px;
   }
 
+  /* On phones the first-run hint goes full-bleed, so it would paint over
+     the bottom-left legend. While the hint is present and visible, hide
+     the legend so the two never overlap. Once the hint is dismissed
+     (removed from the DOM) the legend reappears. */
+  #graph-container:has(#firstrun-hint:not([hidden])) #legend {
+    display: none;
+  }
+
   .firstrun-hint {
     width: calc(100vw - 24px);
     left: 12px;

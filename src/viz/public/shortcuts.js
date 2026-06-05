@@ -58,7 +58,15 @@ function setupPopover() {
     if (!popover.hidden) close();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !popover.hidden) close();
+    if (e.key === "Escape" && !popover.hidden) {
+      // The popover is authoritative for Escape while it's open: a single
+      // Escape should close ONLY the popover and leave the sidebar/selection
+      // intact. This listener is registered before keyboard.js's, so stopping
+      // immediate propagation here prevents that later handler from also
+      // clearing the path/sidebar on the same keystroke.
+      e.stopImmediatePropagation();
+      close();
+    }
   });
 }
 

@@ -7,7 +7,8 @@ export default tseslint.config(
   ...tseslint.configs.strict,
   eslintConfigPrettier,
   {
-    ignores: ["dist/", "node_modules/", "tests/fixtures/", "benchmarks/", "src/viz/public/"],
+    // Vendored, minified third-party bundles are not ours to lint.
+    ignores: ["dist/", "node_modules/", "tests/fixtures/", "benchmarks/", "src/viz/public/vendor/"],
   },
   {
     rules: {
@@ -23,6 +24,62 @@ export default tseslint.config(
       "no-empty": ["error", { allowEmptyCatch: true }],
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/no-dynamic-delete": "off",
+    },
+  },
+  {
+    // Browser ESM modules for the graph visualizer. These are plain .js files
+    // loaded directly in the browser (no bundler), so they need browser globals
+    // plus the two vendored UMD libraries (graphology, Sigma).
+    files: ["src/viz/public/**/*.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        // DOM / window surface
+        window: "readonly",
+        document: "readonly",
+        navigator: "readonly",
+        localStorage: "readonly",
+        location: "readonly",
+        history: "readonly",
+        getComputedStyle: "readonly",
+        devicePixelRatio: "readonly",
+        matchMedia: "readonly",
+        performance: "readonly",
+        // Timers / animation frame
+        requestAnimationFrame: "readonly",
+        cancelAnimationFrame: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        // Network / web APIs
+        fetch: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        Image: "readonly",
+        Blob: "readonly",
+        CustomEvent: "readonly",
+        console: "readonly",
+        // DOM constructors used in instanceof checks
+        Node: "readonly",
+        HTMLElement: "readonly",
+        // Vendored UMD globals (graphology.umd.min.js, sigma.min.js)
+        graphology: "readonly",
+        Sigma: "readonly",
+      },
+    },
+    rules: {
+      "no-undef": "error",
+      "no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+      // These browser modules are plain JS — TS-specific rules don't apply.
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
   {

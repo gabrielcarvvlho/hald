@@ -1,5 +1,3 @@
-/* global graphology */
-
 // ================================================================
 // Build Graph
 // ================================================================
@@ -62,7 +60,7 @@ export function buildGraph(data) {
     try {
       sourceCommunity = graph.getNodeAttribute(edge.source, "communityId");
       targetCommunity = graph.getNodeAttribute(edge.target, "communityId");
-    } catch (e) {
+    } catch {
       // Node may not exist
     }
     const isCross = sourceCommunity !== targetCommunity;
@@ -74,7 +72,7 @@ export function buildGraph(data) {
         edgeType: edge.type,
         weight: edge.weight,
       });
-    } catch (e) {
+    } catch {
       // Skip duplicate edges
     }
   }

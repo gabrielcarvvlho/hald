@@ -34,15 +34,46 @@ export function selectNode(nodeId) {
     );
   }
 
-  // Fetch entity detail and render sidebar
+  // Fetch entity detail and render sidebar.
+  //
+  // A 404 (entity not found) must be handled explicitly: check response.ok
+  // BEFORE parsing, so a missing entity resolves to a clean "not found" panel
+  // rather than a TypeError thrown deep in renderSidebar (reading .name off an
+  // undefined entity) that only lands in .catch() by accident.
   fetch("/api/entity/" + encodeURIComponent(nodeId))
-    .then((r) => r.json())
-    .then((detail) => renderSidebar(detail))
+    .then((r) => {
+      if (!r.ok) {
+        showSidebarMessage(notFoundSidebarHtml());
+        return null;
+      }
+      return r.json();
+    })
+    .then((detail) => {
+      if (detail === null) return; // already handled (not-found short-circuit)
+      renderSidebar(detail);
+    })
     .catch(() => {
-      document.getElementById("sidebar-content").innerHTML =
-        '<p style="color:#ef4444">Failed to load entity details.</p>';
-      document.getElementById("sidebar").classList.add("open");
+      showSidebarMessage('<p style="color:#ef4444">Failed to load entity details.</p>');
     });
+}
+
+// Drop a small message into the sidebar body and open the panel. Used for
+// both the not-found and network-error states so they share one code path.
+function showSidebarMessage(html) {
+  document.getElementById("sidebar-content").innerHTML = html;
+  document.getElementById("sidebar").classList.add("open");
+}
+
+// Pure: true only when the response body actually carries an entity. A 404
+// body (e.g. { error: "not found" }) or an empty object returns false, so the
+// caller can render a clean not-found state instead of crashing.
+export function hasEntityDetail(detail) {
+  return Boolean(detail && detail.entity);
+}
+
+// Pure: the clean "entity not found" sidebar body.
+export function notFoundSidebarHtml() {
+  return '<p style="color:var(--text-tertiary)">Entity not found.</p>';
 }
 
 export function closeSidebar() {
@@ -53,6 +84,14 @@ export function closeSidebar() {
 }
 
 function renderSidebar(detail) {
+  // Defense-in-depth: if the body somehow lacks an entity (malformed response
+  // that still returned 200), render the clean not-found state instead of
+  // dereferencing an undefined entity below.
+  if (!hasEntityDetail(detail)) {
+    showSidebarMessage(notFoundSidebarHtml());
+    return;
+  }
+
   const COLORS = getColors();
   const e = detail.entity;
   let html = "";
