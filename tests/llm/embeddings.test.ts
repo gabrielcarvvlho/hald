@@ -203,6 +203,20 @@ describe("createEmbeddingClient", () => {
     expect(client!.dimensions).toBe(1536);
   });
 
+  it("creates a Zhipu client with its own embedding model and dimensions", async () => {
+    const client = await createEmbeddingClient({
+      provider: "zhipu",
+      apiKey: "zhipu-test",
+      maxRetries: 1,
+    });
+    expect(client).toBeInstanceOf(OpenAIEmbeddingClient);
+    // Zhipu reuses the OpenAI-compatible client, but open.bigmodel.cn has no
+    // `text-embedding-3-small` — it must use `embedding-3`, or the embed pass 400s.
+    const zhipu = client as OpenAIEmbeddingClient;
+    expect(zhipu.model).toBe("embedding-3");
+    expect(zhipu.dimensions).toBe(2048);
+  });
+
   it("creates Google client with correct dimensions", async () => {
     const client = await createEmbeddingClient({
       provider: "google",

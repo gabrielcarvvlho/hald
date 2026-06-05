@@ -123,20 +123,33 @@ export function bufferToEmbedding(buf: Buffer): Float32Array {
 
 const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 const OPENAI_DIMENSIONS = 1536;
+// Zhipu reuses this OpenAI-compatible client but against open.bigmodel.cn, which
+// has no `text-embedding-3-small`; its embedding model is `embedding-3` (2048-dim).
+const ZHIPU_EMBEDDING_MODEL = "embedding-3";
+const ZHIPU_DIMENSIONS = 2048;
 const BATCH_SIZE = 100;
 
 export class OpenAIEmbeddingClient implements EmbeddingClient {
   readonly provider = "openai" as const;
-  readonly dimensions = OPENAI_DIMENSIONS;
+  readonly dimensions: number;
+  readonly model: string;
   private sdk: InstanceType<typeof import("openai").default> | null = null;
   private apiKey: string;
   private baseUrl?: string;
   private maxRetries: number;
 
-  constructor(apiKey: string, baseUrl?: string, maxRetries = 3) {
+  constructor(
+    apiKey: string,
+    baseUrl?: string,
+    maxRetries = 3,
+    model: string = OPENAI_EMBEDDING_MODEL,
+    dimensions: number = OPENAI_DIMENSIONS,
+  ) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.maxRetries = maxRetries;
+    this.model = model;
+    this.dimensions = dimensions;
   }
 
   private async getClient() {
@@ -164,7 +177,7 @@ export class OpenAIEmbeddingClient implements EmbeddingClient {
       const response = await withRetry(
         async () =>
           client.embeddings.create({
-            model: OPENAI_EMBEDDING_MODEL,
+            model: this.model,
             input: batch,
           }),
         this.maxRetries,
@@ -279,11 +292,15 @@ export async function createEmbeddingClient(
         logger.info("No Zhipu API key for embeddings — skipping");
         return null;
       }
-      // Zhipu embedding API is OpenAI-compatible
+      // Zhipu embedding API is OpenAI-compatible but exposes `embedding-3`,
+      // not OpenAI's `text-embedding-3-small` — pass the right model + dims so
+      // the embed call doesn't 400 on the lowest-cost indexing path.
       return new OpenAIEmbeddingClient(
         apiKey,
         config.baseUrl ?? "https://open.bigmodel.cn/api/paas/v4/",
         config.maxRetries,
+        ZHIPU_EMBEDDING_MODEL,
+        ZHIPU_DIMENSIONS,
       );
     }
   }
