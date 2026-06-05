@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { parseExtractionXml, shouldGlean, stripCodeFences } from "../../src/pipeline/extractor.js";
-import { EntityType } from "../../src/shared/types.js";
+import {
+  parseExtractionXml,
+  shouldGlean,
+  stripCodeFences,
+  dedupeRelations,
+  extract,
+} from "../../src/pipeline/extractor.js";
+import { EntityType, RelationType } from "../../src/shared/types.js";
 import type { TextUnit } from "../../src/shared/types.js";
+import type { LLMClient, LLMResponse } from "../../src/llm/types.js";
 
 describe("extractor — XML parsing", () => {
   it("parses a well-formed extraction response", () => {
@@ -279,5 +286,154 @@ describe("extractor — shouldGlean", () => {
       description: "",
     }));
     expect(shouldGlean({ entities, relations: [] }, makeTextUnit(10))).toBe(false);
+  });
+});
+
+describe("extractor — dedupeRelations", () => {
+  it("collapses duplicate (type, source, target) keeping the MAX weight", () => {
+    const deduped = dedupeRelations([
+      {
+        source: "Alice",
+        target: "src/payments",
+        type: RelationType.AUTHORED,
+        description: "first",
+        weight: 4,
+      },
+      {
+        source: "Alice",
+        target: "src/payments",
+        type: RelationType.AUTHORED,
+        description: "re-emitted with higher confidence",
+        weight: 9,
+      },
+    ]);
+
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0]!.weight).toBe(9);
+    // First-seen description/ordering is preserved (not the higher-weight one)
+    expect(deduped[0]!.description).toBe("first");
+  });
+
+  it("keeps weight at the MAX, not the sum, of same-key duplicates", () => {
+    const deduped = dedupeRelations([
+      {
+        source: "src/a",
+        target: "src/b",
+        type: RelationType.CO_CHANGED,
+        description: "x",
+        weight: 6,
+      },
+      {
+        source: "src/a",
+        target: "src/b",
+        type: RelationType.CO_CHANGED,
+        description: "x",
+        weight: 5,
+      },
+    ]);
+
+    expect(deduped).toHaveLength(1);
+    // MAX(6, 5) = 6, NOT 6 + 5 = 11
+    expect(deduped[0]!.weight).toBe(6);
+  });
+
+  it("does not collapse relations that differ in type, source, or target", () => {
+    const deduped = dedupeRelations([
+      {
+        source: "Alice",
+        target: "src/payments",
+        type: RelationType.AUTHORED,
+        description: "",
+        weight: 5,
+      },
+      {
+        source: "Alice",
+        target: "src/payments",
+        type: RelationType.MODIFIED,
+        description: "",
+        weight: 5,
+      },
+      {
+        source: "Bob",
+        target: "src/payments",
+        type: RelationType.AUTHORED,
+        description: "",
+        weight: 5,
+      },
+    ]);
+
+    expect(deduped).toHaveLength(3);
+  });
+});
+
+describe("extractor — gleaning relation dedup", () => {
+  function makeTextUnit(commitCount: number): TextUnit {
+    return {
+      id: "glean-tu",
+      content: "test content",
+      commitHashes: Array.from({ length: commitCount }, (_, i) => `hash${i}`),
+      dateRange: { start: "2024-01-01", end: "2024-01-31" },
+      entityIds: [],
+      relationIds: [],
+    };
+  }
+
+  /** Mock client: first call is the initial extraction, second is the gleaning pass. */
+  function makeGleaningClient(initialXml: string, gleaningXml: string): LLMClient {
+    let call = 0;
+    return {
+      provider: "anthropic",
+      async extract(): Promise<LLMResponse> {
+        call++;
+        const text = call === 1 ? initialXml : gleaningXml;
+        return {
+          text,
+          inputTokens: 100,
+          outputTokens: 50,
+          model: "mock-model",
+          stopReason: "end_turn",
+        };
+      },
+    };
+  }
+
+  it("dedupes a relation re-emitted by gleaning, keeping the max weight", async () => {
+    const initialXml = `<extraction>
+  <entities>
+    <entity><name>Alice</name><type>PERSON</type><description>dev</description></entity>
+    <entity><name>src/payments</name><type>MODULE</type><description>payments</description></entity>
+  </entities>
+  <relations>
+    <relation>
+      <source>Alice</source><target>src/payments</target><type>AUTHORED</type>
+      <description>Alice wrote payments</description><weight>5</weight>
+    </relation>
+  </relations>
+</extraction>`;
+
+    // Gleaning re-emits the SAME relation (type, source, target) with a higher weight.
+    const gleaningXml = `<extraction>
+  <entities>
+    <entity><name>Alice</name><type>PERSON</type><description>dev</description></entity>
+    <entity><name>src/payments</name><type>MODULE</type><description>payments</description></entity>
+  </entities>
+  <relations>
+    <relation>
+      <source>Alice</source><target>src/payments</target><type>AUTHORED</type>
+      <description>Alice wrote payments (gleaned)</description><weight>9</weight>
+    </relation>
+  </relations>
+</extraction>`;
+
+    const client = makeGleaningClient(initialXml, gleaningXml);
+    // 10 commits, ratio 2/10 < 0.5 → gleaning triggers.
+    const result = await extract(makeTextUnit(10), client, { enableGleaning: true });
+
+    // One deduped edge, not two — and the weight is the MAX (9), not the sum (14).
+    expect(result.relations).toHaveLength(1);
+    expect(result.relations[0]!.type).toBe(RelationType.AUTHORED);
+    expect(result.relations[0]!.source).toBe("Alice");
+    expect(result.relations[0]!.target).toBe("src/payments");
+    expect(result.relations[0]!.weight).toBe(9);
   });
 });

@@ -101,6 +101,91 @@ describe("resolver audit — edge cases", () => {
     // But the resolver can only work with what it's given.
   });
 
+  // === MODULE OVER-MERGE: sibling paths must NOT fuzzy-merge ===
+  // Module paths are structured, not fuzzy. Siblings share the parent prefix
+  // ("src/"), and the Jaro-Winkler Winkler boost pushes them above 0.85 — so
+  // fuzzy matching would wrongly collapse distinct modules. MODULE resolution
+  // must rely on exact + alias matching (plus path normalization) only.
+  it("does NOT merge sibling modules 'src/auth' and 'src/api' (JW≈0.87)", () => {
+    // Sanity: confirm these score above the default 0.85 threshold, so the
+    // separation comes from the MODULE exemption, not from JW being low.
+    expect(jaroWinkler("src/auth", "src/api")).toBeGreaterThan(0.85);
+
+    const entities: ExtractedEntity[] = [
+      { name: "src/auth", type: EntityType.MODULE, description: "Authentication" },
+      { name: "src/api", type: EntityType.MODULE, description: "API layer" },
+    ];
+
+    const resolved = resolve(entities, 0.85);
+    expect(resolved).toHaveLength(2);
+    const names = resolved.map((e) => e.name).sort();
+    expect(names).toEqual(["src/api", "src/auth"]);
+  });
+
+  it("does NOT merge sibling modules 'src/billing' and 'src/bidding' (JW≈0.93)", () => {
+    expect(jaroWinkler("src/billing", "src/bidding")).toBeGreaterThan(0.85);
+
+    const entities: ExtractedEntity[] = [
+      { name: "src/billing", type: EntityType.MODULE, description: "Billing" },
+      { name: "src/bidding", type: EntityType.MODULE, description: "Bidding" },
+    ];
+
+    const resolved = resolve(entities, 0.85);
+    expect(resolved).toHaveLength(2);
+    const names = resolved.map((e) => e.name).sort();
+    expect(names).toEqual(["src/bidding", "src/billing"]);
+  });
+
+  it("does NOT merge extensionless sibling modules 'billing-api' and 'billing-app'", () => {
+    // These have no extension, so normalization keeps them as-is. Their JW is
+    // very high (only the last 2 chars differ) — exactly the false positive the
+    // MODULE exemption prevents.
+    expect(jaroWinkler("billing-api", "billing-app")).toBeGreaterThan(0.85);
+
+    const entities: ExtractedEntity[] = [
+      { name: "billing-api", type: EntityType.MODULE, description: "Billing API" },
+      { name: "billing-app", type: EntityType.MODULE, description: "Billing app" },
+    ];
+
+    const resolved = resolve(entities, 0.85);
+    expect(resolved).toHaveLength(2);
+  });
+
+  it("still merges legitimately-equivalent MODULE paths via normalization", () => {
+    // Different files under the same directory normalize to the same module
+    // and merge via EXACT match — the MODULE exemption only removes FUZZY.
+    const entities: ExtractedEntity[] = [
+      { name: "src/billing/processor.ts", type: EntityType.MODULE, description: "Processor" },
+      { name: "src/billing/types.ts", type: EntityType.MODULE, description: "Types" },
+      { name: "src/billing/index.ts", type: EntityType.MODULE, description: "Entry" },
+    ];
+
+    const resolved = resolve(entities, 0.85);
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.name).toBe("src/billing");
+  });
+
+  it("still merges case-variant MODULE names via exact (case-insensitive) match", () => {
+    const entities: ExtractedEntity[] = [
+      { name: "src/Auth", type: EntityType.MODULE, description: "Auth" },
+      { name: "src/auth", type: EntityType.MODULE, description: "Authentication" },
+    ];
+
+    const resolved = resolve(entities, 0.85);
+    expect(resolved).toHaveLength(1);
+  });
+
+  it("PERSON entities still fuzzy-merge after the MODULE exemption", () => {
+    // The exemption must be MODULE-scoped: PERSON near-duplicates still collapse.
+    const entities: ExtractedEntity[] = [
+      { name: "Alice Chen", type: EntityType.PERSON, description: "Dev" },
+      { name: "Alice  Chen", type: EntityType.PERSON, description: "Dev too" },
+    ];
+
+    const resolved = resolve(entities, 0.85);
+    expect(resolved).toHaveLength(1);
+  });
+
   // === SORT ORDER: verify the cluster-creation order is deterministic ===
   it("same entities in random orders produce identical IDs", () => {
     const mkEntities = (): ExtractedEntity[] => [

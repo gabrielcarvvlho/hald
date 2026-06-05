@@ -306,6 +306,30 @@ function mergeResults(base: ExtractorResult, extra: ExtractorResult): ExtractorR
   };
 }
 
+/**
+ * Collapse duplicate relations within a single ExtractorResult, keyed by
+ * (type, source, target). The gleaning pass re-feeds the prior response to the
+ * LLM, which often re-emits relations it already reported — and downstream the
+ * graph builder weight-SUMS edges sharing a key, so blind concatenation would
+ * inflate the same edge. Dedupe keeps the MAX weight (not the sum), since both
+ * emissions describe the same single-chunk relationship. The first-seen
+ * description and ordering are preserved for determinism. Entity dedup is left
+ * to resolve(), which merges across the whole graph.
+ */
+function dedupeRelations(relations: ExtractedRelation[]): ExtractedRelation[] {
+  const byKey = new Map<string, ExtractedRelation>();
+  for (const r of relations) {
+    const key = `${r.type} ${r.source} ${r.target}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...r });
+    } else if (r.weight > existing.weight) {
+      existing.weight = r.weight;
+    }
+  }
+  return [...byKey.values()];
+}
+
 // ================================================================
 // Extract
 // ================================================================
@@ -360,6 +384,7 @@ export async function extract(
     const result = parseExtractionXml(retry.text);
     return {
       ...result,
+      relations: dedupeRelations(result.relations),
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
     };
@@ -413,6 +438,7 @@ export async function extract(
 
   return {
     ...result,
+    relations: dedupeRelations(result.relations),
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
   };
@@ -485,4 +511,16 @@ export async function* extractBatch(
 }
 
 // Exported for testing
-export { parseExtractionXml, SYSTEM_PROMPT, GLEANING_PROMPT, shouldGlean, stripCodeFences };
+export {
+  parseExtractionXml,
+  SYSTEM_PROMPT,
+  GLEANING_PROMPT,
+  shouldGlean,
+  stripCodeFences,
+  dedupeRelations,
+};
+
+// Exported so the orchestrator can re-validate relation type constraints after
+// cross-chunk entity resolution (a relation whose endpoints came from different
+// chunks skips the per-chunk check inside parseExtractionXml).
+export { RELATION_CONSTRAINTS };

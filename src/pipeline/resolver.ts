@@ -142,7 +142,18 @@ function resolveGroup(entities: ExtractedEntity[], type: EntityType, threshold: 
       // Strategy 3: Fuzzy match with prefix blocking
       // Skip JW if length difference is too large (> 50% of the longer string)
       // or if strings share no common prefix — these can't score above typical thresholds.
-      if (canFuzzyMatch(key, clusterKey) && jaroWinkler(key, clusterKey) >= threshold) {
+      //
+      // MODULE entities are EXEMPT: paths are structured, not fuzzy. Sibling
+      // paths share the same parent prefix ("src/auth" vs "src/api"), and the
+      // Winkler prefix boost pushes them above the threshold (JW≈0.87), so
+      // fuzzy matching collapses distinct modules. Path normalization in
+      // resolve() already groups truly-equivalent paths via exact match, so
+      // MODULE relies solely on exact + alias matching here.
+      if (
+        type !== EntityType.MODULE &&
+        canFuzzyMatch(key, clusterKey) &&
+        jaroWinkler(key, clusterKey) >= threshold
+      ) {
         clusters[ci]!.push(entity);
         merged = true;
         break;
