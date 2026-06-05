@@ -3,8 +3,14 @@
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Hald, please report it responsibly.
+**Do not open a public issue.**
 
-**Do not open a public issue.** Instead, email **security@gabrielcarvalho.dev** with:
+The preferred channel is GitHub's
+[private vulnerability reporting](https://github.com/gabrielcarvvlho/hald/security/advisories/new)
+(the **Report a vulnerability** button on the repository's Security tab), which keeps
+the report private until a fix ships. You can also email **security@gabrielcarvalho.dev**.
+
+Please include:
 
 - A description of the vulnerability
 - Steps to reproduce
