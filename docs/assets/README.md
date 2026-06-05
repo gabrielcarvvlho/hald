@@ -1,45 +1,47 @@
-# Hero GIF instructions
+# Assets
 
-The README hero references `docs/assets/hero.gif`. Until you record one, the
-image link will 404 (which most markdown renderers handle gracefully).
+`hero.gif` — the README hero. A recording of the real `hald graph` viewer on the
+built-in mock fixture, looping through the moat: community-clustered graph →
+click a cluster to explain it (LLM summary + top entities/experts) → toggle a
+type filter → switch to dark mode.
 
-## Recording the hero
+## Regenerating the hero
 
-Goal: 8-12 second loop, ≤5MB, demonstrates the moat (communities, click-to-explain).
-
-### Setup
-
-1. Index this repo (or another good demo repo with multiple communities).
-   ```bash
-   ANTHROPIC_API_KEY=sk-... hald scan
-   ```
-2. Make sure your terminal/browser is in light mode for the recording (people
-   compare GIFs against white backgrounds in README previews).
-3. Set browser viewport to ~1280x720 for crisp scaling.
-
-### Story (the 10-second arc)
-
-1. Open the page (vendor loads instantly, top-5 nodes labeled, communities
-   floating with their titles).
-2. Hover one community label — tooltip with summary appears.
-3. Click that community label — overlay opens with title + summary + top
-   entities.
-4. Click an entity in the overlay — sidebar slides in showing details.
-5. Toggle a type chip — graph filters live.
-6. Click the moon icon — switches to dark mode.
-
-### Tools
-
-- macOS: QuickTime → Screen Recording, then `gifski --fps 24 --width 820 -o hero.gif input.mov`
-- Cross-platform: [Peek](https://github.com/phw/peek), [LICEcap](https://www.cockos.com/licecap/), [terminalizer](https://terminalizer.com/) for CLI.
-- Optimize: `gifsicle -O3 --lossy=80 hero.gif > hero.optimized.gif`
-
-### Once recorded
+The graph engine is WebGL, so it must be recorded through a real GPU-backed
+browser (Google Chrome), not a plain headless shell. Prereqs: Chrome, `ffmpeg`,
+and Playwright (`npx playwright`).
 
 ```bash
-mv hero.gif docs/assets/hero.gif
-git add docs/assets/hero.gif
-git commit -m "docs: add README hero GIF"
+# 1. Build and boot the mock viewer (zero API cost: ~50 entities, 6 communities)
+npm run build
+node dist/cli.js graph --mock --no-open --port 3799 &
+
+# 2. Record the arc through real Chrome (save as capture.mjs, run with Playwright on PATH)
+cat > /tmp/capture.mjs <<'EOF'
+import { chromium } from 'playwright';
+const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const b = await chromium.launch({ executablePath: CHROME, headless: true });
+const ctx = await b.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5,
+  recordVideo: { dir: '/tmp/hald-vid', size: { width: 1280, height: 720 } } });
+const p = await ctx.newPage();
+await p.goto('http://localhost:3799', { waitUntil: 'networkidle' });
+await p.waitForFunction(() => document.querySelectorAll('#graph-container canvas').length > 0, { timeout: 20000 });
+await sleep(2800);
+const label = p.locator('.community-label').first();
+await label.hover(); await sleep(1400); await label.click(); await sleep(3000);
+await p.keyboard.press('Escape'); await sleep(1100);
+const chip = p.locator('.filter-chip').nth(3);
+await chip.click(); await sleep(1500); await chip.click(); await sleep(900);
+await p.click('#btn-theme'); await sleep(3000);
+await ctx.close(); await b.close();
+EOF
+node /tmp/capture.mjs
+
+# 3. Encode an optimized GIF (diff palette → clean quality at small size)
+ffmpeg -y -ss 1.3 -i /tmp/hald-vid/*.webm \
+  -vf "fps=16,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" \
+  -loop 0 docs/assets/hero.gif
 ```
 
-The `<img>` tag in README.md already points at `docs/assets/hero.gif`.
+Keep it a 12–17s loop and ≤5MB so it renders fast on GitHub and npm.
