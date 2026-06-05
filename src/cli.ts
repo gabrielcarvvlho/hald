@@ -19,6 +19,7 @@ import { createEmbeddingClient } from "./llm/embeddings.js";
 import { QueryEmbedder } from "./query/similarity.js";
 import { selectPresenter, PrettyPresenter, type Presenter } from "./shared/presenter.js";
 import { logger, LogLevel } from "./shared/logger.js";
+import { formatNumber } from "./shared/format.js";
 import { VERSION } from "./shared/version.js";
 
 const program = new Command();
@@ -290,11 +291,11 @@ program
     store.close();
 
     const rows: [string, string][] = [
-      ["Entities", stats.entities.toLocaleString()],
-      ["Relations", stats.relations.toLocaleString()],
-      ["Text units", stats.textUnits.toLocaleString()],
-      ["Communities", stats.communities.toLocaleString()],
-      ["Commits", stats.commits.toLocaleString()],
+      ["Entities", formatNumber(stats.entities)],
+      ["Relations", formatNumber(stats.relations)],
+      ["Text units", formatNumber(stats.textUnits)],
+      ["Communities", formatNumber(stats.communities)],
+      ["Commits", formatNumber(stats.commits)],
     ];
     const sepIdx = rows.length;
     if (lastCommit) {

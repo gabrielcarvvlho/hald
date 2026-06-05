@@ -1,5 +1,6 @@
 import { estimateTokens } from "./chunker.js";
 import type { TextUnit } from "../shared/types.js";
+import { formatNumber } from "../shared/format.js";
 
 // ================================================================
 // Cost per 1M tokens by provider (input + output combined estimate)
@@ -95,9 +96,9 @@ export function estimateCost(
     totalTokens,
     estimatedCostUsd,
     breakdown: {
-      extraction: `~${extractionTokens.toLocaleString()} tokens (${textUnits.length} text units)`,
-      summarization: `~${summarizationTokens.toLocaleString()} tokens (~${estimatedCommunities} communities)`,
-      total: `~${totalTokens.toLocaleString()} tokens ≈ $${estimatedCostUsd.toFixed(2)}`,
+      extraction: `~${formatNumber(extractionTokens)} tokens (${textUnits.length} text units)`,
+      summarization: `~${formatNumber(summarizationTokens)} tokens (~${estimatedCommunities} communities)`,
+      total: `~${formatNumber(totalTokens)} tokens ≈ $${estimatedCostUsd.toFixed(2)}`,
     },
   };
 }

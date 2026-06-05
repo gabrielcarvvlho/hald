@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { Listr, type ListrTask } from "listr2";
 import type { IndexResult } from "../pipeline/orchestrator.js";
+import { formatNumber } from "./format.js";
 
 // listr2's task callback signature varies by renderer generics; deriving the
 // task-wrapper type straight from `ListrTask['task']` parameters keeps this
@@ -116,7 +117,7 @@ export class JsonPresenter implements Presenter {
     if (result.tokenUsage.requests > 0) {
       lines.push(
         `  LLM requests:            ${result.tokenUsage.requests} (${result.tokenUsage.failures} failed)`,
-        `  Tokens:                  ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`,
+        `  Tokens:                  ${formatNumber(result.tokenUsage.inputTokens)} in / ${formatNumber(result.tokenUsage.outputTokens)} out`,
         `  Cost:                    $${result.actualCostUsd.toFixed(4)}`,
       );
     }
@@ -233,9 +234,9 @@ function renderSummaryCard(result: IndexResult, elapsedMs: number): string {
   const reused = result.communitiesFound - result.communitiesSummarized;
 
   const rows: [string, string][] = [
-    ["Commits processed", result.commitsProcessed.toLocaleString()],
-    ["Entities", result.entitiesFound.toLocaleString()],
-    ["Relations", result.relationsFound.toLocaleString()],
+    ["Commits processed", formatNumber(result.commitsProcessed)],
+    ["Entities", formatNumber(result.entitiesFound)],
+    ["Relations", formatNumber(result.relationsFound)],
     [
       "Communities",
       reused > 0
@@ -249,7 +250,7 @@ function renderSummaryCard(result: IndexResult, elapsedMs: number): string {
         "LLM requests",
         t.failures > 0 ? `${t.requests} (${chalk.red(t.failures + " failed")})` : `${t.requests}`,
       ],
-      ["Tokens", `${t.inputTokens.toLocaleString()} in / ${t.outputTokens.toLocaleString()} out`],
+      ["Tokens", `${formatNumber(t.inputTokens)} in / ${formatNumber(t.outputTokens)} out`],
       ["Cost", chalk.green(`$${result.actualCostUsd.toFixed(4)}`)],
     );
   }

@@ -26,6 +26,7 @@ import type { GlobalSearchResult } from "../query/global-search.js";
 import type { QueryEmbedder } from "../query/similarity.js";
 import { EntityType, RelationType } from "../shared/types.js";
 import type { Entity, Relation, TextUnit } from "../shared/types.js";
+import { formatNumber } from "../shared/format.js";
 
 type GetStore = () => Store;
 type GetQueryEmbedder = () => Promise<QueryEmbedder>;
@@ -846,7 +847,7 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
                 ...(result.tokenUsage.requests > 0
                   ? [
                       `- LLM requests: ${result.tokenUsage.requests}`,
-                      `- Tokens: ${result.tokenUsage.inputTokens.toLocaleString()} in / ${result.tokenUsage.outputTokens.toLocaleString()} out`,
+                      `- Tokens: ${formatNumber(result.tokenUsage.inputTokens)} in / ${formatNumber(result.tokenUsage.outputTokens)} out`,
                       `- Cost: $${result.actualCostUsd.toFixed(4)}`,
                     ]
                   : []),
