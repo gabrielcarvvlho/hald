@@ -195,6 +195,7 @@ export function submitExtraction(xml: string): {
   entities: number;
   relations: number;
   progress: string;
+  warning?: string;
 } {
   const session = activeSession;
   if (!session) throw new Error("No active agent-mediated session");
@@ -210,6 +211,29 @@ export function submitExtraction(xml: string): {
 
   const tu = session.textUnits[session.nextIndex]!;
   const result = parseExtractionXml(xml);
+
+  // Fail loudly on an empty parse. A submission that yields zero entities AND
+  // zero relations almost always means the XML wasn't wrapped in the expected
+  // <extraction>…</extraction> envelope (parseExtractionXml returns empty when
+  // the block is missing or malformed). Silently advancing would burn the chunk
+  // and quietly degrade the whole index, so hold position and ask the host to
+  // resubmit instead.
+  if (result.entities.length === 0 && result.relations.length === 0) {
+    logger.warn("agent-session: empty extraction submitted, not advancing", {
+      textUnitId: tu.id,
+      chunk: `${session.nextIndex + 1}/${session.textUnits.length}`,
+    });
+    return {
+      accepted: false,
+      entities: 0,
+      relations: 0,
+      progress: `${session.nextIndex}/${session.textUnits.length} (chunk not advanced)`,
+      warning:
+        "Parsed 0 entities and 0 relations from this submission. " +
+        "Check that the XML is wrapped in <extraction>…</extraction> (with <entities> and <relations> blocks inside) " +
+        "and resubmit this same chunk via hald_submit_extraction. The session did not advance.",
+    };
+  }
 
   session.extractions.set(tu.id, result);
   session.nextIndex++;
