@@ -300,6 +300,239 @@ describe("Store — Communities", () => {
   });
 });
 
+describe("Store — clearGraph", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+  });
+  afterEach(() => db.close());
+
+  function populate(): void {
+    store.upsertEntity(sampleEntity); // person:alice
+    store.upsertEntity(sampleEntity2); // module:src/billing
+    store.upsertRelation({
+      id: "rel:001",
+      type: RelationType.AUTHORED,
+      sourceId: "person:alice",
+      targetId: "module:src/billing",
+      weight: 5,
+      description: "Alice authored billing",
+      evidence: ["tu:001"],
+      firstSeen: "2024-01-15",
+      lastSeen: "2024-06-10",
+    });
+    store.insertTextUnit({
+      id: "tu:001",
+      content: "Alice worked on billing",
+      commitHashes: ["abc123"],
+      dateRange: { start: "2024-01-01", end: "2024-01-05" },
+      entityIds: ["person:alice", "module:src/billing"],
+      relationIds: ["rel:001"],
+    });
+    store.upsertCommunity({
+      id: "comm:0:0",
+      level: 0,
+      title: "Billing",
+      summary: "Billing community",
+      entityIds: ["person:alice", "module:src/billing"],
+      childIds: [],
+    });
+    store.insertCommit(
+      {
+        hash: "abc123",
+        authorName: "Alice Chen",
+        authorEmail: "alice@acme.com",
+        date: "2024-01-01T10:00:00Z",
+        message: "feat: billing",
+        filesChanged: [],
+        parentHashes: [],
+      },
+      "tu:001",
+    );
+    store.setMeta("last_indexed_commit", "abc123");
+    store.setMeta("last_indexed_at", "2024-06-15T10:00:00Z");
+    store.setMeta("embedding_hashes", JSON.stringify({ "person:alice": "deadbeef" }));
+    store.setMeta("embedding_model", "anthropic");
+    store.setMeta("embedding_dimensions", "4");
+  }
+
+  function tableCount(table: string): number {
+    return (db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c;
+  }
+
+  it("empties every graph-content table in one call", () => {
+    populate();
+
+    // Sanity: data is present before clearing.
+    const stats = store.getStats();
+    expect(stats.entities).toBe(2);
+    expect(stats.relations).toBe(1);
+    expect(stats.textUnits).toBe(1);
+    expect(stats.communities).toBe(1);
+    expect(stats.commits).toBe(1);
+    expect(tableCount("text_unit_entities")).toBeGreaterThan(0);
+    expect(tableCount("community_entities")).toBeGreaterThan(0);
+
+    store.clearGraph();
+
+    for (const table of [
+      "entities",
+      "relations",
+      "text_units",
+      "commits",
+      "communities",
+      "text_unit_entities",
+      "community_entities",
+    ]) {
+      expect(tableCount(table)).toBe(0);
+    }
+  });
+
+  it("clears incremental-skip meta but keeps provider config meta", () => {
+    populate();
+
+    store.clearGraph();
+
+    // Graph-content meta rows are reset so the next scan/embed starts fresh.
+    expect(store.getMeta("last_indexed_commit")).toBeNull();
+    expect(store.getMeta("last_indexed_at")).toBeNull();
+    expect(store.getMeta("embedding_hashes")).toBeNull();
+
+    // Provider config meta and schema state survive.
+    expect(store.getMeta("embedding_model")).toBe("anthropic");
+    expect(store.getMeta("embedding_dimensions")).toBe("4");
+    expect(store.getMeta("schema_version")).not.toBeNull();
+  });
+
+  it("is idempotent — clearing an empty graph is a no-op", () => {
+    store.clearGraph();
+    store.clearGraph();
+    expect(store.getStats().entities).toBe(0);
+  });
+
+  it("re-indexing after clearGraph yields no stale rows", () => {
+    populate();
+    store.clearGraph();
+
+    // Simulate a fresh --full re-index of a single entity.
+    store.upsertEntity(sampleEntity);
+    expect(store.getStats().entities).toBe(1);
+    expect(store.getEntity("module:src/billing")).toBeNull();
+  });
+});
+
+describe("Store — Relation date upsert guard", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+    store.upsertEntity(sampleEntity); // person:alice
+    store.upsertEntity(sampleEntity2); // module:src/billing
+  });
+  afterEach(() => db.close());
+
+  const baseRelation: Relation = {
+    id: "rel:dates",
+    type: RelationType.AUTHORED,
+    sourceId: "person:alice",
+    targetId: "module:src/billing",
+    weight: 1,
+    description: "",
+    evidence: [],
+    firstSeen: "",
+    lastSeen: "",
+  };
+
+  it("a real date beats an earlier empty-string date (empty first, real second)", () => {
+    store.upsertRelation({ ...baseRelation, firstSeen: "", lastSeen: "" });
+    store.upsertRelation({ ...baseRelation, firstSeen: "2024-01-01", lastSeen: "2024-06-10" });
+
+    const result = store.getRelation("rel:dates")!;
+    expect(result.firstSeen).toBe("2024-01-01");
+    expect(result.lastSeen).toBe("2024-06-10");
+  });
+
+  it("an empty incoming date never overwrites a stored real date (real first, empty second)", () => {
+    store.upsertRelation({ ...baseRelation, firstSeen: "2024-01-01", lastSeen: "2024-06-10" });
+    store.upsertRelation({ ...baseRelation, firstSeen: "", lastSeen: "" });
+
+    const result = store.getRelation("rel:dates")!;
+    expect(result.firstSeen).toBe("2024-01-01");
+    expect(result.lastSeen).toBe("2024-06-10");
+  });
+
+  it("two real dates still resolve to MIN(first_seen) / MAX(last_seen)", () => {
+    store.upsertRelation({ ...baseRelation, firstSeen: "2024-05-01", lastSeen: "2024-05-10" });
+    store.upsertRelation({ ...baseRelation, firstSeen: "2024-01-01", lastSeen: "2024-06-10" });
+
+    const result = store.getRelation("rel:dates")!;
+    expect(result.firstSeen).toBe("2024-01-01"); // MIN
+    expect(result.lastSeen).toBe("2024-06-10"); // MAX
+  });
+
+  it("both-empty dates remain empty (no spurious value introduced)", () => {
+    store.upsertRelation({ ...baseRelation, firstSeen: "", lastSeen: "" });
+    store.upsertRelation({ ...baseRelation, firstSeen: "", lastSeen: "" });
+
+    const result = store.getRelation("rel:dates")!;
+    expect(result.firstSeen).toBe("");
+    expect(result.lastSeen).toBe("");
+  });
+});
+
+describe("Store — findModulesByPath LIKE escaping", () => {
+  let store: Store;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+  });
+  afterEach(() => db.close());
+
+  function makeModule(id: string, name: string): Entity {
+    return {
+      id,
+      type: EntityType.MODULE,
+      name,
+      aliases: [],
+      description: "",
+      firstSeen: "2024-01-01",
+      lastSeen: "2024-06-01",
+      frequency: 1,
+      metadata: {},
+    };
+  }
+
+  it("treats '%' in the path as a literal, not a wildcard", () => {
+    store.upsertEntity(makeModule("module:a", "src/a%b"));
+    store.upsertEntity(makeModule("module:asub", "src/a%b/child")); // real sub-module
+    // Decoys the unescaped '%' wildcard WOULD erroneously match as sub-modules:
+    store.upsertEntity(makeModule("module:zzz", "src/aZZZb/child"));
+    store.upsertEntity(makeModule("module:bare", "src/ab/child"));
+
+    const results = store.findModulesByPath("src/a%b");
+    const names = results.map((e) => e.name).sort();
+
+    // Only the literal path and its real sub-module; no wildcard expansion.
+    expect(names).toEqual(["src/a%b", "src/a%b/child"]);
+  });
+
+  it("treats '_' in the path as a literal, not a single-char wildcard", () => {
+    store.upsertEntity(makeModule("module:u", "src/a_b"));
+    store.upsertEntity(makeModule("module:usub", "src/a_b/child")); // real sub-module
+    // Decoy the unescaped '_' single-char wildcard WOULD erroneously match:
+    store.upsertEntity(makeModule("module:ux", "src/aXb/child"));
+
+    const results = store.findModulesByPath("src/a_b");
+    const names = results.map((e) => e.name).sort();
+
+    expect(names).toEqual(["src/a_b", "src/a_b/child"]);
+  });
+});
+
 describe("Store — Commits", () => {
   let store: Store;
   let db: Database.Database;

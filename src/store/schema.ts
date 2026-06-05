@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import { logger } from "../shared/logger.js";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export function initSchema(db: Database.Database): void {
   db.exec(`
@@ -244,6 +244,18 @@ const MIGRATIONS: Migration[] = [
       db.exec(`
         ALTER TABLE entities ADD COLUMN embedding BLOB;
         ALTER TABLE communities ADD COLUMN embedding BLOB;
+      `);
+    },
+  },
+  {
+    version: 5,
+    description: "Add case-insensitive index on entities.name for getEntityByName lookups",
+    up: (db) => {
+      // getEntityByName filters with `name = ? COLLATE NOCASE`. The BINARY
+      // idx_entities_name can't serve that, forcing a full scan — a NOCASE
+      // index makes the lookup index-backed.
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_entities_name_nocase ON entities(name COLLATE NOCASE);
       `);
     },
   },

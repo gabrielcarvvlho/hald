@@ -38,6 +38,27 @@ describe("DB rename migration (oracle.db → hald.db)", () => {
     expect(existsSync(join(tempDir, "oracle.db"))).toBe(false);
   });
 
+  it("checkpoints legacy WAL so un-checkpointed writes survive the rename", () => {
+    // Seed a legacy DB in WAL mode and leave writes in the -wal sibling
+    // (no checkpoint). The migration must checkpoint before renaming the main
+    // file, otherwise those rows would be lost if the -wal rename were skipped.
+    const legacy = new Database(join(tempDir, "oracle.db"));
+    legacy.pragma("journal_mode = WAL");
+    legacy.exec("CREATE TABLE marker (id INTEGER);");
+    legacy.exec("INSERT INTO marker VALUES (7);");
+    // Close without an explicit checkpoint — better-sqlite3 may checkpoint on
+    // close, but openDatabase's own checkpoint is what we exercise here.
+    legacy.close();
+
+    const db = openDatabase(tempDir);
+    const row = db.prepare("SELECT id FROM marker").get() as { id: number };
+    db.close();
+
+    expect(row.id).toBe(7);
+    expect(existsSync(join(tempDir, "hald.db"))).toBe(true);
+    expect(existsSync(join(tempDir, "oracle.db"))).toBe(false);
+  });
+
   it("prefers existing hald.db over legacy oracle.db (no migration)", () => {
     // Both exist — caller already migrated. Hald wins, oracle.db is left untouched.
     const hald = new Database(join(tempDir, "hald.db"));

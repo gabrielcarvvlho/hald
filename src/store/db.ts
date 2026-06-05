@@ -64,6 +64,23 @@ function migrateLegacyDbFile(storagePath: string): string {
     return haldPath;
   }
 
+  // Checkpoint the legacy WAL into the main DB file before renaming. The -wal
+  // and -shm siblings are renamed separately and best-effort below, so a crash
+  // mid-rename could otherwise strip un-checkpointed transactions. Skip
+  // gracefully if the file is missing/locked/corrupt — the rename still runs.
+  try {
+    const legacyDb = new Database(legacyPath);
+    try {
+      legacyDb.pragma("wal_checkpoint(TRUNCATE)");
+    } finally {
+      legacyDb.close();
+    }
+  } catch (err) {
+    logger.debug("Could not checkpoint legacy oracle.db WAL before rename", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   try {
     renameSync(legacyPath, haldPath);
     for (const suffix of ["-shm", "-wal"]) {

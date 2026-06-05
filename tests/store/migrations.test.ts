@@ -21,6 +21,11 @@ function tableExists(db: Database.Database, name: string): boolean {
   return !!row;
 }
 
+function indexExists(db: Database.Database, name: string): boolean {
+  const row = db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?").get(name);
+  return !!row;
+}
+
 describe("Migration framework", () => {
   it("runs pending migrations on a v1 database", () => {
     const db = createV1Database();
@@ -28,7 +33,7 @@ describe("Migration framework", () => {
 
     runMigrations(db);
 
-    expect(getVersion(db)).toBe(4);
+    expect(getVersion(db)).toBe(5);
     expect(tableExists(db, "text_unit_entities")).toBe(true);
     expect(tableExists(db, "community_entities")).toBe(true);
     db.close();
@@ -122,6 +127,44 @@ describe("Migration framework", () => {
     const commColNames = commCols.map((c) => c.name);
     expect(commColNames).toContain("embedding");
 
+    db.close();
+  });
+
+  it("creates a case-insensitive name index on entities in v5 migration", () => {
+    const db = createV1Database();
+    // The BINARY index ships in initSchema; the NOCASE one is migration-added.
+    expect(indexExists(db, "idx_entities_name_nocase")).toBe(false);
+
+    runMigrations(db);
+
+    expect(getVersion(db)).toBe(5);
+    expect(indexExists(db, "idx_entities_name_nocase")).toBe(true);
+
+    // The NOCASE index must actually back the case-insensitive lookup
+    // (otherwise getEntityByName full-scans). EXPLAIN QUERY PLAN names it.
+    const plan = db
+      .prepare("EXPLAIN QUERY PLAN SELECT * FROM entities WHERE name = 'x' COLLATE NOCASE")
+      .all() as { detail: string }[];
+    const usesNocaseIndex = plan.some((step) => step.detail.includes("idx_entities_name_nocase"));
+    expect(usesNocaseIndex).toBe(true);
+
+    db.close();
+  });
+
+  it("does not re-run migrations when reopened at the current version", () => {
+    const db = createV1Database();
+    runMigrations(db);
+    expect(getVersion(db)).toBe(5);
+
+    // Drop a migration-created index, then re-run. An idempotent runner that
+    // tracks the version must skip v5 entirely and leave the index absent.
+    db.exec("DROP INDEX idx_entities_name_nocase");
+    expect(indexExists(db, "idx_entities_name_nocase")).toBe(false);
+
+    runMigrations(db);
+
+    expect(getVersion(db)).toBe(5);
+    expect(indexExists(db, "idx_entities_name_nocase")).toBe(false);
     db.close();
   });
 

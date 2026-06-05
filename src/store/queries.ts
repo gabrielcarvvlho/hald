@@ -224,6 +224,36 @@ export class Store {
     this.db.exec("DELETE FROM communities");
   }
 
+  /**
+   * Wipe all graph-content tables in a single transaction, making a `--full`
+   * re-index idempotent (no stale rows linger from a previous index).
+   *
+   * Deletes entities, relations, text_units, commits, communities and their
+   * junction tables. Also clears the meta rows that drive incremental skipping
+   * (last indexed commit/time + per-item embedding hashes) so the next scan
+   * and embed pass treat the graph as fresh.
+   *
+   * Does NOT touch schema/migration state (schema_version) or provider config
+   * meta (embedding_model/embedding_dimensions).
+   */
+  clearGraph(): void {
+    this.transaction(() => {
+      // Junction tables first (also covered by ON DELETE CASCADE, but explicit
+      // is resilient regardless of foreign_keys pragma state).
+      this.db.exec(`
+        DELETE FROM text_unit_entities;
+        DELETE FROM community_entities;
+        DELETE FROM communities;
+        DELETE FROM text_units;
+        DELETE FROM relations;
+        DELETE FROM commits;
+        DELETE FROM entities;
+        DELETE FROM index_meta
+          WHERE key IN ('last_indexed_commit', 'last_indexed_at', 'embedding_hashes');
+      `);
+    });
+  }
+
   // ================================================================
   // Commits
   // ================================================================
@@ -313,7 +343,10 @@ export class Store {
 
   /** Find MODULE entities matching a path (exact + prefix for sub-modules). */
   findModulesByPath(modulePath: string): Entity[] {
-    const rows = this.stmts.findModulesByPath.all(modulePath, modulePath + "/%") as EntityRow[];
+    // Escape LIKE metacharacters in the dynamic prefix so a path containing
+    // '%' or '_' matches literally (the trailing "/%" stays a real wildcard).
+    const prefix = escapeLike(modulePath) + "/%";
+    const rows = this.stmts.findModulesByPath.all(modulePath, prefix) as EntityRow[];
     return rows.map(toEntity);
   }
 
@@ -436,8 +469,23 @@ function prepareStatements(db: Database.Database) {
         weight = relations.weight + excluded.weight,
         description = excluded.description,
         evidence = excluded.evidence,
-        first_seen = MIN(relations.first_seen, excluded.first_seen),
-        last_seen = MAX(relations.last_seen, excluded.last_seen)
+        -- Empty-string dates must never win MIN/MAX. NULLIF maps '' → NULL.
+        -- SQLite's scalar MIN/MAX return NULL if ANY arg is NULL, so when one
+        -- side is empty the MIN/MAX yields NULL and COALESCE falls back to the
+        -- non-empty side (NULLIF again skips a remaining empty). Only when both
+        -- sides are empty does it settle on '' — a real date always wins.
+        first_seen = COALESCE(
+          MIN(NULLIF(relations.first_seen, ''), NULLIF(excluded.first_seen, '')),
+          NULLIF(relations.first_seen, ''),
+          NULLIF(excluded.first_seen, ''),
+          ''
+        ),
+        last_seen = COALESCE(
+          MAX(NULLIF(relations.last_seen, ''), NULLIF(excluded.last_seen, '')),
+          NULLIF(relations.last_seen, ''),
+          NULLIF(excluded.last_seen, ''),
+          ''
+        )
     `),
     getRelation: db.prepare("SELECT * FROM relations WHERE id = ?"),
     getRelationsBySource: db.prepare("SELECT * FROM relations WHERE source_id = ?"),
@@ -513,10 +561,22 @@ function prepareStatements(db: Database.Database) {
     `),
     findModulesByPath: db.prepare(`
       SELECT * FROM entities
-      WHERE type = 'MODULE' AND (name = ? OR name LIKE ?)
+      WHERE type = 'MODULE' AND (name = ? OR name LIKE ? ESCAPE '\\')
     `),
     getEntityByName: db.prepare("SELECT * FROM entities WHERE name = ? COLLATE NOCASE"),
   };
+}
+
+// ================================================================
+// LIKE Pattern Escaping
+// ================================================================
+
+/**
+ * Escape LIKE metacharacters (`%`, `_`) and the escape char itself in a
+ * dynamic value so it matches literally. Pair with `ESCAPE '\'` in the query.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => "\\" + ch);
 }
 
 // ================================================================
