@@ -3,6 +3,18 @@ import { withRetry } from "./retry.js";
 
 const DEFAULT_MODEL = "gpt-5.4-mini";
 
+/**
+ * GPT-5 and the o-series are reasoning models that only accept the default
+ * temperature of 1 — passing any explicit temperature returns a 400. Detect
+ * them by name so we can omit the parameter (mirrors the `max_completion_tokens`
+ * handling below). gpt-4o and OpenAI-compatible endpoints (Ollama, Zhipu, …)
+ * keep deterministic `temperature: 0`.
+ */
+export function isReasoningModel(model: string): boolean {
+  const m = model.toLowerCase();
+  return m.startsWith("gpt-5") || /^o\d/.test(m);
+}
+
 export class OpenAIClient implements LLMClient {
   readonly provider = "openai" as const;
   private sdk: InstanceType<typeof import("openai").default> | null = null;
@@ -42,7 +54,8 @@ export class OpenAIClient implements LLMClient {
       async () => {
         const response = await client.chat.completions.create({
           model: this.model,
-          temperature: options?.temperature ?? 0,
+          // Reasoning models reject an explicit temperature; see isReasoningModel.
+          ...(isReasoningModel(this.model) ? {} : { temperature: options?.temperature ?? 0 }),
           // GPT-5 / o1 family rejected the legacy `max_tokens`. Use
           // `max_completion_tokens` — canonical since o1 (late 2024) and
           // accepted by gpt-4o family too. If you hit a third-party
