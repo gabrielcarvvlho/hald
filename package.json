@@ -1,6 +1,6 @@
 {
   "name": "haldy",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Your codebase, held. GraphRAG-powered codebase intelligence for git repositories.",
   "type": "module",
   "main": "dist/index.js",

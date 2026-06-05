@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-05
+
+A correctness patch: fixes the OpenAI and Zhipu provider paths so a first-run scan
+works on their documented default models, plus packaging and documentation polish.
+
+### Fixed
+
+- OpenAI extraction no longer fails on the default `gpt-5.4-mini` (or the o-series):
+  reasoning models reject an explicit `temperature`, so it is now omitted for them
+  while `gpt-4o` and OpenAI-compatible endpoints keep deterministic `temperature: 0`.
+- Zhipu embeddings use Zhipu's `embedding-3` model instead of OpenAI's
+  `text-embedding-3-small` (which its endpoint does not expose), so the lowest-cost
+  indexing path no longer 400s on the embed pass.
+
+### Changed
+
+- Dropped sourcemaps from the published build (~1.5 MB lighter tarball).
+- Forward `ZHIPU_API_KEY` through the Claude Code and Cursor MCP shims.
+- Added a `package.json` `author` field, a Dependabot config (weekly npm + GitHub
+  Actions updates), a Node.js 20+ note, and the Zhipu provider in the README CLI
+  reference.
+
 ## [0.3.0] - 2026-06-05
 
 A public-launch polish sweep: a deterministic ownership layer, a full graph-viewer
@@ -102,7 +124,8 @@ polish pass, data-correctness fixes, and a documentation accuracy pass.
   Google, Zhipu), MCP server with `hald_*` tools, and platform shims for Claude
   Code, Cursor, OpenCode, Codex, and Gemini CLI.
 
-[Unreleased]: https://github.com/gabrielcarvvlho/hald/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/gabrielcarvvlho/hald/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/gabrielcarvvlho/hald/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/gabrielcarvvlho/hald/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/gabrielcarvvlho/hald/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gabrielcarvvlho/hald/compare/fd4dbf7e84531573332053b929625973dc703fad...v0.2.0
