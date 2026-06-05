@@ -48,6 +48,12 @@ export interface AgentIndexSession {
   commits: CommitData[];
   extractions: Map<TextUnitId, ExtractorResult>;
   nextIndex: number;
+  /**
+   * The index for which the host has already been warned about a 0/0 (empty)
+   * submission. On the SECOND empty submission for this same index we accept
+   * and advance so a genuinely-empty chunk can never livelock the loop.
+   */
+  emptyWarnedIndex: number | null;
   createdAt: Date;
 }
 
@@ -142,6 +148,7 @@ export async function startAgentSession(options: {
     commits,
     extractions: new Map(),
     nextIndex: 0,
+    emptyWarnedIndex: null,
     createdAt: new Date(),
   };
 
@@ -212,31 +219,58 @@ export function submitExtraction(xml: string): {
   const tu = session.textUnits[session.nextIndex]!;
   const result = parseExtractionXml(xml);
 
-  // Fail loudly on an empty parse. A submission that yields zero entities AND
-  // zero relations almost always means the XML wasn't wrapped in the expected
+  // Handle an empty parse. A submission that yields zero entities AND zero
+  // relations usually means the XML wasn't wrapped in the expected
   // <extraction>…</extraction> envelope (parseExtractionXml returns empty when
-  // the block is missing or malformed). Silently advancing would burn the chunk
-  // and quietly degrade the whole index, so hold position and ask the host to
-  // resubmit instead.
+  // the block is missing or malformed) — but it can also be a legitimately
+  // empty chunk (lockfile/whitespace/generated-file churn). Give the host ONE
+  // chance to fix a malformed envelope: hold position and warn. On the SECOND
+  // 0/0 for the SAME index, accept and advance so a genuinely-empty chunk can
+  // never livelock the extraction loop.
   if (result.entities.length === 0 && result.relations.length === 0) {
-    logger.warn("agent-session: empty extraction submitted, not advancing", {
+    if (session.emptyWarnedIndex !== session.nextIndex) {
+      session.emptyWarnedIndex = session.nextIndex;
+      logger.warn("agent-session: empty extraction submitted, not advancing", {
+        textUnitId: tu.id,
+        chunk: `${session.nextIndex + 1}/${session.textUnits.length}`,
+      });
+      return {
+        accepted: false,
+        entities: 0,
+        relations: 0,
+        progress: `${session.nextIndex}/${session.textUnits.length} (chunk not advanced)`,
+        warning:
+          "Parsed 0 entities and 0 relations from this submission. " +
+          "If the chunk genuinely has no entities, resubmit it to skip it; " +
+          "otherwise wrap the XML in <extraction>…</extraction> (with <entities> and <relations> blocks inside) " +
+          "and resubmit this same chunk via hald_submit_extraction. The session did not advance.",
+      };
+    }
+
+    // Second empty submission for the same chunk — accept and advance (logged)
+    // so the loop can never get stuck on a chunk with no extractable entities.
+    logger.info("agent-session: second empty extraction for chunk — advancing (treated as empty)", {
       textUnitId: tu.id,
       chunk: `${session.nextIndex + 1}/${session.textUnits.length}`,
     });
+    session.extractions.set(tu.id, result);
+    session.nextIndex++;
+    session.emptyWarnedIndex = null;
+
     return {
-      accepted: false,
+      accepted: true,
       entities: 0,
       relations: 0,
-      progress: `${session.nextIndex}/${session.textUnits.length} (chunk not advanced)`,
+      progress: `${session.nextIndex}/${session.textUnits.length}`,
       warning:
-        "Parsed 0 entities and 0 relations from this submission. " +
-        "Check that the XML is wrapped in <extraction>…</extraction> (with <entities> and <relations> blocks inside) " +
-        "and resubmit this same chunk via hald_submit_extraction. The session did not advance.",
+        "Accepted an empty chunk (0 entities, 0 relations) after a second submission — " +
+        "treated as a chunk with no extractable entities and skipped.",
     };
   }
 
   session.extractions.set(tu.id, result);
   session.nextIndex++;
+  session.emptyWarnedIndex = null;
 
   logger.debug("agent-session: extraction submitted", {
     textUnitId: tu.id,

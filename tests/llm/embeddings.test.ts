@@ -6,6 +6,7 @@ import {
   resolveStoredDimensions,
   embeddingToBuffer,
   bufferToEmbedding,
+  rankBuffersBySimilaritySafe,
   createEmbeddingClient,
   OpenAIEmbeddingClient,
   GoogleEmbeddingClient,
@@ -63,6 +64,40 @@ describe("cosineSimilaritySafe", () => {
     const b = new Float32Array([1, 2, 3]); // 3-dim
     expect(() => cosineSimilaritySafe(a, b)).not.toThrow();
     expect(cosineSimilaritySafe(a, b)).toBeNull();
+  });
+});
+
+describe("rankBuffersBySimilaritySafe", () => {
+  it("ranks matching-dimension buffers descending by similarity", () => {
+    const query = new Float32Array([1, 0, 0]);
+    const items = [
+      { id: "orthogonal", embedding: embeddingToBuffer(new Float32Array([0, 1, 0])) },
+      { id: "identical", embedding: embeddingToBuffer(new Float32Array([1, 0, 0])) },
+      { id: "similar", embedding: embeddingToBuffer(new Float32Array([0.9, 0.1, 0])) },
+    ];
+
+    const ranked = rankBuffersBySimilaritySafe(query, items);
+    expect(ranked.map((r) => r.id)).toEqual(["identical", "similar", "orthogonal"]);
+    expect(ranked[0]!.similarity).toBeCloseTo(1.0, 5);
+  });
+
+  it("degrades a per-vector dimension mismatch to score 0 instead of throwing", () => {
+    const query = new Float32Array([1, 0, 0]); // 3-dim
+    const items = [
+      // A single corrupt/foreign-dimension stored vector must not abort ranking.
+      { id: "wrong-dim", embedding: embeddingToBuffer(new Float32Array([1, 0])) }, // 2-dim
+      { id: "good", embedding: embeddingToBuffer(new Float32Array([1, 0, 0])) }, // 3-dim
+    ];
+
+    expect(() => rankBuffersBySimilaritySafe(query, items)).not.toThrow();
+    const ranked = rankBuffersBySimilaritySafe(query, items);
+    // The matching vector ranks first; the mismatched one scores 0.
+    expect(ranked[0]!.id).toBe("good");
+    expect(ranked.find((r) => r.id === "wrong-dim")!.similarity).toBe(0);
+  });
+
+  it("returns an empty array for empty input", () => {
+    expect(rankBuffersBySimilaritySafe(new Float32Array([1, 0, 0]), [])).toEqual([]);
   });
 });
 

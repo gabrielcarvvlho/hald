@@ -55,6 +55,33 @@ export function bufferDimensions(buf: Buffer): number {
   return Math.floor(buf.byteLength / Float32Array.BYTES_PER_ELEMENT);
 }
 
+export interface RankedBuffer {
+  id: string;
+  similarity: number;
+}
+
+/**
+ * Rank stored embedding buffers against a query vector, degrading gracefully
+ * when an individual stored vector's dimension disagrees with the query (e.g.
+ * the meta-level dimension check passed but a single stored vector is corrupt
+ * or was written under a different model). Such vectors score 0 rather than
+ * throwing "Dimension mismatch" and aborting the whole query.
+ *
+ * Results are sorted descending by similarity.
+ */
+export function rankBuffersBySimilaritySafe(
+  queryEmbedding: Float32Array,
+  items: Array<{ id: string; embedding: Buffer }>,
+): RankedBuffer[] {
+  return items
+    .map((item) => {
+      const score = cosineSimilaritySafe(queryEmbedding, bufferToEmbedding(item.embedding));
+      // A per-vector dimension mismatch yields null → treat as "no semantic score".
+      return { id: item.id, similarity: score ?? 0 };
+    })
+    .sort((a, b) => b.similarity - a.similarity);
+}
+
 /**
  * Resolve the dimensionality of the embeddings stored in an index. Prefers the
  * persisted `embedding_dimensions` meta value, falling back to the byte length

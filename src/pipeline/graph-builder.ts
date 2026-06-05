@@ -190,7 +190,8 @@ interface AuthorAccumulator {
 }
 
 interface OwnershipEdgeAccumulator {
-  personId: string;
+  /** Stable identity key (email-or-name) — resolved to a personId at emit time. */
+  identityKey: string;
   moduleId: string;
   /** True once any commit ADDED a file in this module (→ AUTHORED). */
   authored: boolean;
@@ -245,9 +246,6 @@ export function buildOwnershipGraph(commits: CommitData[], moduleDepth?: number)
       if (commit.date > author.lastSeen) author.lastSeen = commit.date;
     }
 
-    const resolvedName = authorByEmail.get(identityKey)!.name;
-    const personId = generateEntityId(EntityType.PERSON, resolvedName);
-
     // Aggregate per-module ownership signal for this commit (one edge per module
     // the author touched, with the strongest status across the commit's files).
     const moduleStatus = new Map<string, { added: boolean; lines: number }>();
@@ -276,11 +274,11 @@ export function buildOwnershipGraph(commits: CommitData[], moduleDepth?: number)
 
     for (const [mod, status] of moduleStatus) {
       const moduleId = generateEntityId(EntityType.MODULE, mod);
-      const edgeKey = `${personId} ${moduleId}`;
+      const edgeKey = `${identityKey} ${moduleId}`;
       const edge = edges.get(edgeKey);
       if (!edge) {
         edges.set(edgeKey, {
-          personId,
+          identityKey,
           moduleId,
           authored: status.added,
           lines: status.lines,
@@ -333,16 +331,24 @@ export function buildOwnershipGraph(commits: CommitData[], moduleDepth?: number)
 
   const relations: Relation[] = [];
   for (const edge of edges.values()) {
-    if (edge.personId === edge.moduleId) continue; // defensive: never a self-loop
+    // Resolve personId here from the canonical final name so it always
+    // agrees with the emitted PERSON entity (which uses the last-seen name
+    // for that identity). Keying the accumulator by identityKey above means
+    // a name-drifted author no longer strands its edges under a stale id.
+    const personId = generateEntityId(
+      EntityType.PERSON,
+      authorByEmail.get(edge.identityKey)!.name,
+    );
+    if (personId === edge.moduleId) continue; // defensive: never a self-loop
     const type = edge.authored ? RelationType.AUTHORED : RelationType.MODIFIED;
-    const id = generateRelationId(type, edge.personId, edge.moduleId);
+    const id = generateRelationId(type, personId, edge.moduleId);
     // Weight by commit count + lines touched — a person who repeatedly edits a
     // module, or moves a lot of lines, owns it more strongly.
     const weight = edge.commitCount + Math.min(edge.lines, 100);
     relations.push({
       id,
       type,
-      sourceId: edge.personId,
+      sourceId: personId,
       targetId: edge.moduleId,
       weight,
       description: edge.authored

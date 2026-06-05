@@ -81,6 +81,23 @@ describe("Store — Entities", () => {
     expect(result.lastSeen).toBe("2024-07-01"); // MAX
   });
 
+  it("a blank incoming description never clobbers a stored real description", () => {
+    // Mirrors the incremental-scan hazard: a rich LLM description is stored,
+    // then a deterministic ownership upsert re-touches the same id with an
+    // empty description. The empty value must not overwrite the existing one.
+    store.upsertEntity(sampleEntity); // description: "Lead developer"
+    store.upsertEntity({ ...sampleEntity, description: "" });
+
+    expect(store.getEntity("person:alice")!.description).toBe("Lead developer");
+  });
+
+  it("a real incoming description still overwrites an existing description", () => {
+    store.upsertEntity({ ...sampleEntity, description: "" });
+    store.upsertEntity({ ...sampleEntity, description: "Lead developer" });
+
+    expect(store.getEntity("person:alice")!.description).toBe("Lead developer");
+  });
+
   it("filters entities by type", () => {
     store.upsertEntity(sampleEntity);
     store.upsertEntity(sampleEntity2);

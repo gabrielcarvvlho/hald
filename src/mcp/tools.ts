@@ -1211,7 +1211,10 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
 
         const result = submitExtraction(xml);
 
-        if (result.warning) {
+        // A warning on a NON-accepted submission means the chunk was held (the
+        // host gets one chance to fix a malformed envelope). Surface the
+        // warning and stop — the same chunk will be served again.
+        if (result.warning && !result.accepted) {
           return {
             content: [
               {
@@ -1225,12 +1228,14 @@ export function registerTools(server: McpServer, getStore: GetStore, getQueryEmb
           };
         }
 
+        // Accepted (possibly with a warning, e.g. an empty chunk accepted on the
+        // second submission so the loop can't livelock). Advance to the next chunk.
         return {
           content: [
             {
               type: "text" as const,
               text: [
-                `Extraction accepted: ${result.entities} entities, ${result.relations} relations.`,
+                result.warning ?? `Extraction accepted: ${result.entities} entities, ${result.relations} relations.`,
                 `Progress: ${result.progress}`,
                 "",
                 "Call **hald_extract_next** for the next chunk.",

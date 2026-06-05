@@ -369,6 +369,104 @@ describe("buildOwnershipGraph", () => {
     expect(people[0]!.frequency).toBe(2);
   });
 
+  it("keeps the AUTHORED edge keyed under the canonical person id despite name drift", () => {
+    // Same email, two name spellings across two commits both touching the same
+    // module. The emitted PERSON entity uses the LAST (canonical) name; the
+    // ownership edge must agree with it so it survives the FK existence check
+    // in build() rather than being stranded under the first-seen name's id.
+    const commits: CommitData[] = [
+      {
+        hash: "c1",
+        authorName: "Alice Chen", // first touch of the module under this name
+        authorEmail: "alice@acme.com",
+        date: "2024-01-01T00:00:00Z",
+        message: "feat: add billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "added", additions: 40, deletions: 0 },
+        ],
+        parentHashes: ["p0"],
+      },
+      {
+        hash: "c2",
+        authorName: "alice", // different spelling, same email → canonical name
+        authorEmail: "alice@acme.com",
+        date: "2024-02-01T00:00:00Z",
+        message: "fix: tweak billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "modified", additions: 2, deletions: 1 },
+        ],
+        parentHashes: ["c1"],
+      },
+    ];
+
+    const { entities, relations } = buildOwnershipGraph(commits);
+
+    // The single emitted PERSON entity uses the canonical (last) name.
+    const people = entities.filter((e) => e.type === EntityType.PERSON);
+    expect(people).toHaveLength(1);
+    const personId = people[0]!.id;
+    expect(personId).toBe(generateEntityId(EntityType.PERSON, "alice"));
+
+    const billingId = generateEntityId(EntityType.MODULE, "src/billing");
+
+    // Every ownership edge references the canonical person id (none stranded
+    // under the stale "Alice Chen" id), so all of them have a valid target.
+    const ownershipEdges = relations.filter((r) => r.targetId === billingId);
+    expect(ownershipEdges).toHaveLength(1);
+    expect(ownershipEdges[0]!.sourceId).toBe(personId);
+    expect(entities.some((e) => e.id === ownershipEdges[0]!.sourceId)).toBe(true);
+  });
+
+  it("persists the name-drifted AUTHORED edge through build() (not dropped by FK check)", () => {
+    const commits: CommitData[] = [
+      {
+        hash: "c1",
+        authorName: "Alice Chen",
+        authorEmail: "alice@acme.com",
+        date: "2024-01-01T00:00:00Z",
+        message: "feat: add billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "added", additions: 40, deletions: 0 },
+        ],
+        parentHashes: ["p0"],
+      },
+      {
+        hash: "c2",
+        authorName: "alice",
+        authorEmail: "alice@acme.com",
+        date: "2024-02-01T00:00:00Z",
+        message: "fix: tweak billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "modified", additions: 2, deletions: 1 },
+        ],
+        parentHashes: ["c1"],
+      },
+    ];
+
+    const { db: db2, store: store2 } = createTestStore();
+    try {
+      build(store2, {
+        textUnits: [],
+        entities: [],
+        relations: [],
+        extractions: new Map(),
+        commits,
+      });
+
+      const personId = generateEntityId(EntityType.PERSON, "alice");
+      const billingId = generateEntityId(EntityType.MODULE, "src/billing");
+
+      const edge = store2.getRelation(
+        generateRelationId(RelationType.AUTHORED, personId, billingId),
+      );
+      expect(edge).not.toBeNull();
+      expect(edge!.sourceId).toBe(personId);
+      expect(edge!.targetId).toBe(billingId);
+    } finally {
+      db2.close();
+    }
+  });
+
   it("skips merge commits (parentHashes.length > 1)", () => {
     const mergeCommit: CommitData = {
       hash: "m1",

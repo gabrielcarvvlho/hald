@@ -1,7 +1,7 @@
 import type { Store } from "../store/queries.js";
 import type { Entity, Community } from "../shared/types.js";
-import { QueryEmbedder, rankBuffersBySimilarity } from "./similarity.js";
-import { resolveStoredDimensions } from "../llm/embeddings.js";
+import { QueryEmbedder } from "./similarity.js";
+import { resolveStoredDimensions, rankBuffersBySimilaritySafe } from "../llm/embeddings.js";
 import { logger } from "../shared/logger.js";
 
 // ================================================================
@@ -74,7 +74,10 @@ export async function globalSearch(
           { queryDimensions: queryEmbedding.length, storedDimensions: storedDims },
         );
       } else {
-        const ranked = rankBuffersBySimilarity(queryEmbedding, communityEmbeddings);
+        // rankBuffersBySimilaritySafe degrades a per-vector dimension mismatch
+        // to a 0 score instead of throwing, so one corrupt stored vector can't
+        // abort the whole query even after the meta-level guard passes.
+        const ranked = rankBuffersBySimilaritySafe(queryEmbedding, communityEmbeddings);
         for (const item of ranked) {
           semanticScores.set(item.id, item.similarity);
         }

@@ -436,7 +436,15 @@ function prepareStatements(db: Database.Database) {
         type = excluded.type,
         name = excluded.name,
         aliases = excluded.aliases,
-        description = excluded.description,
+        -- Never let an empty/blank incoming description overwrite an existing
+        -- one. On an INCREMENTAL scan, a re-touched id may only get the
+        -- deterministic ownership upsert (description: ''), which would
+        -- otherwise clobber a previously-stored rich LLM description.
+        description = CASE
+          WHEN excluded.description IS NULL OR excluded.description = ''
+          THEN entities.description
+          ELSE excluded.description
+        END,
         first_seen = MIN(entities.first_seen, excluded.first_seen),
         last_seen = MAX(entities.last_seen, excluded.last_seen),
         frequency = entities.frequency + excluded.frequency,

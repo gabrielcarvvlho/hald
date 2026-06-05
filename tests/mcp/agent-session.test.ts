@@ -192,6 +192,54 @@ describe("agent-session — empty extraction", () => {
     }
   });
 
+  it("advances on the SECOND empty submission for the same chunk (no livelock)", async () => {
+    await startAgentSession({ full: true });
+
+    const before = getNextChunk();
+    expect(before.done).toBe(false);
+    const startIndex = before.done ? -1 : before.index;
+
+    // First empty submission: held, warned, not advanced.
+    const first = submitExtraction("<entities></entities>");
+    expect(first.accepted).toBe(false);
+    expect(first.warning).toBeDefined();
+    expect(first.warning).toContain("<extraction>");
+    // The warning must distinguish the two recovery paths for the host.
+    expect(first.warning).toContain("resubmit");
+
+    const stillHere = getNextChunk();
+    expect(stillHere.done).toBe(false);
+    if (!stillHere.done && !before.done) {
+      expect(stillHere.index).toBe(startIndex);
+    }
+
+    // Second empty submission for the SAME chunk: accepted + advanced so a
+    // genuinely-empty chunk (lockfile/whitespace churn) can never livelock.
+    const second = submitExtraction("<entities></entities>");
+    expect(second.accepted).toBe(true);
+
+    const advanced = getNextChunk();
+    if (!advanced.done && !before.done) {
+      expect(advanced.index).toBe(startIndex + 1);
+    }
+  });
+
+  it("resets the empty-resubmit counter when a different chunk is reached", async () => {
+    const { chunkCount } = await startAgentSession({ full: true });
+    // Need at least two chunks to prove the counter is per-index.
+    if (chunkCount < 2) return;
+
+    // Chunk 0: one empty (held) then a valid submission advances to chunk 1.
+    expect(submitExtraction("<entities></entities>").accepted).toBe(false);
+    expect(submitExtraction(validExtractionXml()).accepted).toBe(true);
+
+    // Chunk 1: a single empty submission must still be HELD (counter reset),
+    // not auto-accepted from chunk 0's earlier empty.
+    const onNewChunk = submitExtraction("<entities></entities>");
+    expect(onNewChunk.accepted).toBe(false);
+    expect(onNewChunk.warning).toBeDefined();
+  });
+
   it("counts non-advanced empty chunks as failures in the finalize summary", async () => {
     const { chunkCount } = await startAgentSession({ full: true });
 
