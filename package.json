@@ -38,6 +38,10 @@
     "institutional-knowledge"
   ],
   "license": "MIT",
+  "author": {
+    "name": "Gabriel Carvalho",
+    "url": "https://github.com/gabrielcarvvlho"
+  },
   "files": [
     "dist",
     "bin",

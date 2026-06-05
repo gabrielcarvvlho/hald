@@ -7,7 +7,7 @@ export default defineConfig([
     target: "node20",
     dts: true,
     clean: true,
-    sourcemap: true,
+    sourcemap: false,
     external: ["better-sqlite3"],
   },
   {
@@ -16,7 +16,7 @@ export default defineConfig([
     target: "node20",
     dts: false,
     clean: false,
-    sourcemap: true,
+    sourcemap: false,
     external: ["better-sqlite3"],
     banner: { js: "#!/usr/bin/env node" },
   },

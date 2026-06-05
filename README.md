@@ -2,6 +2,8 @@
 
 **Your codebase, held.**
 
+<sub>*From the Old Norse **hald** — a hold, a keeping.*</sub>
+
 GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git history — commits, authors, files, relationships — and lets you query it with natural language. Like having a senior engineer who's read every commit and can answer any question about your codebase instantly.
 
 <p align="center">
@@ -21,7 +23,7 @@ GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git h
 ## Quick Start
 
 ```bash
-# Install
+# Install (requires Node.js 20+)
 npm install -g haldy
 
 # Try it now — zero key, zero cost: open a built-in demo graph
@@ -187,7 +189,7 @@ hald scan [options]            Build or update the knowledge graph
   --full                       Force full re-scan (ignore existing index)
   --max-commits <n>            Limit number of commits to process
   --since <date>               Only scan commits after this date (YYYY-MM-DD)
-  --provider <name>            LLM provider: anthropic | openai | google | auto
+  --provider <name>            LLM provider: anthropic | openai | google | zhipu | auto
   -y, --yes                    Skip cost confirmation prompt
 
 hald ask <question>            Ask a natural language question
