@@ -4,7 +4,7 @@
 // Renderer — Sigma instance, custom hover, node/edge reducers
 // ================================================================
 
-import { state } from "./state.js";
+import { state, prefersReducedMotion } from "./state.js";
 import { getColors, hexToRgba } from "./colors.js";
 import { HALO_ALPHA_ACTIVE, HALO_ACTIVE_GROW } from "./halo.js";
 import { pulseSizeMult } from "./motion.js";
@@ -45,12 +45,18 @@ export function createRenderer() {
 
   // Brief settle animation on first paint — leave ~30% padding around
   // the graph so users don't feel boxed in. The slight zoom-in starting
-  // state pulls back to give a sense of "settling into view."
+  // state pulls back to give a sense of "settling into view." Reduced-
+  // motion users skip the animated pull-back and land directly at the
+  // resting camera state.
   const camera = renderer.getCamera();
-  camera.setState({ x: 0.5, y: 0.5, ratio: 1.5, angle: 0 });
-  requestAnimationFrame(() => {
-    camera.animate({ x: 0.5, y: 0.5, ratio: 1.3, angle: 0 }, { duration: 700 });
-  });
+  if (prefersReducedMotion()) {
+    camera.setState({ x: 0.5, y: 0.5, ratio: 1.3, angle: 0 });
+  } else {
+    camera.setState({ x: 0.5, y: 0.5, ratio: 1.5, angle: 0 });
+    requestAnimationFrame(() => {
+      camera.animate({ x: 0.5, y: 0.5, ratio: 1.3, angle: 0 }, { duration: 700 });
+    });
+  }
 }
 
 // ================================================================
@@ -157,9 +163,14 @@ function nodeReducer(node, data) {
 
   const res = { ...data };
 
-  // Type filtering
+  // Type filtering. forceLabel is cleared explicitly here (and in every
+  // dim/hide branch below) because the top-degree anchors carry a sticky
+  // forceLabel=true from buildGraph(); without resetting it, a hidden or
+  // dimmed anchor would keep forcing its label. Label-forcing must be
+  // fully state-driven, never a stale build-time flag.
   if (state.hiddenTypes.has(data.nodeType)) {
     res.hidden = true;
+    res.forceLabel = false;
     return res;
   }
 
@@ -180,6 +191,7 @@ function nodeReducer(node, data) {
     } else {
       res.color = COLORS.dimNode;
       res.label = "";
+      res.forceLabel = false;
       res.zIndex = 0;
     }
   }
@@ -192,6 +204,7 @@ function nodeReducer(node, data) {
       if (!inPath) {
         res.color = COLORS.dimNode;
         res.label = "";
+        res.forceLabel = false;
         res.zIndex = 0;
       }
     } else {
@@ -220,6 +233,7 @@ function nodeReducer(node, data) {
         // handled above and stay lit.
         res.color = COLORS.dimNode;
         res.label = "";
+        res.forceLabel = false;
         res.zIndex = 0;
       }
     }

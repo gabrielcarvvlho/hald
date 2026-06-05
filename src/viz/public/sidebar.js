@@ -2,7 +2,7 @@
 // Sidebar — entity detail panel + stats header
 // ================================================================
 
-import { state } from "./state.js";
+import { state, prefersReducedMotion } from "./state.js";
 import { getColors } from "./colors.js";
 import { scheduleUrlUpdate } from "./url-sync.js";
 import { escapeHtml, escapeAttr, formatDate } from "./dom-utils.js";
@@ -25,12 +25,12 @@ export function selectNode(nodeId) {
   state.renderer.refresh();
   scheduleUrlUpdate();
 
-  // Fly-to node
+  // Fly-to node. Reduced-motion users get an instant jump (duration 0).
   const nodePos = state.renderer.getNodeDisplayData(nodeId);
   if (nodePos) {
     state.renderer.getCamera().animate(
       { x: nodePos.x, y: nodePos.y, ratio: 0.35 },
-      { duration: 400 },
+      { duration: prefersReducedMotion() ? 0 : 400 },
     );
   }
 

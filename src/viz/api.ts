@@ -57,13 +57,39 @@ export interface GraphCommunity {
   color: string;
 }
 
+// Truncation metadata. Present (non-null) only when the cap kicked in,
+// so the client can show a "showing top N of M" badge. Null means the
+// full graph fit under the caps and nothing was dropped.
+export interface GraphTruncation {
+  shownNodes: number;
+  totalNodes: number;
+  shownEdges: number;
+  totalEdges: number;
+}
+
 export interface GraphResponse {
   nodes: GraphNode[];
   edges: GraphEdge[];
   communities: GraphCommunity[];
+  // Optional in the type (so older callers/fixtures that omit it stay
+  // valid) but ALWAYS set by getGraphData / the mock provider: a value
+  // when the graph was capped, null when it fit. The client treats a
+  // missing field the same as null.
+  truncated?: GraphTruncation | null;
 }
 
-export function getGraphData(store: Store): GraphResponse {
+// Caps for the returned graph. Large repos produce tens of thousands of
+// entities/relations; rendering every one chokes Sigma (and halos double
+// the node count in the client). We return the highest-value slice — top
+// nodes by frequency, top edges by weight — and report what was dropped.
+export const MAX_GRAPH_NODES = 500;
+export const MAX_GRAPH_EDGES = 2000;
+
+export function getGraphData(
+  store: Store,
+  maxNodes: number = MAX_GRAPH_NODES,
+  maxEdges: number = MAX_GRAPH_EDGES,
+): GraphResponse {
   const entities = store.getAllEntities();
   const relations = store.getAllRelations();
   const communities = store.getCommunitiesByLevel(0);
@@ -86,11 +112,35 @@ export function getGraphData(store: Store): GraphResponse {
     }
   }
 
-  // Compute layout positions
-  const positions = computeLayout(entities, relations);
+  // ----------------------------------------------------------------
+  // Node cap — keep the top-N entities by frequency. Done BEFORE layout
+  // so ForceAtlas2 only spreads the survivors (cheaper + tighter spread).
+  // Ties broken by id for determinism. The surviving id set then gates
+  // both layout edges and the returned edge list.
+  // ----------------------------------------------------------------
+  const totalNodes = entities.length;
+  let keptEntities = entities;
+  if (entities.length > maxNodes) {
+    keptEntities = [...entities]
+      .sort((a, b) => {
+        if (b.frequency !== a.frequency) return b.frequency - a.frequency;
+        return a.id.localeCompare(b.id);
+      })
+      .slice(0, maxNodes);
+  }
+  const keptIds = new Set(keptEntities.map((e) => e.id));
+
+  // Only relations whose BOTH endpoints survived the node cap can be
+  // drawn — a dangling edge to a dropped node is meaningless.
+  const survivingRelations = relations.filter(
+    (r) => keptIds.has(r.sourceId) && keptIds.has(r.targetId),
+  );
+
+  // Compute layout positions over the surviving subgraph.
+  const positions = computeLayout(keptEntities, survivingRelations);
 
   // Build nodes
-  const nodes: GraphNode[] = entities.map((e) => {
+  const nodes: GraphNode[] = keptEntities.map((e) => {
     const pos = positions.get(e.id) ?? { x: 0, y: 0 };
     return {
       id: e.id,
@@ -107,7 +157,7 @@ export function getGraphData(store: Store): GraphResponse {
 
   // Deduplicate edges: for each undirected (source, target) pair, keep highest weight
   const edgeMap = new Map<string, GraphEdge>();
-  for (const r of relations) {
+  for (const r of survivingRelations) {
     const key = [r.sourceId, r.targetId].sort().join("\0");
     const existing = edgeMap.get(key);
     if (!existing || r.weight > existing.weight) {
@@ -121,9 +171,35 @@ export function getGraphData(store: Store): GraphResponse {
       });
     }
   }
-  const edges = Array.from(edgeMap.values());
 
-  return { nodes, edges, communities: communitiesWithColor };
+  // ----------------------------------------------------------------
+  // Edge cap — keep the top-M deduped edges by weight. totalEdges counts
+  // the deduped set so the badge reads "of M relations" consistently with
+  // the un-truncated response (which also returns the deduped edge list).
+  // ----------------------------------------------------------------
+  const dedupedEdges = Array.from(edgeMap.values());
+  const totalEdges = dedupedEdges.length;
+  let edges = dedupedEdges;
+  if (dedupedEdges.length > maxEdges) {
+    edges = [...dedupedEdges]
+      .sort((a, b) => {
+        if (b.weight !== a.weight) return b.weight - a.weight;
+        return a.id.localeCompare(b.id);
+      })
+      .slice(0, maxEdges);
+  }
+
+  const truncated: GraphTruncation | null =
+    nodes.length < totalNodes || edges.length < totalEdges
+      ? {
+          shownNodes: nodes.length,
+          totalNodes,
+          shownEdges: edges.length,
+          totalEdges,
+        }
+      : null;
+
+  return { nodes, edges, communities: communitiesWithColor, truncated };
 }
 
 function computeLayout(

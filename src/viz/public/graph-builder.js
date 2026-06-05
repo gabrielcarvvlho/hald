@@ -19,6 +19,12 @@ export function buildGraph(data) {
   const Graph = graphology.Graph;
   const graph = new Graph();
 
+  // Truncation indicator. On large repos the server caps the graph to
+  // the top entities/relations; surface that so users know they're
+  // looking at a slice, not the whole repo. Hidden when nothing dropped.
+  state.truncation = data.truncated || null;
+  renderTruncationBadge(state.truncation);
+
   // Store community colors
   for (const c of data.communities) {
     state.communityColors[c.id] = c.color;
@@ -128,4 +134,43 @@ export function buildGraph(data) {
 
   state.graph = graph;
   initMotion(graph);
+}
+
+// ================================================================
+// Truncation badge
+// ================================================================
+// Small "showing top N of M entities" pill, rendered into
+// #graph-container. CSS class `.graph-truncation-badge` is owned by the
+// stylesheet (see style.css). The element is created lazily and toggled
+// (not removed) so repeated builds don't churn the DOM. When the graph
+// fits under the cap (truncation === null), the badge is hidden.
+function renderTruncationBadge(truncation) {
+  const container = document.getElementById("graph-container");
+  if (!container) return;
+
+  let badge = document.getElementById("graph-truncation-badge");
+  if (!truncation) {
+    if (badge) badge.style.display = "none";
+    return;
+  }
+
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "graph-truncation-badge";
+    badge.className = "graph-truncation-badge";
+    container.appendChild(badge);
+  }
+
+  // Lead with entities (the headline number). Mention edges only when
+  // they were also capped, so the badge stays terse on the common case.
+  const n = truncation.shownNodes.toLocaleString();
+  const m = truncation.totalNodes.toLocaleString();
+  let text = `Showing top ${n} of ${m} entities`;
+  if (truncation.shownEdges < truncation.totalEdges) {
+    const e = truncation.shownEdges.toLocaleString();
+    const t = truncation.totalEdges.toLocaleString();
+    text += ` · ${e} of ${t} relations`;
+  }
+  badge.textContent = text;
+  badge.style.display = "";
 }

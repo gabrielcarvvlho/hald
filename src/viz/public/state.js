@@ -15,6 +15,11 @@ export const state = {
   communityColors: {},
   neighbors: new Map(), // nodeId → Set<nodeId>
   overlayOpen: false,
+  // Set by buildGraph() from the /api/graph response. Non-null only when
+  // the server capped the returned graph (top-N nodes / top-M edges):
+  // { shownNodes, totalNodes, shownEdges, totalEdges }. Drives the
+  // "showing top N of M entities" badge. Null when nothing was dropped.
+  truncation: null,
   // Populated by setupCommunityLabels(); read by the per-render
   // positioner and the screenshot compositor.
   communityLabels: [],

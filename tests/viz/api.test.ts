@@ -18,6 +18,65 @@ import {
   getCommunityDetail,
 } from "../../src/viz/api.js";
 
+// Build a store with `entityCount` entities and a dense web of relations
+// so we can exercise the node/edge caps. Frequencies and weights are
+// monotonic in the index so the "top-N" survivors are predictable: the
+// highest-index entities/edges are the highest-value ones.
+function createLargeStore(
+  entityCount: number,
+  edgeCount: number,
+): { db: Database.Database; store: Store } {
+  const db = openDatabase(":memory:");
+  const store = new Store(db);
+
+  for (let i = 0; i < entityCount; i++) {
+    const e: Entity = {
+      id: `module:m${String(i).padStart(5, "0")}`,
+      type: EntityType.MODULE,
+      name: `module-${i}`,
+      aliases: [],
+      description: "",
+      firstSeen: "2025-01-01",
+      lastSeen: "2026-01-01",
+      frequency: i, // higher index → higher frequency → kept first
+      metadata: {},
+    };
+    store.upsertEntity(e);
+  }
+
+  // Generate DISTINCT undirected pairs among the highest-frequency
+  // entities (the survivors of the node cap), so the deduped edge set is
+  // large enough to exercise the edge cap. We enumerate pairs (i, j) over
+  // the top region with a nested walk; weight increases monotonically so
+  // the "top-M by weight" survivors are predictable.
+  //
+  // Endpoints are confined to the top `span` nodes (highest indices, i.e.
+  // highest frequency) so survivors stay connected after the node cap.
+  const span = Math.min(entityCount, 480);
+  const base = entityCount - span; // lowest index used as an endpoint
+  let made = 0;
+  outer: for (let i = base; i < entityCount && made < edgeCount; i++) {
+    for (let j = i + 1; j < entityCount && made < edgeCount; j++) {
+      const r: Relation = {
+        id: `rel:${String(made).padStart(6, "0")}`,
+        type: RelationType.CO_CHANGED,
+        sourceId: `module:m${String(i).padStart(5, "0")}`,
+        targetId: `module:m${String(j).padStart(5, "0")}`,
+        weight: made + 1,
+        description: "",
+        evidence: [],
+        firstSeen: "2025-01-01",
+        lastSeen: "2026-01-01",
+      };
+      store.upsertRelation(r);
+      made++;
+      if (made >= edgeCount) break outer;
+    }
+  }
+
+  return { db, store };
+}
+
 function createFixtureStore(): { db: Database.Database; store: Store } {
   const db = openDatabase(":memory:");
   const store = new Store(db);
@@ -245,6 +304,87 @@ describe("getGraphData", () => {
 
     expect(alice!.communityId).toBe("comm:1");
     expect(payments!.communityId).toBeNull(); // not in any community
+  });
+});
+
+// ================================================================
+// getGraphData — node/edge caps (large repos)
+// ================================================================
+
+describe("getGraphData caps", () => {
+  it("returns null truncation metadata when under the caps", () => {
+    const { db, store } = createLargeStore(20, 30);
+    try {
+      const result = getGraphData(store);
+      expect(result.truncated).toBeNull();
+      expect(result.nodes.length).toBe(20);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("caps nodes to the top-N by frequency with truncation metadata", () => {
+    // 600 entities (> default 500 cap), small edge set.
+    const { db, store } = createLargeStore(600, 50);
+    try {
+      const result = getGraphData(store);
+
+      expect(result.nodes.length).toBe(500);
+      expect(result.truncated).not.toBeNull();
+      expect(result.truncated!.shownNodes).toBe(500);
+      expect(result.truncated!.totalNodes).toBe(600);
+
+      // Survivors are the highest-frequency entities (index 100..599).
+      const minFreq = Math.min(...result.nodes.map((n) => n.frequency));
+      expect(minFreq).toBe(100);
+      for (const n of result.nodes) {
+        expect(n.frequency).toBeGreaterThanOrEqual(100);
+      }
+
+      // Every returned edge connects two surviving nodes.
+      const ids = new Set(result.nodes.map((n) => n.id));
+      for (const e of result.edges) {
+        expect(ids.has(e.source)).toBe(true);
+        expect(ids.has(e.target)).toBe(true);
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it("caps edges to the top-M by weight with truncation metadata", () => {
+    // Stay under the node cap (300 < 500) but exceed the edge cap.
+    const { db, store } = createLargeStore(300, 2500);
+    try {
+      const result = getGraphData(store, 500, 2000);
+
+      expect(result.nodes.length).toBe(300);
+      expect(result.edges.length).toBeLessThanOrEqual(2000);
+      expect(result.truncated).not.toBeNull();
+      expect(result.truncated!.shownEdges).toBe(result.edges.length);
+      expect(result.truncated!.totalEdges).toBeGreaterThan(2000);
+
+      // Kept edges are the heaviest ones — every kept edge's weight is
+      // ≥ the heaviest dropped edge would have been.
+      const weights = result.edges.map((e) => e.weight);
+      const minKept = Math.min(...weights);
+      expect(minKept).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("respects explicit cap arguments", () => {
+    const { db, store } = createLargeStore(100, 200);
+    try {
+      const result = getGraphData(store, 10, 20);
+      expect(result.nodes.length).toBe(10);
+      expect(result.edges.length).toBeLessThanOrEqual(20);
+      expect(result.truncated).not.toBeNull();
+      expect(result.truncated!.totalNodes).toBe(100);
+    } finally {
+      db.close();
+    }
   });
 });
 

@@ -28,6 +28,62 @@ import { isHalo } from "./halo.js";
 const EDGE_CURVE_AMOUNT = 0.12;       // sagitta as fraction of chord length
 const EDGE_CURVE_MIN_LEN = 8;         // below this (in screen px), draw straight
 
+// ----------------------------------------------------------------
+// Dirty-flag cache. drawCurvedEdges() runs on every sigma afterRender —
+// which, while the breathing RAF loop is running, is every frame. The
+// curve geometry only changes when the camera moves, a node moves, or
+// the dim/hover/path/filter selection changes. We cache a signature of
+// everything that affects the overlay and SKIP the redraw only when the
+// signature is byte-identical to the last draw.
+//
+// CONSERVATIVE BY DESIGN — correctness beats perf, a stale overlay is a
+// visible bug. We REDRAW (never skip) whenever ANY of these is true:
+//   1. Motion is enabled. Breathing drifts node positions every frame,
+//      so edge endpoints move continuously — the overlay is never stable.
+//      (When motion is off — reduced-motion — afterRender only fires on
+//      explicit refresh()es, so skipping between them is safe.)
+//   2. Camera state (x, y, ratio, angle) changed — pan/zoom/rotate.
+//   3. Active node changed (hover or selection) — alters dim/highlight.
+//   4. Path active-flag or membership-version changed.
+//   5. The hidden-types filter set changed (size is a cheap proxy; the
+//      filter handler always refreshes, which re-runs us anyway).
+//   6. Canvas size changed (resize) — geometry maps to new pixels.
+//   7. Theme changed — applyTheme() recolors every edge then refresh()es;
+//      the data-theme attribute captures that so the overlay doesn't keep
+//      the old palette's edge colors.
+// When in any doubt we fall through and redraw.
+let lastSig = null;
+
+function computeSignature(canvas) {
+  const cam = state.renderer.getCamera().getState();
+  const activeNode = state.hoveredNode || state.selectedNode;
+  // path.nodeSet/edgeSet are rebuilt on every path change; using their
+  // sizes + endpoints captures membership churn without serializing sets.
+  const p = state.path;
+  const theme =
+    (typeof document !== "undefined" &&
+      document.documentElement &&
+      document.documentElement.dataset.theme) ||
+    "";
+  return [
+    cam.x,
+    cam.y,
+    cam.ratio,
+    cam.angle,
+    activeNode || "",
+    p.active ? 1 : 0,
+    p.fromId || "",
+    p.toId || "",
+    p.nodeSet.size,
+    p.edgeSet.size,
+    state.hiddenTypes.size,
+    state.searchQuery,
+    canvas.width,
+    canvas.height,
+    theme,
+  ].join("|");
+}
+
 function ensureEdgeOverlay() {
   let canvas = document.getElementById("edge-overlay");
   if (canvas) return canvas;
@@ -67,12 +123,30 @@ export function drawCurvedEdges() {
   sizeEdgeOverlay(canvas);
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
+
+  if (!state.graph || !state.renderer) return;
+
+  // Dirty-flag gate. Skip the full redraw ONLY when motion is off AND the
+  // overlay signature is unchanged since the last draw (see computeSignature
+  // for the exact invalidation conditions). When motion is on, node
+  // positions drift every frame, so we always redraw. Skipping here means
+  // NOT clearing — the previously-painted curves stay on screen, which is
+  // correct precisely because nothing that affects them changed.
+  if (!state.motion.enabled) {
+    const sig = computeSignature(canvas);
+    if (sig === lastSig) return;
+    lastSig = sig;
+  } else {
+    // Motion drives continuous redraws; invalidate the cache so the first
+    // frame after motion stops always does a fresh draw.
+    lastSig = null;
+  }
+
   // Clear in CSS pixels (transform is DPR-scaled).
   const cssW = canvas.width / dpr;
   const cssH = canvas.height / dpr;
   ctx.clearRect(0, 0, cssW, cssH);
 
-  if (!state.graph || !state.renderer) return;
   const g = state.graph;
   const renderer = state.renderer;
   const activeNode = state.hoveredNode || state.selectedNode;

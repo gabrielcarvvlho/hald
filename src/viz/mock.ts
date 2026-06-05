@@ -765,7 +765,15 @@ function buildGraph(): GraphResponse {
     }
   });
 
-  cachedGraph = { nodes, edges: Array.from(edgeMap.values()), communities };
+  // Mirror api.ts's response shape. The mock fixture is well under the
+  // caps, so truncated is always null here — but the field must exist so
+  // the client's badge logic has a consistent contract across providers.
+  cachedGraph = {
+    nodes,
+    edges: Array.from(edgeMap.values()),
+    communities,
+    truncated: null,
+  };
   return cachedGraph;
 }
 

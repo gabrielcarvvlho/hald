@@ -2,7 +2,7 @@
 // Search + type-chip filters
 // ================================================================
 
-import { state } from "./state.js";
+import { state, prefersReducedMotion } from "./state.js";
 import { getColors } from "./colors.js";
 import { isHalo } from "./halo.js";
 import { selectNode } from "./sidebar.js";
@@ -73,13 +73,14 @@ export function setupSearch() {
         emptyEl.style.display = "none";
       }
 
-      // Fly to first match (largest matching node).
+      // Fly to first match (largest matching node). Reduced-motion users
+      // get an instant jump (duration 0) instead of an animated fly-to.
       if (bestNode) {
         const pos = state.renderer.getNodeDisplayData(bestNode);
         if (pos) {
           state.renderer.getCamera().animate(
             { x: pos.x, y: pos.y, ratio: 0.5 },
-            { duration: 300 },
+            { duration: prefersReducedMotion() ? 0 : 300 },
           );
         }
       }
