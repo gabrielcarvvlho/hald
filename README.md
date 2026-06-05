@@ -168,8 +168,16 @@ Copy `.opencode/plugins/hald.js` to your OpenCode plugins directory.
 
 ### Gemini CLI
 
+Install directly from the repo:
+
 ```bash
-cp gemini-extension.json ~/.gemini/extensions/hald.json
+gemini extensions install https://github.com/gabrielcarvvlho/hald
+```
+
+Or install from a local checkout (Gemini extensions are directories, not single files):
+
+```bash
+mkdir -p ~/.gemini/extensions/hald && cp gemini-extension.json ~/.gemini/extensions/hald/
 ```
 
 ## CLI Reference

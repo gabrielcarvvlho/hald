@@ -8,9 +8,9 @@ import { formatNumber } from "../shared/format.js";
 
 const COST_PER_1M_TOKENS: Record<string, { input: number; output: number }> = {
   anthropic: { input: 3.0, output: 15.0 }, // Claude Sonnet
-  openai: { input: 0.4, output: 1.6 }, // GPT-4.1-mini
-  google: { input: 0.15, output: 0.6 }, // Gemini Flash
-  zhipu: { input: 0.07, output: 0.07 }, // GLM-4-Flash
+  openai: { input: 0.75, output: 4.5 }, // gpt-5.4-mini
+  google: { input: 0.25, output: 1.5 }, // gemini-3.1-flash-lite-preview
+  zhipu: { input: 0.07, output: 0.07 }, // glm-4-flash
 };
 
 /** Per-model pricing (USD per 1M tokens). Used for actual cost calculation. */
@@ -123,13 +123,13 @@ export function formatCostEstimate(estimate: CostEstimate): string {
   ];
 
   if (estimate.provider === "google") {
-    lines.push(`  (Google Gemini Flash — lowest cost)`);
+    lines.push(`  (Google gemini-3.1-flash-lite-preview — low cost)`);
   } else if (estimate.provider === "openai") {
-    lines.push(`  (OpenAI GPT-4.1-mini)`);
+    lines.push(`  (OpenAI gpt-5.4-mini)`);
   } else if (estimate.provider === "anthropic") {
-    lines.push(`  (Anthropic Claude Sonnet)`);
+    lines.push(`  (Anthropic claude-sonnet-4-6)`);
   } else if (estimate.provider === "zhipu") {
-    lines.push(`  (Zhipu GLM-4-Flash — very low cost)`);
+    lines.push(`  (Zhipu glm-4-flash — lowest cost)`);
   }
 
   lines.push(`  Estimate includes ~40% buffer for retries and gleaning passes`);

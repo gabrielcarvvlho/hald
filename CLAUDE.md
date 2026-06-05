@@ -130,9 +130,10 @@ npx @modelcontextprotocol/inspector node dist/index.js
 - **Indexing:** ~500 tokens per TextUnit extraction, ~300 tokens per community summary.
 - **Querying:** Zero LLM cost — tools return structured data, the host agent synthesizes.
 - **Cost per 1k commits (approximate):**
-  - Anthropic (Claude Sonnet): ~$0.50-$1.00
-  - OpenAI (GPT-4.1-mini): ~$0.30-$0.60
-  - Google (Gemini Flash): ~$0.10-$0.30
+  - Anthropic (claude-sonnet-4-6): ~$0.50-$1.00
+  - OpenAI (gpt-5.4-mini): ~$0.50-$1.00
+  - Google (gemini-3.1-flash-lite-preview): ~$0.15-$0.40
+  - Zhipu AI (glm-4-flash): ~$0.05-$0.15
   - Ollama (local): $0.00
 
 ## Git Workflow

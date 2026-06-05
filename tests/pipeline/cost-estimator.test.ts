@@ -3,6 +3,7 @@ import {
   estimateCost,
   estimateCommunityCount,
   calculateActualCost,
+  formatCostEstimate,
 } from "../../src/pipeline/cost-estimator.js";
 import type { TextUnit } from "../../src/shared/types.js";
 
@@ -72,6 +73,25 @@ describe("estimateCost", () => {
     const cost = estimateCost([makeTextUnit("test")], 1, "ollama");
     expect(cost.estimatedCostUsd).toBeGreaterThan(0);
     expect(cost.provider).toBe("ollama");
+  });
+
+  it("estimates OpenAI cost in the same band as Anthropic (gpt-5.4-mini default)", () => {
+    // gpt-5.4-mini is priced close to Claude Sonnet, so the provider-level
+    // estimate should land in the same ~$0.50-$1.00 / 1k commits band, not the
+    // old cheap GPT-4.1-mini band that put it below Google.
+    const textUnits = Array.from({ length: 5 }, () => makeTextUnit("x".repeat(2000)));
+    const openai = estimateCost(textUnits, 5, "openai");
+    const google = estimateCost(textUnits, 5, "google");
+    expect(openai.estimatedCostUsd).toBeGreaterThan(google.estimatedCostUsd);
+  });
+});
+
+describe("formatCostEstimate", () => {
+  it("labels OpenAI with the current default model (gpt-5.4-mini)", () => {
+    const cost = estimateCost([makeTextUnit("test content")], 2, "openai");
+    const out = formatCostEstimate(cost);
+    expect(out).toContain("gpt-5.4-mini");
+    expect(out).not.toContain("GPT-4.1-mini");
   });
 });
 
