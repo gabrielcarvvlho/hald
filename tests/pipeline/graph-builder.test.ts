@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { initSchema, runMigrations } from "../../src/store/schema.js";
 import { Store } from "../../src/store/queries.js";
-import { build, generateRelationId } from "../../src/pipeline/graph-builder.js";
+import {
+  build,
+  buildOwnershipGraph,
+  generateRelationId,
+} from "../../src/pipeline/graph-builder.js";
+import { generateEntityId } from "../../src/pipeline/resolver.js";
 import {
   EntityType,
   RelationType,
@@ -249,5 +254,271 @@ describe("generateRelationId", () => {
     const id1 = generateRelationId(RelationType.CO_CHANGED, "a", "b");
     const id2 = generateRelationId(RelationType.CO_CHANGED, "b", "a");
     expect(id1).toBe(id2);
+  });
+});
+
+// ================================================================
+// Deterministic ownership layer (headline "connections" feature)
+// ================================================================
+
+describe("buildOwnershipGraph", () => {
+  const addedCommit: CommitData = {
+    hash: "c1",
+    authorName: "Alice Chen",
+    authorEmail: "alice@acme.com",
+    date: "2024-01-01T00:00:00Z",
+    message: "feat: add billing",
+    filesChanged: [
+      { path: "src/billing/processor.ts", status: "added", additions: 40, deletions: 0 },
+      { path: "src/billing/types.ts", status: "added", additions: 10, deletions: 0 },
+    ],
+    parentHashes: ["p0"],
+  };
+
+  const modifiedCommit: CommitData = {
+    hash: "c2",
+    authorName: "Bob Martinez",
+    authorEmail: "bob@acme.com",
+    date: "2024-02-01T00:00:00Z",
+    message: "fix: tweak payments",
+    filesChanged: [
+      { path: "src/payments/handler.ts", status: "modified", additions: 5, deletions: 3 },
+    ],
+    parentHashes: ["c1"],
+  };
+
+  it("creates one PERSON entity per distinct author with commit-count frequency", () => {
+    const { entities } = buildOwnershipGraph([addedCommit, modifiedCommit]);
+    const people = entities.filter((e) => e.type === EntityType.PERSON);
+
+    expect(people.map((p) => p.name).sort()).toEqual(["Alice Chen", "Bob Martinez"]);
+
+    const alice = people.find((p) => p.name === "Alice Chen")!;
+    expect(alice.id).toBe(generateEntityId(EntityType.PERSON, "Alice Chen"));
+    expect(alice.frequency).toBe(1);
+    expect(alice.firstSeen).toBe("2024-01-01T00:00:00Z");
+    expect(alice.lastSeen).toBe("2024-01-01T00:00:00Z");
+  });
+
+  it("emits AUTHORED for added files and MODIFIED for modified-only files", () => {
+    const { relations } = buildOwnershipGraph([addedCommit, modifiedCommit]);
+
+    const aliceId = generateEntityId(EntityType.PERSON, "Alice Chen");
+    const bobId = generateEntityId(EntityType.PERSON, "Bob Martinez");
+    const billingId = generateEntityId(EntityType.MODULE, "src/billing");
+    const paymentsId = generateEntityId(EntityType.MODULE, "src/payments");
+
+    const aliceBilling = relations.find(
+      (r) => r.sourceId === aliceId && r.targetId === billingId,
+    )!;
+    expect(aliceBilling.type).toBe(RelationType.AUTHORED);
+
+    const bobPayments = relations.find((r) => r.sourceId === bobId && r.targetId === paymentsId)!;
+    expect(bobPayments.type).toBe(RelationType.MODIFIED);
+  });
+
+  it("resolves to AUTHORED when the same author both added and later modified a module", () => {
+    const commits: CommitData[] = [
+      addedCommit,
+      {
+        hash: "c3",
+        authorName: "Alice Chen",
+        authorEmail: "alice@acme.com",
+        date: "2024-03-01T00:00:00Z",
+        message: "fix: tweak billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "modified", additions: 2, deletions: 1 },
+        ],
+        parentHashes: ["c2"],
+      },
+    ];
+    const { relations } = buildOwnershipGraph(commits);
+
+    const aliceId = generateEntityId(EntityType.PERSON, "Alice Chen");
+    const billingId = generateEntityId(EntityType.MODULE, "src/billing");
+    const edges = relations.filter((r) => r.sourceId === aliceId && r.targetId === billingId);
+
+    // A single merged edge, typed AUTHORED (the stronger signal), spanning both commits.
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.type).toBe(RelationType.AUTHORED);
+    expect(edges[0]!.firstSeen).toBe("2024-01-01T00:00:00Z");
+    expect(edges[0]!.lastSeen).toBe("2024-03-01T00:00:00Z");
+  });
+
+  it("canonicalizes an author with the same email but different name spellings", () => {
+    const commits: CommitData[] = [
+      addedCommit, // "Alice Chen" / alice@acme.com
+      {
+        hash: "c4",
+        authorName: "alice", // different spelling, same email
+        authorEmail: "alice@acme.com",
+        date: "2024-04-01T00:00:00Z",
+        message: "feat: more billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "modified", additions: 1, deletions: 0 },
+        ],
+        parentHashes: ["c3"],
+      },
+    ];
+    const people = buildOwnershipGraph(commits).entities.filter(
+      (e) => e.type === EntityType.PERSON,
+    );
+
+    // One person, not two — collapsed by email. frequency counts both commits.
+    expect(people).toHaveLength(1);
+    expect(people[0]!.frequency).toBe(2);
+  });
+
+  it("skips merge commits (parentHashes.length > 1)", () => {
+    const mergeCommit: CommitData = {
+      hash: "m1",
+      authorName: "Merger",
+      authorEmail: "merge@acme.com",
+      date: "2024-05-01T00:00:00Z",
+      message: "merge branch",
+      filesChanged: [{ path: "src/x/y.ts", status: "modified", additions: 9, deletions: 9 }],
+      parentHashes: ["a", "b"],
+    };
+    const { entities } = buildOwnershipGraph([mergeCommit]);
+    expect(entities.filter((e) => e.name === "Merger")).toHaveLength(0);
+  });
+});
+
+describe("build: deterministic ownership persisted with NO LLM extraction", () => {
+  let db: Database.Database;
+  let store: Store;
+
+  beforeEach(() => {
+    ({ db, store } = createTestStore());
+  });
+  afterEach(() => db.close());
+
+  it("creates PERSON entities and AUTHORED/MODIFIED edges from authors with empty extractions", () => {
+    const commits: CommitData[] = [
+      {
+        hash: "h1",
+        authorName: "Alice Chen",
+        authorEmail: "alice@acme.com",
+        date: "2024-01-01T00:00:00Z",
+        message: "feat: add billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "added", additions: 30, deletions: 0 },
+        ],
+        parentHashes: ["p0"],
+      },
+      {
+        hash: "h2",
+        authorName: "Bob Martinez",
+        authorEmail: "bob@acme.com",
+        date: "2024-02-01T00:00:00Z",
+        message: "fix: tweak billing",
+        filesChanged: [
+          { path: "src/billing/processor.ts", status: "modified", additions: 4, deletions: 2 },
+        ],
+        parentHashes: ["h1"],
+      },
+    ];
+
+    // No text units, no extractions, no LLM relations — purely deterministic.
+    build(store, {
+      textUnits: [],
+      entities: [],
+      relations: [],
+      extractions: new Map(),
+      commits,
+    });
+
+    const aliceId = generateEntityId(EntityType.PERSON, "Alice Chen");
+    const bobId = generateEntityId(EntityType.PERSON, "Bob Martinez");
+    const billingId = generateEntityId(EntityType.MODULE, "src/billing");
+
+    // PERSON + MODULE entities exist deterministically.
+    expect(store.getEntity(aliceId)?.type).toBe(EntityType.PERSON);
+    expect(store.getEntity(bobId)?.type).toBe(EntityType.PERSON);
+    expect(store.getEntity(billingId)?.type).toBe(EntityType.MODULE);
+
+    // Ownership edges exist and carry the right types.
+    const aliceEdge = store.getRelation(
+      generateRelationId(RelationType.AUTHORED, aliceId, billingId),
+    )!;
+    expect(aliceEdge.type).toBe(RelationType.AUTHORED);
+    expect(aliceEdge.sourceId).toBe(aliceId);
+    expect(aliceEdge.targetId).toBe(billingId);
+    expect(aliceEdge.firstSeen).toBe("2024-01-01T00:00:00Z");
+
+    const bobEdge = store.getRelation(
+      generateRelationId(RelationType.MODIFIED, bobId, billingId),
+    )!;
+    expect(bobEdge.type).toBe(RelationType.MODIFIED);
+  });
+
+  it("merges an LLM-emitted PERSON duplicate via ON CONFLICT (additive frequency, LLM description wins)", () => {
+    const aliceId = generateEntityId(EntityType.PERSON, "Alice Chen");
+    const billingId = generateEntityId(EntityType.MODULE, "src/billing");
+
+    const tu: TextUnit = {
+      id: "tu:1",
+      content: "Alice authored billing",
+      commitHashes: ["h1"],
+      dateRange: { start: "2024-01-01", end: "2024-01-02" },
+      entityIds: [aliceId],
+      relationIds: [],
+    };
+
+    // LLM also extracted "Alice Chen" with a rich description.
+    const llmAlice: Entity = {
+      id: aliceId,
+      type: EntityType.PERSON,
+      name: "Alice Chen",
+      aliases: [],
+      description: "Lead engineer who owns billing",
+      firstSeen: "",
+      lastSeen: "",
+      frequency: 0,
+      metadata: {},
+    };
+
+    build(store, {
+      textUnits: [tu],
+      entities: [llmAlice],
+      relations: [],
+      extractions: new Map([
+        [
+          "tu:1",
+          {
+            entities: [
+              { name: "Alice Chen", type: EntityType.PERSON, description: "Lead engineer who owns billing" },
+            ],
+            relations: [],
+          },
+        ],
+      ]),
+      commits: [
+        {
+          hash: "h1",
+          authorName: "Alice Chen",
+          authorEmail: "alice@acme.com",
+          date: "2024-01-01T00:00:00Z",
+          message: "feat: add billing",
+          filesChanged: [
+            { path: "src/billing/processor.ts", status: "added", additions: 30, deletions: 0 },
+          ],
+          parentHashes: ["p0"],
+        },
+      ],
+    });
+
+    const alice = store.getEntity(aliceId)!;
+    // Exactly one Alice entity — the deterministic and LLM rows merged.
+    const allPeople = store.getAllEntities().filter((e) => e.type === EntityType.PERSON);
+    expect(allPeople).toHaveLength(1);
+    // LLM description survives (deterministic empty description must not clobber it).
+    expect(alice.description).toBe("Lead engineer who owns billing");
+    // frequency is additive: deterministic (1 commit) + LLM (1 text-unit occurrence).
+    expect(alice.frequency).toBe(2);
+
+    // And the deterministic AUTHORED edge is present.
+    const edge = store.getRelation(generateRelationId(RelationType.AUTHORED, aliceId, billingId))!;
+    expect(edge.type).toBe(RelationType.AUTHORED);
   });
 });

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LLMClient, LLMResponse } from "../../src/llm/types.js";
 import type { HaldConfig } from "../../src/shared/types.js";
+import { EntityType } from "../../src/shared/types.js";
 
 // ================================================================
 // Mock the LLM client module BEFORE importing orchestrator
@@ -277,6 +278,59 @@ describe("Full pipeline integration test", () => {
     const types = new Set(allRelations.map((r) => r.type));
     // AUTHORED proves the LLM mock extraction worked (CO_CHANGED is commit-derived, not proof of extraction)
     expect(types.has("AUTHORED")).toBe(true);
+  });
+
+  // --- Task 2: relation dates ---
+
+  it("non-CO_CHANGED edges carry real first_seen/last_seen dates (not empty strings)", () => {
+    const allRelations = store.getAllRelations();
+    // Look at the edges whose dates come from text units / commit dates, not the
+    // commit-derived CO_CHANGED edges. AUTHORED/MODIFIED edges (LLM- or
+    // ownership-derived) must have non-empty dates after the dateRange wiring.
+    const dated = allRelations.filter(
+      (r) => r.type === "AUTHORED" || r.type === "MODIFIED" || r.type === "USES",
+    );
+    expect(dated.length).toBeGreaterThanOrEqual(1);
+    for (const r of dated) {
+      expect(r.firstSeen).not.toBe("");
+      expect(r.lastSeen).not.toBe("");
+      // ISO-ish: at least a leading year.
+      expect(r.firstSeen).toMatch(/^\d{4}/);
+      expect(r.lastSeen).toMatch(/^\d{4}/);
+    }
+  });
+
+  // --- Task 3: deterministic ownership layer ---
+
+  it("creates deterministic PERSON entities for every commit author (Alice, Bob, Carlos)", () => {
+    const people = store.getEntitiesByType(EntityType.PERSON);
+    const names = people.map((p) => p.name);
+    // All three sample-repo authors must appear, even though the LLM mock only
+    // emits PERSON entities for chunks that mention them — the deterministic
+    // ownership layer guarantees coverage from git authorship.
+    expect(names).toContain("Alice Chen");
+    expect(names).toContain("Bob Martinez");
+    expect(names).toContain("Carlos Ruiz");
+  });
+
+  it("creates deterministic AUTHORED/MODIFIED ownership edges from git authorship", () => {
+    const allRelations = store.getAllRelations();
+    const ownership = allRelations.filter(
+      (r) => r.type === "AUTHORED" || r.type === "MODIFIED",
+    );
+    expect(ownership.length).toBeGreaterThanOrEqual(1);
+
+    // Carlos only ever authored docs/ — the LLM mock never emits a relation for
+    // Carlos, so an ownership edge from Carlos proves the deterministic layer ran.
+    const carlos = store.getEntityByName("Carlos Ruiz");
+    expect(carlos).not.toBeNull();
+    const carlosEdges = store.getRelationsBySource(carlos!.id);
+    expect(carlosEdges.length).toBeGreaterThanOrEqual(1);
+    for (const e of carlosEdges) {
+      expect(["AUTHORED", "MODIFIED"]).toContain(e.type);
+      // The target must be a MODULE (PERSON→MODULE ownership form).
+      expect(store.getEntity(e.targetId)?.type).toBe(EntityType.MODULE);
+    }
   });
 
   // --- Community assertions ---

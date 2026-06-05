@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import type { LLMClient, LLMResponse } from "../../src/llm/types.js";
 import type { HaldConfig } from "../../src/shared/types.js";
+import { EntityType } from "../../src/shared/types.js";
 
 // ================================================================
 // Mock LLM client with call tracking
@@ -282,5 +283,117 @@ describe("Incremental indexing", () => {
       }
       storeAfter.close();
     }
+  }, 30_000);
+});
+
+// ================================================================
+// --full idempotence: re-indexing with full:true must NOT double
+// entity frequencies or relation weights (additive upserts would).
+// ================================================================
+
+describe("--full re-index idempotence", () => {
+  let tmpDir: string;
+  let repoDir: string;
+  let storageDir: string;
+
+  function makeFullConfig(): HaldConfig {
+    return {
+      repoPath: repoDir,
+      branch: "HEAD",
+      commitsPerChunk: 5,
+      maxChunkTokens: 2000,
+      provider: "anthropic",
+      maxConcurrency: 1,
+      maxRetries: 0,
+      entityResolutionThreshold: 0.85,
+      communityResolutions: [1.0],
+      minCommunitySize: 2,
+      parentLinkThreshold: 0.3,
+      splitWarningThreshold: 0.7,
+      summaryReuseThreshold: 0.7,
+      storagePath: storageDir,
+    };
+  }
+
+  beforeAll(async () => {
+    tmpDir = join(tmpdir(), `hald-full-${Date.now()}`);
+    repoDir = join(tmpDir, "repo");
+    storageDir = join(tmpDir, "storage");
+    mkdirSync(storageDir, { recursive: true });
+    await createIncrementalRepo(repoDir);
+    await addMoreCommits(repoDir, 3);
+
+    // Add a commit that touches TWO modules so a CO_CHANGED edge exists
+    // (our witness for relation-weight idempotence).
+    const git = simpleGit(repoDir);
+    await git.addConfig("user.name", "Alice");
+    await git.addConfig("user.email", "alice@test.com");
+    mkdirSync(join(repoDir, "src/api"), { recursive: true });
+    writeFileSync(join(repoDir, "src/core/index.ts"), "export const v = 99;");
+    writeFileSync(join(repoDir, "src/api/handler.ts"), "export const v = 99;");
+    await git.add(".");
+    await git.commit("feat: wire core into api (cross-module change)");
+  });
+
+  beforeEach(() => {
+    extractCalls = [];
+    summaryCalls = [];
+  });
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("frequencies and weights are identical after a second full re-index (not doubled)", async () => {
+    // First full index. NB: `full` is an IndexOptions field (2nd arg), not config.
+    await indexRepository(makeFullConfig(), { full: true });
+
+    const snapshot = () => {
+      const db = openDatabase(storageDir);
+      const store = new Store(db);
+      // Pick a stable PERSON entity and the heaviest CO_CHANGED edge as witnesses.
+      const people = store.getEntitiesByType(EntityType.PERSON).sort((a, b) => a.id.localeCompare(b.id));
+      const coChanged = store
+        .getAllRelations()
+        .filter((r) => r.type === "CO_CHANGED")
+        .sort((a, b) => a.id.localeCompare(b.id));
+      const authored = store
+        .getAllRelations()
+        .filter((r) => r.type === "AUTHORED")
+        .sort((a, b) => a.id.localeCompare(b.id));
+      const stats = store.getStats();
+      store.close();
+      return {
+        person: people[0] ? { id: people[0].id, frequency: people[0].frequency } : null,
+        coChanged: coChanged[0] ? { id: coChanged[0].id, weight: coChanged[0].weight } : null,
+        authored: authored[0] ? { id: authored[0].id, weight: authored[0].weight } : null,
+        stats,
+      };
+    };
+
+    const before = snapshot();
+    // Sanity: the witnesses must exist, otherwise the test proves nothing.
+    expect(before.person).not.toBeNull();
+    expect(before.coChanged).not.toBeNull();
+    expect(before.authored).not.toBeNull();
+
+    // Second full re-index over the SAME, already-populated graph.
+    const r2 = await indexRepository(makeFullConfig(), { full: true });
+    // The re-index must actually re-process the whole history (proving the test
+    // exercises the additive-upsert path that clearGraph() guards against).
+    expect(r2.commitsProcessed).toBeGreaterThan(0);
+
+    const after = snapshot();
+
+    // Frequencies and weights must be IDENTICAL — clearGraph() wiped the old
+    // rows so additive ON CONFLICT upserts don't accumulate across runs.
+    expect(after.person).toEqual(before.person);
+    expect(after.coChanged).toEqual(before.coChanged);
+    expect(after.authored).toEqual(before.authored);
+
+    // Counts must also be stable (no orphaned/duplicated rows).
+    expect(after.stats.entities).toBe(before.stats.entities);
+    expect(after.stats.relations).toBe(before.stats.relations);
+    expect(after.stats.commits).toBe(before.stats.commits);
   }, 30_000);
 });

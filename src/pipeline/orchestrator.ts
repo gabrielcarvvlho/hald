@@ -5,13 +5,16 @@ import type {
   Relation,
   Community,
   CommunityId,
+  TextUnit,
 } from "../shared/types.js";
+import { EntityType } from "../shared/types.js";
 import type {
   ExtractedRelation,
   ExtractorResult,
   ExtractedEntity,
   TokenAccumulator,
 } from "./extractor.js";
+import { RELATION_CONSTRAINTS } from "./extractor.js";
 import { openDatabase } from "../store/db.js";
 import { Store } from "../store/queries.js";
 import { readCommits, getHead } from "./git-reader.js";
@@ -85,6 +88,16 @@ async function runPipeline(
   const presenter = options.presenter;
 
   // 2. Determine what to index
+  // A `--full` re-index must be idempotent. Entity frequency and relation
+  // weight upserts are additive (queries.ts ON CONFLICT), so re-running over an
+  // already-populated graph would DOUBLE every frequency/weight and corrupt
+  // clustering + summaries. Wipe the graph first so the rebuild starts clean.
+  // clearGraph() also removes 'last_indexed_commit', so the guard below still
+  // reads undefined and we re-read the whole history.
+  if (options.full) {
+    store.clearGraph();
+  }
+
   let sinceCommit: string | undefined;
   if (!options.full) {
     sinceCommit = store.getMeta("last_indexed_commit") ?? undefined;
@@ -156,7 +169,6 @@ async function runPipeline(
   // 6. Extract entities and relations
   const extractions = new Map<string, ExtractorResult>();
   const allExtractedEntities: ExtractedEntity[] = [];
-  const allExtractedRelations: ExtractedRelation[] = [];
   const tokenUsage: TokenAccumulator = {
     inputTokens: 0,
     outputTokens: 0,
@@ -180,7 +192,6 @@ async function runPipeline(
     if (failed) failedChunks++;
     extractions.set(textUnitId, result);
     allExtractedEntities.push(...result.entities);
-    allExtractedRelations.push(...result.relations);
   }
 
   if (failedChunks > 0) {
@@ -188,16 +199,19 @@ async function runPipeline(
     presenter?.stageWarn("extracting", `${failedChunks}/${textUnits.length} chunks failed`);
   }
 
+  let extractedRelationCount = 0;
+  for (const ex of extractions.values()) extractedRelationCount += ex.relations.length;
+
   logger.info("orchestrator: extracted", {
     entities: allExtractedEntities.length,
-    relations: allExtractedRelations.length,
+    relations: extractedRelationCount,
     inputTokens: tokenUsage.inputTokens,
     outputTokens: tokenUsage.outputTokens,
     failedChunks,
   });
   presenter?.stageEnd(
     "extracting",
-    `${allExtractedEntities.length} entities, ${allExtractedRelations.length} relations`,
+    `${allExtractedEntities.length} entities, ${extractedRelationCount} relations`,
   );
 
   // 7. Resolve (deduplicate) entities
@@ -212,9 +226,14 @@ async function runPipeline(
   });
   presenter?.stageEnd("resolving", `${resolvedEntities.length} unique entities`);
 
-  // 8. Convert extracted relations to resolved relations (name → ID)
+  // 8. Convert extracted relations to resolved relations (name → ID).
+  // Passing the per-text-unit extractions + textUnits lets each relation inherit
+  // its owning text unit's dateRange (extraction is keyed by textUnitId) and lets
+  // us re-validate relation type constraints against the globally-resolved entity
+  // types (the per-chunk check is skipped when endpoints span chunks).
   const resolvedRelations = resolveExtractedRelations(
-    allExtractedRelations,
+    extractions,
+    textUnits,
     resolvedEntities,
     config.moduleDepth,
   );
@@ -446,13 +465,67 @@ async function runPipeline(
 
 /**
  * Convert ExtractedRelation (entity names) → Relation (entity IDs).
- * Skips relations where source or target can't be resolved.
+ *
+ * - Skips relations where source or target can't be resolved.
+ * - Populates firstSeen/lastSeen from the owning text unit's dateRange so
+ *   non-CO_CHANGED edges (AUTHORED/USES/DECIDED/…) carry real dates instead of
+ *   empty strings. (The store's NULLIF guard means empty dates never win, but
+ *   real dates here let them survive into the persisted graph.)
+ * - Re-validates each relation's type against the GLOBALLY-resolved endpoint
+ *   entity types via RELATION_CONSTRAINTS. The per-chunk check in the extractor
+ *   only fires when both endpoints were extracted in the same chunk; once
+ *   resolution merges entities across chunks, an edge can end up pointing at a
+ *   different entity type than the relation allows. Such edges are dropped + logged.
+ *
+ * Two call forms:
+ *  - (extractions, textUnits, resolvedEntities, moduleDepth) — the orchestrator
+ *    path; attributes each relation to its text unit's dateRange.
+ *  - (extractedRelations, resolvedEntities, moduleDepth) — the agent-mediated
+ *    path (no per-relation text-unit linkage); dates stay empty but constraint
+ *    revalidation still applies.
  */
+export function resolveExtractedRelations(
+  extractions: Map<string, ExtractorResult>,
+  textUnits: TextUnit[],
+  resolvedEntities: Entity[],
+  moduleDepth?: number,
+): Relation[];
 export function resolveExtractedRelations(
   extractedRelations: ExtractedRelation[],
   resolvedEntities: Entity[],
   moduleDepth?: number,
+): Relation[];
+export function resolveExtractedRelations(
+  first: Map<string, ExtractorResult> | ExtractedRelation[],
+  second: TextUnit[] | Entity[],
+  third?: Entity[] | number,
+  fourth?: number,
 ): Relation[] {
+  // Normalize both call forms into a list of (relation, dateRange) pairs.
+  let pairs: Array<{ relation: ExtractedRelation; dateRange?: { start: string; end: string } }>;
+  let resolvedEntities: Entity[];
+  let moduleDepth: number | undefined;
+
+  if (first instanceof Map) {
+    const extractions = first;
+    const textUnits = second as TextUnit[];
+    resolvedEntities = third as Entity[];
+    moduleDepth = fourth;
+
+    const dateRangeByTextUnit = new Map<string, { start: string; end: string }>();
+    for (const tu of textUnits) dateRangeByTextUnit.set(tu.id, tu.dateRange);
+
+    pairs = [];
+    for (const [textUnitId, extraction] of extractions) {
+      const dateRange = dateRangeByTextUnit.get(textUnitId);
+      for (const relation of extraction.relations) pairs.push({ relation, dateRange });
+    }
+  } else {
+    resolvedEntities = second as Entity[];
+    moduleDepth = third as number | undefined;
+    pairs = first.map((relation) => ({ relation }));
+  }
+
   const entityByName = new Map<string, Entity>();
   for (const e of resolvedEntities) {
     entityByName.set(e.name.toLowerCase(), e);
@@ -469,11 +542,28 @@ export function resolveExtractedRelations(
   }
 
   const relations: Relation[] = [];
-  for (const r of extractedRelations) {
+  for (const { relation: r, dateRange } of pairs) {
     const source = findEntity(r.source);
     const target = findEntity(r.target);
     if (!source || !target) continue;
     if (source.id === target.id) continue;
+
+    // Re-validate against the resolved (global) entity types. Endpoints can
+    // resolve to a different type than the chunk-local check assumed.
+    const constraint = RELATION_CONSTRAINTS[r.type];
+    if (
+      constraint &&
+      (!constraint.source.includes(source.type as EntityType) ||
+        !constraint.target.includes(target.type as EntityType))
+    ) {
+      logger.warn("orchestrator: dropping relation, type/entity mismatch after resolution", {
+        relation: r.type,
+        source: `${source.name} (${source.type})`,
+        target: `${target.name} (${target.type})`,
+        expected: `${constraint.source.join("|")} → ${constraint.target.join("|")}`,
+      });
+      continue;
+    }
 
     const id = generateRelationId(r.type, source.id, target.id);
     relations.push({
@@ -484,8 +574,8 @@ export function resolveExtractedRelations(
       weight: r.weight,
       description: r.description,
       evidence: [],
-      firstSeen: "",
-      lastSeen: "",
+      firstSeen: dateRange?.start ?? "",
+      lastSeen: dateRange?.end ?? "",
     });
   }
 

@@ -32,6 +32,13 @@ export interface GitReaderOptions {
   branch?: string;
   sinceCommit?: string;
   sinceDate?: string;
+  /**
+   * Cap on commits to read in a single pass. Selects the OLDEST N commits
+   * chronologically (not the newest), so repeated incremental scans backfill
+   * history in order: each scan advances the checkpoint to the newest commit it
+   * processed, and the next scan resumes from there until the repo is fully
+   * indexed. Combine with `sinceCommit` for resumable, batched indexing.
+   */
   maxCommits?: number;
 }
 
@@ -49,7 +56,7 @@ export async function* readCommits(options: GitReaderOptions): AsyncIterable<Com
   const rawNameStatus = await git.raw([
     "log",
     "--reverse",
-    `--format=__COMMIT__%H%x1f%an%x1f%ae%x1f%aI%x1f%P%x1f%s`,
+    `--format=${RECORD_SEP}%H${UNIT_SEP}%an${UNIT_SEP}%ae${UNIT_SEP}%aI${UNIT_SEP}%P${UNIT_SEP}%s`,
     "--name-status",
     "-M",
     ...args,
@@ -59,7 +66,7 @@ export async function* readCommits(options: GitReaderOptions): AsyncIterable<Com
   const rawNumstat = await git.raw([
     "log",
     "--reverse",
-    `--format=__COMMIT__%H`,
+    `--format=${RECORD_SEP}%H`,
     "--numstat",
     ...args,
   ]);
@@ -68,14 +75,23 @@ export async function* readCommits(options: GitReaderOptions): AsyncIterable<Com
   const rawPatch = await git.raw([
     "log",
     "--reverse",
-    `--format=__COMMIT__%H`,
+    `--format=${RECORD_SEP}%H`,
     "-p",
     "--no-merges",
     "--diff-filter=AMRT",
     ...args,
   ]);
 
-  const commits = parseNameStatusLog(rawNameStatus);
+  const parsed = parseNameStatusLog(rawNameStatus);
+  // --max-commits keeps the OLDEST N commits chronologically (the stream is
+  // already oldest-first via --reverse). This makes incremental scans backfill
+  // correctly: the checkpoint advances to the newest commit we actually
+  // processed, so the next scan picks up where this one stopped rather than
+  // skipping the older tail forever (which `git log -n N` — newest N — caused).
+  const commits =
+    options.maxCommits && options.maxCommits > 0
+      ? parsed.slice(0, options.maxCommits)
+      : parsed;
   const numstatMap = parseNumstatLog(rawNumstat);
   const patchMap = parsePatchLog(rawPatch);
 
@@ -117,7 +133,11 @@ export async function getFileTree(repoPath: string): Promise<string[]> {
 
 function buildLogArgs(options: GitReaderOptions): string[] {
   const args: string[] = [];
-  if (options.maxCommits) args.push(`-n`, `${options.maxCommits}`);
+  // NB: maxCommits is intentionally NOT translated to `git log -n N` here.
+  // `-n N` with --reverse still selects the NEWEST N commits, then reverses
+  // them — the opposite of what we want. We fetch the full range and slice the
+  // oldest N after parsing (see readCommits), so incremental scans backfill the
+  // remaining commits on subsequent runs.
   if (options.sinceDate) args.push(`--since=${options.sinceDate}`);
   if (options.sinceCommit) args.push(`${options.sinceCommit}..HEAD`);
   if (options.branch && options.branch !== "HEAD") args.push(options.branch);
@@ -128,13 +148,20 @@ function buildLogArgs(options: GitReaderOptions): string[] {
 // Parsers
 // ================================================================
 
+// Record separator (RS, 0x1E) prefixes every commit block; field separator
+// (US, 0x1F) splits header fields. Both are control chars git can emit via
+// %x1e/%x1f — they can never appear in a commit message, author, or path, so
+// the parse is collision-proof (a message literally containing "__COMMIT__"
+// no longer corrupts block boundaries).
+const RECORD_SEP = "%x1e";
 const UNIT_SEP = "\x1f";
+const RECORD_SEP_CHAR = "\x1e";
 
 function parseNameStatusLog(raw: string): CommitData[] {
   if (!raw.trim()) return [];
 
   const commits: CommitData[] = [];
-  const blocks = raw.split("__COMMIT__").filter(Boolean);
+  const blocks = raw.split(RECORD_SEP_CHAR).filter(Boolean);
 
   for (const block of blocks) {
     const lines = block.split("\n");
@@ -215,7 +242,7 @@ function parseNumstatLog(raw: string): Map<string, NumstatEntry[]> {
   if (!raw.trim()) return new Map();
 
   const result = new Map<string, NumstatEntry[]>();
-  const blocks = raw.split("__COMMIT__").filter(Boolean);
+  const blocks = raw.split(RECORD_SEP_CHAR).filter(Boolean);
 
   for (const block of blocks) {
     const lines = block.split("\n");
@@ -285,7 +312,7 @@ function parsePatchLog(raw: string): Map<string, PatchEntry[]> {
   if (!raw.trim()) return new Map();
 
   const result = new Map<string, PatchEntry[]>();
-  const blocks = raw.split("__COMMIT__").filter(Boolean);
+  const blocks = raw.split(RECORD_SEP_CHAR).filter(Boolean);
 
   for (const block of blocks) {
     const lines = block.split("\n");

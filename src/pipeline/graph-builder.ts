@@ -39,8 +39,20 @@ export interface BuildInput {
 export function build(store: Store, input: BuildInput): GraphStats {
   const end = logger.time("graph-builder: build");
 
+  // Deterministic ownership layer (PERSON + MODULE entities, PERSON→MODULE
+  // AUTHORED/MODIFIED edges) derived purely from commit authorship.
+  const ownership = buildOwnershipGraph(input.commits, input.moduleDepth);
+
   store.transaction(() => {
-    // 1. Upsert entities (with dates from text units)
+    // 1a. Upsert deterministic ownership entities FIRST. They carry empty
+    // descriptions, so upserting before the LLM entities lets any richer
+    // LLM description win the ON CONFLICT (last write), while frequency merges
+    // additively. They also guarantee every ownership edge has a valid target.
+    for (const entity of ownership.entities) {
+      store.upsertEntity(entity);
+    }
+
+    // 1b. Upsert LLM-extracted entities (with dates from text units).
     // Build lookup that handles both canonical names and normalized paths
     const entityMap = new Map<string, Entity>();
     for (const e of input.entities) {
@@ -81,6 +93,10 @@ export function build(store: Store, input: BuildInput): GraphStats {
       relationEntityIds.add(rel.sourceId);
       relationEntityIds.add(rel.targetId);
     }
+    for (const rel of ownership.relations) {
+      relationEntityIds.add(rel.sourceId);
+      relationEntityIds.add(rel.targetId);
+    }
     const existingEntities = store.getEntitiesByIds([...relationEntityIds]);
 
     // 2. Upsert relations (use pre-fetched map instead of per-relation getEntity)
@@ -113,6 +129,13 @@ export function build(store: Store, input: BuildInput): GraphStats {
         store.upsertRelation(rel);
       }
     }
+
+    // 6. Create deterministic ownership edges (use pre-fetched map).
+    for (const rel of ownership.relations) {
+      if (existingEntities.has(rel.sourceId) && existingEntities.has(rel.targetId)) {
+        store.upsertRelation(rel);
+      }
+    }
   });
 
   const stats = store.getStats();
@@ -126,6 +149,212 @@ export function build(store: Store, input: BuildInput): GraphStats {
     textUnitCount: stats.textUnits,
     edgeDensity: stats.entities > 1 ? stats.relations / (stats.entities * (stats.entities - 1)) : 0,
   };
+}
+
+// ================================================================
+// Deterministic ownership layer (PERSON + AUTHORED/MODIFIED edges)
+// ================================================================
+
+/**
+ * The headline "connections" layer: derive PERSON entities and
+ * PERSON→MODULE ownership edges deterministically from commit authorship,
+ * independent of any LLM extraction.
+ *
+ * Without this, PERSON entities and AUTHORED/MODIFIED edges only exist when the
+ * LLM happens to emit them — making "who knows module X?" sparse and unreliable.
+ * Here, every distinct author becomes a PERSON entity and every (author, module)
+ * touch becomes an ownership edge, so the graph always answers ownership queries
+ * from ground-truth git history.
+ *
+ * Edge typing (consistent with shared/types RelationType + RELATION_CONSTRAINTS,
+ * where AUTHORED/MODIFIED are both PERSON→MODULE):
+ *   - AUTHORED: the author added a file under the module (introduced/owns it).
+ *   - MODIFIED: the author only changed pre-existing files in the module.
+ * A module the author both added and later modified resolves to AUTHORED (the
+ * stronger ownership signal).
+ *
+ * IDs use the shared generate*Id helpers so any LLM-emitted PERSON/MODULE
+ * entities or AUTHORED/MODIFIED relations collide-and-merge via ON CONFLICT
+ * upsert rather than duplicating.
+ */
+interface OwnershipGraph {
+  entities: Entity[];
+  relations: Relation[];
+}
+
+interface AuthorAccumulator {
+  name: string;
+  commitCount: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+interface OwnershipEdgeAccumulator {
+  personId: string;
+  moduleId: string;
+  /** True once any commit ADDED a file in this module (→ AUTHORED). */
+  authored: boolean;
+  /** Accumulated lines changed across all touching commits. */
+  lines: number;
+  commitCount: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+interface ModuleAccumulator {
+  name: string;
+  firstSeen: string;
+  lastSeen: string;
+  touches: number;
+}
+
+export function buildOwnershipGraph(commits: CommitData[], moduleDepth?: number): OwnershipGraph {
+  // Canonicalize authors by email (a person may spell their name differently
+  // across commits but the email is the stable identity). The display name is
+  // the most recent non-empty name seen for that email.
+  const authorByEmail = new Map<string, AuthorAccumulator>();
+  const edges = new Map<string, OwnershipEdgeAccumulator>();
+  // Modules touched by these commits. We emit them as MODULE entities so the
+  // ownership edges always have a valid target (the LLM may not have extracted
+  // every module), making ownership queries reliable rather than LLM-dependent.
+  const modulesByName = new Map<string, ModuleAccumulator>();
+
+  for (const commit of commits) {
+    // Skip merge commits — their file lists duplicate the merged branch commits,
+    // which would double-count ownership (mirrors the co-change builder).
+    if (commit.parentHashes.length > 1) continue;
+
+    const email = commit.authorEmail.trim().toLowerCase();
+    const name = commit.authorName.trim();
+    if (!email && !name) continue;
+
+    // Identity key: prefer email; fall back to name when email is missing.
+    const identityKey = email || `name:${name.toLowerCase()}`;
+    const author = authorByEmail.get(identityKey);
+    if (!author) {
+      authorByEmail.set(identityKey, {
+        name: name || email,
+        commitCount: 1,
+        firstSeen: commit.date,
+        lastSeen: commit.date,
+      });
+    } else {
+      author.commitCount++;
+      if (name) author.name = name;
+      if (commit.date < author.firstSeen) author.firstSeen = commit.date;
+      if (commit.date > author.lastSeen) author.lastSeen = commit.date;
+    }
+
+    const resolvedName = authorByEmail.get(identityKey)!.name;
+    const personId = generateEntityId(EntityType.PERSON, resolvedName);
+
+    // Aggregate per-module ownership signal for this commit (one edge per module
+    // the author touched, with the strongest status across the commit's files).
+    const moduleStatus = new Map<string, { added: boolean; lines: number }>();
+    for (const f of commit.filesChanged) {
+      const mod = normalizeModulePath(f.path, moduleDepth);
+      const lines = (f.additions || 0) + (f.deletions || 0);
+      const entry = moduleStatus.get(mod) ?? { added: false, lines: 0 };
+      entry.added = entry.added || f.status === "added";
+      entry.lines += lines;
+      moduleStatus.set(mod, entry);
+
+      const moduleAcc = modulesByName.get(mod);
+      if (!moduleAcc) {
+        modulesByName.set(mod, {
+          name: mod,
+          firstSeen: commit.date,
+          lastSeen: commit.date,
+          touches: 1,
+        });
+      } else {
+        moduleAcc.touches++;
+        if (commit.date < moduleAcc.firstSeen) moduleAcc.firstSeen = commit.date;
+        if (commit.date > moduleAcc.lastSeen) moduleAcc.lastSeen = commit.date;
+      }
+    }
+
+    for (const [mod, status] of moduleStatus) {
+      const moduleId = generateEntityId(EntityType.MODULE, mod);
+      const edgeKey = `${personId} ${moduleId}`;
+      const edge = edges.get(edgeKey);
+      if (!edge) {
+        edges.set(edgeKey, {
+          personId,
+          moduleId,
+          authored: status.added,
+          lines: status.lines,
+          commitCount: 1,
+          firstSeen: commit.date,
+          lastSeen: commit.date,
+        });
+      } else {
+        edge.authored = edge.authored || status.added;
+        edge.lines += status.lines;
+        edge.commitCount++;
+        if (commit.date < edge.firstSeen) edge.firstSeen = commit.date;
+        if (commit.date > edge.lastSeen) edge.lastSeen = commit.date;
+      }
+    }
+  }
+
+  const entities: Entity[] = [];
+  for (const author of authorByEmail.values()) {
+    entities.push({
+      id: generateEntityId(EntityType.PERSON, author.name),
+      type: EntityType.PERSON,
+      name: author.name,
+      aliases: [],
+      description: "",
+      firstSeen: author.firstSeen,
+      lastSeen: author.lastSeen,
+      // frequency = commits authored, so the ON CONFLICT additive merge keeps
+      // this person's weight consistent with LLM-emitted PERSON entities.
+      frequency: author.commitCount,
+      metadata: {},
+    });
+  }
+
+  for (const mod of modulesByName.values()) {
+    entities.push({
+      id: generateEntityId(EntityType.MODULE, mod.name),
+      type: EntityType.MODULE,
+      name: mod.name,
+      aliases: [],
+      description: "",
+      firstSeen: mod.firstSeen,
+      lastSeen: mod.lastSeen,
+      // frequency = number of times this module was touched. The additive ON
+      // CONFLICT merge folds this into any LLM-emitted MODULE of the same id.
+      frequency: mod.touches,
+      metadata: {},
+    });
+  }
+
+  const relations: Relation[] = [];
+  for (const edge of edges.values()) {
+    if (edge.personId === edge.moduleId) continue; // defensive: never a self-loop
+    const type = edge.authored ? RelationType.AUTHORED : RelationType.MODIFIED;
+    const id = generateRelationId(type, edge.personId, edge.moduleId);
+    // Weight by commit count + lines touched — a person who repeatedly edits a
+    // module, or moves a lot of lines, owns it more strongly.
+    const weight = edge.commitCount + Math.min(edge.lines, 100);
+    relations.push({
+      id,
+      type,
+      sourceId: edge.personId,
+      targetId: edge.moduleId,
+      weight,
+      description: edge.authored
+        ? `Authored across ${edge.commitCount} commit(s)`
+        : `Modified across ${edge.commitCount} commit(s)`,
+      evidence: [],
+      firstSeen: edge.firstSeen,
+      lastSeen: edge.lastSeen,
+    });
+  }
+
+  return { entities, relations };
 }
 
 // ================================================================
