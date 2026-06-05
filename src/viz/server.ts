@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import type { GraphResponse, StatsResponse } from "./api.js";
 import type { VizDataProvider } from "./provider.js";
+import { logger } from "../shared/logger.js";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -117,7 +118,9 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
   });
 
   // Find available port
-  let port = options.port;
+  const startPort = options.port;
+  let port = startPort;
+  let bound = false;
   for (let attempt = 0; attempt < 10; attempt++) {
     try {
       await new Promise<void>((resolve, reject) => {
@@ -127,6 +130,7 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
           resolve();
         });
       });
+      bound = true;
       break;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {
@@ -137,16 +141,39 @@ export async function startVizServer(options: VizServerOptions): Promise<void> {
     }
   }
 
+  // If every port in the range was taken, the loop falls through without
+  // binding. Fail loudly instead of advertising a URL for a server that never
+  // listened (which would then try to open a dead page in the browser).
+  if (!bound) {
+    throw new Error(
+      `No free port in range ${startPort}..${startPort + 9}. ` +
+        `Pass --port <number> to pick a different range.`,
+    );
+  }
+
   const url = `http://localhost:${port}`;
   console.log(`\n  Hald Graph Viewer`);
   console.log(`  ${url}`);
   console.log(`  Press Ctrl+C to stop\n`);
 
-  // Auto-open browser
+  // Auto-open browser. Use execFile (no shell) so the URL is passed as a single
+  // argument rather than interpolated into a shell command line. On Windows,
+  // `start` is a cmd builtin, so route through `cmd /c start "" <url>`.
   if (open) {
-    const cmd =
-      process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-    exec(`${cmd} ${url}`);
+    const [cmd, cmdArgs] =
+      process.platform === "darwin"
+        ? (["open", [url]] as const)
+        : process.platform === "win32"
+          ? (["cmd", ["/c", "start", "", url]] as const)
+          : (["xdg-open", [url]] as const);
+    execFile(cmd, [...cmdArgs], (err) => {
+      if (err) {
+        logger.warn("Failed to auto-open browser", {
+          error: err.message,
+          url,
+        });
+      }
+    });
   }
 
   // Graceful shutdown

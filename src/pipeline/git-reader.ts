@@ -50,6 +50,15 @@ export async function* readCommits(options: GitReaderOptions): AsyncIterable<Com
   const git = simpleGit(options.repoPath);
   const args = buildLogArgs(options);
 
+  // Guard the no-commits case (a freshly `git init`'d repo). `git log` exits
+  // fatal — "your current branch ... does not have any commits yet" — which
+  // would otherwise bubble up as a scary "Indexing failed" crash. Detect it
+  // up front and stream zero commits so callers hit the friendly empty path.
+  if (!(await hasCommits(git))) {
+    logger.info("git-reader: repository has no commits");
+    return;
+  }
+
   const end = logger.time("git-reader: read commits");
 
   // Call 1: commit metadata + file statuses (M/A/D/R + paths)
@@ -109,6 +118,19 @@ export async function* readCommits(options: GitReaderOptions): AsyncIterable<Com
 
   end();
   logger.info("git-reader: done", { commits: commits.length });
+}
+
+/**
+ * Returns true if the repository has at least one commit reachable from HEAD.
+ * A freshly-init'd repo (no commits) returns false rather than throwing.
+ */
+async function hasCommits(git: ReturnType<typeof simpleGit>): Promise<boolean> {
+  try {
+    await git.raw(["rev-parse", "--verify", "HEAD"]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Get the current HEAD commit hash. */

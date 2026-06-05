@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { simpleGit } from "simple-git";
 import { createSampleRepo } from "../helpers/sample-repo.js";
 import { readCommits, getHead, getFileTree } from "../../src/pipeline/git-reader.js";
 
@@ -99,5 +100,31 @@ describe("git-reader", () => {
     expect(tree).toContain("package.json");
     expect(tree).toContain("src/index.ts");
     expect(tree).toContain("src/billing/processor.ts");
+  });
+});
+
+describe("git-reader — empty repo", () => {
+  let emptyDir: string;
+
+  beforeAll(async () => {
+    // A freshly-init'd repo with zero commits: `git log` fatals here, which
+    // used to crash the whole scan. readCommits must degrade to zero commits.
+    emptyDir = mkdtempSync(join(tmpdir(), "hald-empty-"));
+    const git = simpleGit(emptyDir);
+    await git.init();
+    await git.addConfig("user.name", "Nobody");
+    await git.addConfig("user.email", "nobody@example.com");
+  }, 30_000);
+
+  afterAll(() => {
+    rmSync(emptyDir, { recursive: true, force: true });
+  });
+
+  it("yields zero commits instead of throwing", async () => {
+    const commits = [];
+    for await (const commit of readCommits({ repoPath: emptyDir })) {
+      commits.push(commit);
+    }
+    expect(commits.length).toBe(0);
   });
 });

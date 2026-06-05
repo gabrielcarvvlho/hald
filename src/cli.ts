@@ -33,6 +33,28 @@ program
 // index
 // ================================================================
 
+/**
+ * Actionable guidance shown when `hald scan` runs with no LLM API key in
+ * "auto" provider mode. Indexing requires a provider, so we surface the exact
+ * env vars to set rather than pricing an unknown provider and prompting.
+ */
+function noProviderGuidance(): string {
+  return [
+    "",
+    "  No LLM API key found — indexing needs a provider to extract entities.",
+    "",
+    "  Set one of these environment variables and re-run `hald scan`:",
+    "    ANTHROPIC_API_KEY   (Claude)",
+    "    OPENAI_API_KEY      (GPT)",
+    "    GOOGLE_API_KEY      (Gemini)",
+    "    ZHIPU_API_KEY       (GLM)",
+    "",
+    "  Or index from your coding agent via the hald_index MCP tool",
+    "  (agent-mediated mode — no key required).",
+    "",
+  ].join("\n");
+}
+
 program
   .command("scan")
   .description("Scan the current repository's git history")
@@ -50,8 +72,15 @@ program
         provider: opts.provider,
       });
 
-      // Detect actual provider for cost estimation
+      // Provider gate FIRST — before any cost estimate or prompt. When the
+      // provider is "auto" and no API key is detected, indexing can't run, so
+      // fail fast with actionable guidance instead of pricing an unknown
+      // provider (as Anthropic) and prompting "Proceed?" only to crash later.
       const detected = detectProvider();
+      if (config.provider === "auto" && !detected) {
+        console.error(noProviderGuidance());
+        process.exit(1);
+      }
       const providerName =
         config.provider === "auto" ? (detected?.provider ?? "unknown") : config.provider;
 
@@ -169,91 +198,96 @@ program
       const db = openDatabase(config.storagePath);
       const store = new Store(db);
 
-      const stats = store.getStats();
-      if (stats.entities === 0) {
-        console.error("No index found. Run `hald scan` first.");
-        store.close();
-        process.exit(1);
-      }
-
-      const searchType = opts.type === "auto" ? classifyQuery(question) : opts.type;
-
-      // Create QueryEmbedder if an embedding-capable provider is available
-      const detected = detectProvider();
-      const provider = detected?.provider ?? "auto";
-      const embeddingClient = await createEmbeddingClient({ provider, maxRetries: 2 });
-      const queryEmbedder = new QueryEmbedder(embeddingClient);
-
-      console.log(`Search type: ${searchType}\n`);
-
-      if (searchType === "global") {
-        const result = await globalSearch(store, {
-          query: question,
-          maxCommunities: 5,
-          queryEmbedder,
-        });
-
-        if (result.communities.length === 0) {
-          console.log("No relevant communities found.");
-        } else {
-          if (result.topEntities.length > 0) {
-            console.log("### Key Entities");
-            for (const e of result.topEntities) {
-              console.log(`  [${e.type}] ${e.name} — ${e.description}`);
-            }
-            console.log("");
-          }
-          for (const community of result.communities) {
-            console.log(`## ${community.title}`);
-            console.log(community.summary);
-            console.log("");
-          }
+      // Close the store in finally so a query/embedding failure never leaks the
+      // SQLite handle (matches orchestrator.ts). The empty-index branch closes
+      // explicitly first because process.exit() skips finally.
+      try {
+        const stats = store.getStats();
+        if (stats.entities === 0) {
+          console.error("No index found. Run `hald scan` first.");
+          store.close();
+          process.exit(1);
         }
-      } else {
-        const result = await localSearch(store, {
-          query: question,
-          maxEntities: 10,
-          maxRelations: 20,
-          maxTextUnits: 5,
-          queryEmbedder,
-        });
 
-        if (result.entities.length === 0) {
-          console.log("No relevant entities found.");
-        } else {
-          if (result.totalEntityMatches > result.entities.length) {
-            console.log(
-              `### Entities (showing ${result.entities.length} of ${result.totalEntityMatches})`,
-            );
+        const searchType = opts.type === "auto" ? classifyQuery(question) : opts.type;
+
+        // Create QueryEmbedder if an embedding-capable provider is available
+        const detected = detectProvider();
+        const provider = detected?.provider ?? "auto";
+        const embeddingClient = await createEmbeddingClient({ provider, maxRetries: 2 });
+        const queryEmbedder = new QueryEmbedder(embeddingClient);
+
+        console.log(`Search type: ${searchType}\n`);
+
+        if (searchType === "global") {
+          const result = await globalSearch(store, {
+            query: question,
+            maxCommunities: 5,
+            queryEmbedder,
+          });
+
+          if (result.communities.length === 0) {
+            console.log("No relevant communities found.");
           } else {
-            console.log("### Entities");
+            if (result.topEntities.length > 0) {
+              console.log("### Key Entities");
+              for (const e of result.topEntities) {
+                console.log(`  [${e.type}] ${e.name} — ${e.description}`);
+              }
+              console.log("");
+            }
+            for (const community of result.communities) {
+              console.log(`## ${community.title}`);
+              console.log(community.summary);
+              console.log("");
+            }
           }
-          for (const e of result.entities) {
-            const tag = e.isSeed ? "seed" : `${e.hopDistance}-hop`;
-            console.log(
-              `  [${e.type}] ${e.name} — ${e.description} (${tag}, score: ${e.score.toFixed(2)})`,
-            );
-          }
+        } else {
+          const result = await localSearch(store, {
+            query: question,
+            maxEntities: 10,
+            maxRelations: 20,
+            maxTextUnits: 5,
+            queryEmbedder,
+          });
 
-          if (result.relations.length > 0) {
-            console.log("\n### Relations");
-            for (const r of result.relations) {
+          if (result.entities.length === 0) {
+            console.log("No relevant entities found.");
+          } else {
+            if (result.totalEntityMatches > result.entities.length) {
               console.log(
-                `  ${r.sourceName} --[${r.type}]--> ${r.targetName} (weight: ${r.weight})`,
+                `### Entities (showing ${result.entities.length} of ${result.totalEntityMatches})`,
+              );
+            } else {
+              console.log("### Entities");
+            }
+            for (const e of result.entities) {
+              const tag = e.isSeed ? "seed" : `${e.hopDistance}-hop`;
+              console.log(
+                `  [${e.type}] ${e.name} — ${e.description} (${tag}, score: ${e.score.toFixed(2)})`,
               );
             }
-          }
 
-          if (result.communities.length > 0) {
-            console.log("\n### Community Context");
-            for (const c of result.communities) {
-              console.log(`  ${c.title}: ${c.summary}`);
+            if (result.relations.length > 0) {
+              console.log("\n### Relations");
+              for (const r of result.relations) {
+                console.log(
+                  `  ${r.sourceName} --[${r.type}]--> ${r.targetName} (weight: ${r.weight})`,
+                );
+              }
+            }
+
+            if (result.communities.length > 0) {
+              console.log("\n### Community Context");
+              for (const c of result.communities) {
+                console.log(`  ${c.title}: ${c.summary}`);
+              }
             }
           }
         }
+      } finally {
+        store.close();
       }
-
-      store.close();
     } catch (err) {
       console.error(`Query failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
