@@ -46,8 +46,9 @@ These tools are provided via the MCP server and work the same across all platfor
 
 For indexing, set at least one LLM API key:
 - `ANTHROPIC_API_KEY` — Claude (default)
-- `OPENAI_API_KEY` — GPT-4.1 / compatible endpoints
+- `OPENAI_API_KEY` — GPT (default `gpt-5.4-mini`) / compatible endpoints
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` — Gemini
+- `ZHIPU_API_KEY` — Zhipu AI GLM models (default `glm-4-flash`)
 - `HALD_BASE_URL` — Custom endpoints (Ollama, OpenRouter)
 
 If no key is set, indexing falls back to agent-mediated mode (zero cost, the agent performs extraction itself).

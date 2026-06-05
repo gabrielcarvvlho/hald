@@ -24,7 +24,11 @@ GraphRAG-powered codebase intelligence. Builds a knowledge graph from your git h
 # Install
 npm install -g haldy
 
-# Scan your repository (requires an LLM API key)
+# Try it now — zero key, zero cost: open a built-in demo graph
+hald graph --mock
+
+# Scan your repository (uses an LLM API key if one is set;
+# falls back to a key-free, agent-mediated path otherwise)
 cd your-repo
 hald scan
 
@@ -34,6 +38,9 @@ hald ask "why did we migrate to gRPC?"
 hald ask "what changed most in the last 3 months?"
 hald stats
 ```
+
+No API key? `hald scan` falls back to **agent-mediated extraction** — your AI agent
+performs the entity extraction itself at zero extra cost (see [LLM Providers](#llm-providers)).
 
 ## How It Works
 
@@ -104,13 +111,14 @@ Works fully offline — no CDN dependencies.
 
 ## LLM Providers
 
-hald auto-detects your available API key. Set one of these before running `hald scan`:
+hald auto-detects your available API key. Set one of these before running `hald scan` for the fastest, highest-quality indexing. No key set? hald falls back to **agent-mediated extraction** — your AI agent does the extraction itself at zero extra cost.
 
 | Provider | Env Var | Default Model | Cost per 1k commits |
 |---|---|---|---|
 | Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-6 | ~$0.50-$1.00 |
 | OpenAI | `OPENAI_API_KEY` | gpt-5.4-mini | ~$0.50-$1.00 |
 | Google | `GOOGLE_API_KEY` | gemini-3.1-flash-lite-preview | ~$0.15-$0.40 |
+| Zhipu AI | `ZHIPU_API_KEY` | glm-4-flash | ~$0.05-$0.15 |
 | Ollama (local) | `OPENAI_API_KEY` + `HALD_BASE_URL` | configurable | $0.00 |
 
 Querying is always free — no LLM calls at query time.
@@ -119,11 +127,7 @@ Querying is always free — no LLM calls at query time.
 
 ### Claude Code
 
-```bash
-claude plugin add hald
-```
-
-Or add to your project's `.mcp.json`:
+Add hald to your project's `.mcp.json`:
 
 ```json
 {

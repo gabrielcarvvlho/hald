@@ -32,42 +32,7 @@ Deferred work captured during reviews. Each item should have enough context that
 
 **Depends on / blocked by:** None. Could be a benchmark added to CI.
 
-## Repo polish quick wins (orthogonal to viz, target a separate `chore/cleanup-polish` branch)
-
-### Fix ESLint failures in `.opencode/plugins/hald.js`
-
-**What:** 6 ESLint errors in `.opencode/plugins/hald.js` (no-undef × 4, no-require-imports × 2). File uses CommonJS (`require`, `module.exports`) in an ESM project.
-
-**Why:** `npm run lint` currently fails on this file. CI may be green only because lint isn't gated, but it's a bomb waiting to land.
-
-**Context:** Either (a) convert the OpenCode plugin to ESM (verify OpenCode loader supports it), or (b) add an eslint config override scoped to `.opencode/plugins/*.js` that allows CommonJS.
-
-### Rename DB file `oracle.db` → `hald.db`
-
-**What:** Update `src/store/db.ts:17` and `src/cli.ts:347` to use `hald.db` instead of `oracle.db`. Add a one-time migration that detects and renames existing `oracle.db` files.
-
-**Why:** Vestigial from the git-oracle → hald rename. Existing users have `.hald/oracle.db` which is brand-inconsistent. Filename is the last place "oracle" still appears in user-visible state.
-
-**Context:** Migration logic: at `openDatabase()` time, if `hald.db` doesn't exist but `oracle.db` does in the same dir, rename it (and `oracle.db-shm`, `oracle.db-wal`). Fall back to `oracle.db` only if rename fails.
-
-### Cleanup `.git-oracle/` directory
-
-**What:** Remove the `.git-oracle/` directory at repo root (296KB SQLite vestigial from old project name).
-
-**Why:** Cruft. Confusing for contributors who clone the repo.
-
-**Context:** Don't `git rm` blindly — check whether anything references it. The repo's own `.hald/` is the active storage path now (per `src/shared/config.ts:42`). Likely safe to delete; the `.gitignore` was recently modified (line 27) to remove `.git-oracle/` from ignores, suggesting an in-progress decision.
-
-### Refresh default LLM models
-
-**What:** Update default model strings:
-- `src/llm/anthropic.ts:4` — `claude-sonnet-4-20250514` → current (e.g., `claude-sonnet-4-6` or `claude-opus-4-7`)
-- `src/llm/openai.ts:4` — `gpt-5.4-mini` → verify current
-- `src/llm/google.ts:6` — `gemini-3.1-flash-lite-preview` → verify current
-
-**Why:** Cutoff is 2026-04-25. The Claude default is from May 2025. Newer models are usually cheaper and smarter for the same task.
-
-**Context:** Run a small benchmark indexing the same fixture repo with each model, compare cost and extraction quality. Pick the best price/quality combo. Update README cost table to match.
+## Speculative surfaces — deferred until distribution signal validates demand
 
 ### TUI surface — deferred until distribution signal validates demand
 
@@ -79,36 +44,28 @@ Deferred work captured during reviews. Each item should have enough context that
 
 **Cons:** Three frontends to maintain on a solo project (CLI, web viz, TUI). Demand not yet validated — no user has asked for it. Splits attention from the viz polish + distribution sprint that's the current bet.
 
-**Context:** Considered during /plan-ceo-review on 2026-04-26 in response to "faria sentido termos uma TUI?" (https://opentui.com/). Decision: defer. The reframe revealed the user's real pain was ugly `haldy scan` output (now Tier 1 work — listr2 presenter), not lack of an interactive surface. TUI remains a real Phase 2 candidate.
+**Context:** Considered during /plan-ceo-review on 2026-04-26 in response to "faria sentido termos uma TUI?" (https://opentui.com/). Decision: defer. The reframe revealed the user's real pain was ugly `haldy scan` output (now shipped — listr2 presenter), not lack of an interactive surface. TUI remains a real Phase 2 candidate.
 
 **Trigger condition for revisit:** After viz polish ships + 3-day distribution sprint (Show HN, awesome lists, outreach), watch ~2 weeks of signal. If users say "I want this in my terminal," "I work over SSH," or "make it asciinema-able" — TUI becomes Phase 2, scoped at ~3-5 days with OpenTUI. If users don't ask, log the learning ("audience uses browser fine") and skip.
 
 **Scoped MVP if revisited:** Single-screen layout — left pane lists communities sorted by size, right pane shows community detail (LLM summary + top 5 entities), bottom pane shows recent commits touching the selected community. Keyboard nav: arrows + Enter + `/` for search. Reuses `localSearch`/`globalSearch` from `src/query/`. Entry point: `hald` with no args opens the TUI; existing subcommands unchanged.
 
-**Depends on / blocked by:** Should NOT ship before viz polish + distribution sprint. Needs TTY detection (will share infra with the Tier 1 presenter from `feat/clusterer-hardening`).
+**Depends on / blocked by:** Should NOT ship before viz polish + distribution sprint.
 
 **Effort estimate:** M (3-5 days human, ~half-day with CC+gstack).
 
 **Priority:** P3 — speculative until demand validated.
 
-### Tier 2 — Live scan dashboard with OpenTUI
+### Live scan dashboard with OpenTUI
 
-**What:** Replace the (Tier 1) listr2 sequential output with a real-estate-aware live dashboard during `haldy scan` — like `bun install` or `cargo build`. Persistent regions: pipeline progress table, cost burn meter, ETA, recent extraction samples scrolling at the bottom.
+**What:** Replace the listr2 sequential output with a real-estate-aware live dashboard during `haldy scan` — like `bun install` or `cargo build`. Persistent regions: pipeline progress table, cost burn meter, ETA, recent extraction samples scrolling at the bottom.
 
-**Why:** Tier 1 (listr2) solves "ugly scan output" for free. Tier 2 turns the scan command itself into a viral asset — an asciinema cast of the dashboard becomes a second hero alongside the web viz GIF. This is where OpenTUI actually earns its keep (interactive layout, not just sequential output).
+**Why:** The shipped listr2 presenter solves "ugly scan output" for free. A live dashboard turns the scan command itself into a viral asset — an asciinema cast of the dashboard becomes a second hero alongside the web viz GIF. This is where OpenTUI actually earns its keep (interactive layout, not just sequential output).
 
-**Context:** Considered during /plan-ceo-review on 2026-04-26 alongside the TUI question. Recommendation was Tier 1 first (3-4h, fixes the immediate pain), Tier 2 only if Tier 1 ships and there's appetite for a second hero asset. Don't blow the focus on the viz polish sprint by going to Tier 2 first.
+**Context:** Considered during /plan-ceo-review on 2026-04-26 alongside the TUI question. Recommendation was the listr2 presenter first (now shipped), the dashboard only if there's appetite for a second hero asset. Don't blow the focus on the viz polish sprint by chasing it prematurely.
 
-**Depends on / blocked by:** Tier 1 (listr2 presenter) should ship first — establishes the Presenter interface that Tier 2 swaps an implementation into. Same TTY-detection infra applies.
+**Depends on / blocked by:** Builds on the shipped Presenter interface — the dashboard would swap a new implementation into the existing presenter abstraction. Same TTY-detection infra applies.
 
 **Effort estimate:** M (1-1.5 days human, ~1-2h with CC+gstack).
 
-**Priority:** P3 — pursue only if Tier 1 lands well and the viz polish + distribution sprint clears.
-
-### Bump package version `0.1.0` → `0.2.0`
-
-**What:** Update `package.json` version from `0.1.0` to at least `0.2.0`.
-
-**Why:** Many features shipped since 0.1.0 (rename, brutal review fixes, library API exposed, vendor bundling). SemVer hygiene says minor bump for additive features.
-
-**Context:** Coordinate with CHANGELOG (if exists) and the npm publish workflow. Tag release after viz polish is done — that becomes the natural cut point.
+**Priority:** P3 — pursue only if the viz polish + distribution sprint clears and there's appetite for a second hero asset.

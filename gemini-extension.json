@@ -1,5 +1,19 @@
 {
   "name": "hald",
   "description": "Your codebase, held. GraphRAG-powered codebase intelligence for git repositories.",
-  "skills_dir": "skills"
+  "skills_dir": "skills",
+  "mcpServers": {
+    "hald": {
+      "command": "npx",
+      "args": ["haldy", "serve"],
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "ZHIPU_API_KEY": "${ZHIPU_API_KEY}",
+        "HALD_BASE_URL": "${HALD_BASE_URL}"
+      }
+    }
+  }
 }

@@ -27,7 +27,8 @@
     "lint:types": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "preview:scan": "tsx scripts/preview-pretty-scan.ts"
+    "preview:scan": "tsx scripts/preview-pretty-scan.ts",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "graphrag",
@@ -56,6 +57,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gabrielcarvvlho/hald.git"
+  },
+  "homepage": "https://github.com/gabrielcarvvlho/hald#readme",
+  "bugs": {
+    "url": "https://github.com/gabrielcarvvlho/hald/issues"
   },
   "engines": {
     "node": ">=20"

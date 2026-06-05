@@ -14,7 +14,7 @@ You should receive an acknowledgment within 48 hours. We will work with you to u
 
 ## Scope
 
-Hald processes git history and stores extracted data in a local SQLite database (`.hald/oracle.db`). Security concerns include:
+Hald processes git history and stores extracted data in a local SQLite database (`.hald/hald.db`). Security concerns include:
 
 - **API key handling** — Hald reads LLM provider keys from environment variables. Keys are never stored on disk or logged.
 - **Local data only** — The knowledge graph is stored locally. Hald does not transmit repository data to any service other than the configured LLM provider for indexing.

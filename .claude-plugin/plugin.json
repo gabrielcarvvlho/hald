@@ -1,8 +1,11 @@
 {
   "name": "hald",
   "description": "Your codebase, held. GraphRAG-powered codebase intelligence for git repositories. Ask questions about architectural decisions, find domain experts, trace code evolution, and surface hidden coupling.",
-  "version": "0.1.0",
-  "author": { "name": "Gabriel" },
+  "version": "0.2.1",
+  "author": { "name": "Gabriel Carvalho", "url": "https://github.com/gabrielcarvvlho" },
+  "homepage": "https://github.com/gabrielcarvvlho/hald#readme",
+  "repository": "https://github.com/gabrielcarvvlho/hald",
   "license": "MIT",
-  "keywords": ["graphrag", "git", "knowledge-graph", "institutional-knowledge"]
+  "keywords": ["graphrag", "git", "knowledge-graph", "institutional-knowledge"],
+  "mcpServers": "./.mcp.json"
 }

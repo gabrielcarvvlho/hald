@@ -28,7 +28,7 @@
 5. **API keys for indexing:** Codex runs in a sandbox with restricted env.
    Set at least one of these in your Codex MCP server config's `env` block:
    - `ANTHROPIC_API_KEY` — for Claude (default)
-   - `OPENAI_API_KEY` — for GPT-4.1 / compatible endpoints
+   - `OPENAI_API_KEY` — for GPT (default `gpt-5.4-mini`) / compatible endpoints
    - `GOOGLE_API_KEY` — for Gemini
    - `HALD_BASE_URL` — for custom endpoints (Ollama, OpenRouter)
 
