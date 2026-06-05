@@ -14,6 +14,13 @@
     </div>
     <div class="header-right">
       <span id="stats-text" class="stats-text">Loading...</span>
+      <button id="btn-help" class="header-btn" title="Gestures &amp; shortcuts" aria-label="Gestures and shortcuts" aria-expanded="false" aria-controls="shortcuts-popover">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+          <circle cx="8" cy="8" r="6.5"></circle>
+          <path d="M6 6a2 2 0 1 1 2.6 1.9c-.5.2-.6.5-.6 1v.3"></path>
+          <line x1="8" y1="11.4" x2="8" y2="11.5"></line>
+        </svg>
+      </button>
       <button id="btn-screenshot" class="header-btn" title="Save as PNG" aria-label="Save as PNG" disabled>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
           <rect x="1.5" y="3.5" width="13" height="10" rx="1.5"></rect>
@@ -40,10 +47,27 @@
     </div>
   </header>
 
+  <!-- Shortcuts popover — opened by the header "?" button. Lists the
+       gestures and keyboard shortcuts. Wired by setupShortcuts(). -->
+  <div id="shortcuts-popover" class="shortcuts-popover" role="dialog" aria-label="Gestures and shortcuts" hidden>
+    <div class="shortcuts-popover-header">
+      <span class="shortcuts-popover-title">Gestures &amp; shortcuts</span>
+      <button class="shortcuts-popover-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <ul class="shortcuts-list">
+      <li><span class="shortcuts-gesture">Click</span><span class="shortcuts-desc">Inspect a node</span></li>
+      <li><span class="shortcuts-gesture">Cmd/Ctrl-click</span><span class="shortcuts-desc">Trace a path to a second node</span></li>
+      <li><span class="shortcuts-gesture">Click label</span><span class="shortcuts-desc">Explain a cluster</span></li>
+      <li><span class="shortcuts-gesture"><kbd>/</kbd></span><span class="shortcuts-desc">Focus search</span></li>
+      <li><span class="shortcuts-gesture"><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd></span><span class="shortcuts-desc">Pan the camera</span></li>
+      <li><span class="shortcuts-gesture"><kbd>Esc</kbd></span><span class="shortcuts-desc">Close / clear selection</span></li>
+    </ul>
+  </div>
+
   <!-- Toolbar -->
   <div id="toolbar">
     <div class="search-wrapper">
-      <input type="text" id="search-input" placeholder="Search entities..." autocomplete="off" />
+      <input type="text" id="search-input" placeholder="Search entities…  (press /)" autocomplete="off" />
     </div>
     <div id="filter-chips" class="filter-chips">
       <!-- Chips populated by setupTypeChips() based on actual entity types in the graph. -->
@@ -53,6 +77,49 @@
   <!-- Graph -->
   <div id="graph-container">
     <div id="loading">Loading graph...</div>
+
+    <!-- Legend — decodes the visual encoding. Collapsible; open/closed
+         state persisted in localStorage by setupLegend(). -->
+    <aside id="legend" aria-label="Legend">
+      <div class="legend-header">
+        <span class="legend-title">Legend</span>
+        <button id="legend-toggle" class="legend-toggle" type="button" aria-expanded="true" aria-label="Collapse legend" aria-controls="legend-body">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M4 6l4 4 4-4"></path>
+          </svg>
+        </button>
+      </div>
+      <div id="legend-body" class="legend-body">
+        <div class="legend-row">
+          <span class="legend-swatch legend-swatch-color"></span>
+          <span class="legend-label"><b>Color</b> — community (cluster)</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch legend-swatch-size"></span>
+          <span class="legend-label"><b>Size</b> — how often it appears</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch legend-swatch-edge"></span>
+          <span class="legend-label"><b>Edge</b> — relationship strength</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch legend-swatch-chip"></span>
+          <span class="legend-label"><b>Chips</b> — entity type filter</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- One-time first-run hint — top three gestures. Dismissal
+         persisted in localStorage by setupShortcuts(). -->
+    <div id="firstrun-hint" class="firstrun-hint" hidden>
+      <button class="firstrun-hint-close" type="button" aria-label="Dismiss hint">&times;</button>
+      <div class="firstrun-hint-title">Tips</div>
+      <ul class="firstrun-hint-list">
+        <li>Click a node to inspect it</li>
+        <li>Cmd/Ctrl-click a second node to trace a path</li>
+        <li>Press <kbd>?</kbd> for all gestures</li>
+      </ul>
+    </div>
   </div>
 
   <!-- Sidebar -->
@@ -69,6 +136,10 @@
       <div id="cluster-content"></div>
     </div>
   </div>
+
+  <!-- Toast — transient confirmations (e.g. "Saved PNG"). aria-live so
+       screen readers announce it. Shown/hidden by screenshot.js. -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- Dependencies: graphology first (peer dep), then sigma. Vendored locally to work offline. -->
   <script src="/assets/vendor/graphology.umd.min.js"></script>

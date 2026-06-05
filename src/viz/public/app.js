@@ -22,6 +22,8 @@ import { setupTypeChips, setupSearch, setupFilters } from "./search-filters.js";
 import { setupEvents } from "./events.js";
 import { setupCommunityLabels } from "./community-labels.js";
 import { setupScreenshot } from "./screenshot.js";
+import { setupLegend } from "./legend.js";
+import { setupShortcuts } from "./shortcuts.js";
 import { setupKeyboardShortcuts } from "./keyboard.js";
 import { setupTheme } from "./theme.js";
 import { setupClusterOverlay } from "./cluster-overlay.js";
@@ -33,11 +35,36 @@ import { startMotionLoop } from "./motion.js";
 // Init
 // ================================================================
 
+// Probe for WebGL support. Sigma needs a WebGL (or WebGL2) context to
+// render; some browsers (headless, locked-down, or with acceleration
+// disabled) ship the globals but can't produce a context. We
+// distinguish "engine missing" from "engine present, GPU unavailable"
+// so the error tells the viewer what to actually do about it.
+function hasWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(
+      canvas.getContext("webgl") || canvas.getContext("webgl2"),
+    );
+  } catch (_e) {
+    return false;
+  }
+}
+
 async function init() {
   const loadingEl = document.getElementById("loading");
 
   if (typeof graphology === "undefined" || typeof Sigma === "undefined") {
-    loadingEl.textContent = "Failed to load graph engine. Try rebuilding with `npm run build`.";
+    loadingEl.textContent =
+      "Failed to load the graph engine (graphology / Sigma).";
+    loadingEl.classList.add("error");
+    return;
+  }
+
+  if (!hasWebGL()) {
+    loadingEl.textContent =
+      "This browser can't render the graph: WebGL is unavailable. " +
+      "Try a hardware-accelerated browser.";
     loadingEl.classList.add("error");
     return;
   }
@@ -77,6 +104,8 @@ async function init() {
     setupFilters();
     setupCommunityLabels(graphData);
     setupScreenshot();
+    setupLegend();
+    setupShortcuts();
     setupKeyboardShortcuts();
     setupTheme();
     setupClusterOverlay();

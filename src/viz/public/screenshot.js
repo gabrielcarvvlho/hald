@@ -11,6 +11,29 @@ import { state } from "./state.js";
 import { getColors } from "./colors.js";
 import { drawCurvedEdges } from "./curved-edges.js";
 
+// Transient toast confirmation. The #toast element is aria-live=polite,
+// so updating its text also announces to screen readers. We clear any
+// pending hide timer first so rapid saves don't flicker.
+let toastTimer = null;
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.hidden = false;
+  // Force reflow so re-triggering the fade-in transition works even
+  // when the toast was already visible from a previous save.
+  void toast.offsetWidth;
+  toast.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.remove("is-visible");
+    // Hide after the fade-out so it leaves the accessibility tree.
+    setTimeout(() => {
+      toast.hidden = true;
+    }, 200);
+  }, 2200);
+}
+
 function captureScreenshotCanvas() {
   const COLORS = getColors();
   const canvases = state.renderer.getCanvases();
@@ -98,6 +121,7 @@ export function setupScreenshot() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      showToast("Saved PNG");
       // Defer revoke until next tick so the browser commits the download.
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }, "image/png");

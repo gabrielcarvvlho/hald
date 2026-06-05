@@ -247,8 +247,11 @@ html, body {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-quaternary);
+  /* Tertiary (not quaternary) for WCAG-passing contrast on the canvas. */
+  color: var(--text-tertiary);
   font-size: 15px;
+  text-align: center;
+  padding: 0 24px;
 }
 
 #loading.error {
@@ -863,6 +866,12 @@ html, body {
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
 }
 
+/* When a path banner is on screen it owns the top:16px slot; stack the
+   search-empty banner BELOW it instead of colliding at the same spot. */
+#graph-container:has(.path-banner:not([hidden])) .search-empty {
+  top: 64px;
+}
+
 /* ================================================================
    Empty State
    ================================================================ */
@@ -884,4 +893,577 @@ html, body {
 
 .empty-state-text {
   font-size: 13px;
+}
+
+.empty-state-text code {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 12px;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ================================================================
+   Legend — collapsible corner panel decoding the visual encoding
+   ================================================================ */
+
+#legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 12;
+  width: 232px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.10);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+[data-theme="dark"] #legend {
+  box-shadow: 0 4px 22px rgba(0, 0, 0, 0.45);
+}
+
+.legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 8px 12px;
+}
+
+.legend-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-quaternary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.legend-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background 0.15s, color 0.15s, transform 0.18s ease;
+}
+
+.legend-toggle:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* Collapsed: rotate the chevron and hide the body. */
+#legend.is-collapsed .legend-toggle {
+  transform: rotate(-90deg);
+}
+
+.legend-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+  /* Animate the collapse without measuring height: max-height + opacity.
+     overflow:hidden on #legend clips the slack. */
+  max-height: 200px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.2s ease, opacity 0.18s ease, padding 0.2s ease;
+}
+
+#legend.is-collapsed .legend-body {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.legend-label {
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.legend-label b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.legend-swatch {
+  flex-shrink: 0;
+  width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Color = community: a gradient dot standing in for the cluster palette. */
+.legend-swatch-color::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #d946ef 55%, #f59e0b);
+}
+
+/* Size = frequency: small dot beside large dot. */
+.legend-swatch-size::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  box-shadow: 11px 0 0 -1px var(--text-secondary);
+  margin-right: 8px;
+}
+
+/* Edge = strength: a thin-to-thick stroke. */
+.legend-swatch-edge::before {
+  content: "";
+  width: 18px;
+  height: 0;
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 2px solid var(--text-secondary);
+}
+
+/* Chips = entity type: a tiny pill echoing the toolbar chips. */
+.legend-swatch-chip::before {
+  content: "";
+  width: 16px;
+  height: 9px;
+  border-radius: 999px;
+  border: 1.5px solid var(--link);
+}
+
+/* ================================================================
+   Shortcuts popover — opened by the header "?" button
+   ================================================================ */
+
+.shortcuts-popover {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  z-index: 30;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
+  padding: 14px 16px 16px;
+  animation: shortcuts-pop-in 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] .shortcuts-popover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.shortcuts-popover[hidden] {
+  display: none;
+}
+
+@keyframes shortcuts-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.shortcuts-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.shortcuts-popover-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.shortcuts-popover-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--hover-bg);
+  border-radius: 6px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.shortcuts-popover-close:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.shortcuts-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcuts-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.shortcuts-gesture {
+  flex-shrink: 0;
+  width: 108px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.shortcuts-desc {
+  color: var(--text-tertiary);
+  line-height: 1.3;
+}
+
+/* Keycap styling — shared by popover, first-run hint, and any inline
+   <kbd> we surface. Reads like a physical key without shouting. */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--hover-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* ================================================================
+   First-run hint — one-time dismissible gesture primer
+   ================================================================ */
+
+.firstrun-hint {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 12;
+  width: 258px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--link);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.12);
+  padding: 12px 14px 12px 14px;
+  animation: cluster-card-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] .firstrun-hint {
+  box-shadow: 0 4px 22px rgba(0, 0, 0, 0.45);
+}
+
+.firstrun-hint[hidden] {
+  display: none;
+}
+
+.firstrun-hint-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-quaternary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.firstrun-hint-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.firstrun-hint-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-quaternary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.firstrun-hint-close:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   Toast — transient confirmation (e.g. "Saved PNG")
+   ================================================================ */
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 200;
+  padding: 9px 16px;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: var(--shadow-tooltip);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ================================================================
+   Truncation badge — perf agent surfaces this when the graph is
+   capped (e.g. "Showing 500 of 1,200"). Subtle pill, top-left.
+   ================================================================ */
+
+.graph-truncation-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 12;
+  padding: 4px 10px;
+  background: var(--bg-card);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+  pointer-events: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme="dark"] .graph-truncation-badge {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ================================================================
+   Focus-visible — consistent keyboard focus ring across every
+   interactive surface. Mouse clicks stay ring-free (:focus-visible).
+   ================================================================ */
+
+.header-btn:focus-visible,
+.filter-chip:focus-visible,
+#search-input:focus-visible,
+.relation-item:focus-visible,
+.cluster-entity:focus-visible,
+.path-banner-step:focus-visible,
+.community-label:focus-visible,
+.legend-toggle:focus-visible,
+.shortcuts-popover-close:focus-visible,
+.firstrun-hint-close:focus-visible,
+#btn-help:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* Search input already shows a border on focus; pair it with the ring
+   but drop the offset so the ring hugs the field. */
+#search-input:focus-visible {
+  outline-offset: 1px;
+}
+
+/* ================================================================
+   Responsive — keep the desktop layout intact; reflow on small screens
+   ================================================================ */
+
+@media (max-width: 720px) {
+  /* Toolbar: search flexes, chips wrap onto a second row. */
+  #toolbar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 8px 14px;
+    gap: 8px;
+  }
+
+  .search-wrapper {
+    flex: 1 1 100%;
+  }
+
+  #search-input {
+    width: 100%;
+  }
+
+  .filter-chips {
+    flex-wrap: wrap;
+  }
+
+  /* The toolbar is now variable-height, so anchor the graph below the
+     header only and let the toolbar push it via normal flow is not an
+     option (absolute). Give the canvas room with a larger top inset. */
+  #graph-container {
+    top: 132px;
+  }
+
+  /* Sidebar → full-width bottom sheet that slides up from the bottom. */
+  #sidebar {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100vw;
+    height: 60vh;
+    max-height: 60vh;
+    transform: translateY(100%);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+    border-top: 1px solid var(--border);
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+  }
+
+  #sidebar.open {
+    transform: translateY(0);
+  }
+
+  /* Reposition the floating corner panels so they don't overlap or
+     fight the bottom sheet. Legend keeps its corner; first-run hint
+     moves above it; shortcuts popover stays pinned under the header. */
+  #legend {
+    bottom: 12px;
+    left: 12px;
+    width: 200px;
+  }
+
+  .firstrun-hint {
+    right: 12px;
+    bottom: 12px;
+    width: 220px;
+  }
+
+  .shortcuts-popover {
+    right: 12px;
+    width: min(300px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 480px) {
+  #header {
+    padding: 0 14px;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+
+  #toolbar {
+    padding: 7px 12px;
+  }
+
+  #graph-container {
+    top: 128px;
+  }
+
+  /* Tighten the corner panels further on phones. */
+  #legend {
+    width: 176px;
+    font-size: 11px;
+  }
+
+  .firstrun-hint {
+    width: calc(100vw - 24px);
+    left: 12px;
+    right: 12px;
+  }
+
+  .sidebar,
+  #sidebar {
+    height: 66vh;
+    max-height: 66vh;
+    padding: 14px;
+  }
+
+  .cluster-overlay-card {
+    padding: 18px 18px;
+  }
+}
+
+/* ================================================================
+   Reduced motion — neutralize non-essential animation/transition for
+   viewers who request it. Keeps functional state changes instant.
+   ================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Kill the cluster-card entrance and the shortcuts popover pop-in. */
+  .cluster-overlay-card,
+  .shortcuts-popover,
+  .firstrun-hint {
+    animation: none;
+  }
+
+  /* Sidebar slides become instant snaps (both desktop X and mobile Y). */
+  #sidebar {
+    transition: none;
+  }
+
+  /* Neutralize the remaining decorative transitions. The * rule is
+     scoped to transition only — color/background changes still apply,
+     they just resolve instantly. */
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
