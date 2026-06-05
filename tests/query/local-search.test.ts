@@ -435,6 +435,30 @@ describe("localSearch", () => {
       // With embeddings, should find payments/billing by semantic similarity
       expect(result.entities.length).toBeGreaterThan(0);
     });
+
+    it("falls back to FTS-only when query embedding dimensions mismatch the index", async () => {
+      const { QueryEmbedder } = await import("../../src/query/similarity.js");
+      // Index stores 4-dim vectors (embedding_dimensions="4" in the fixture).
+      // Simulate querying under a different provider that emits 3-dim vectors.
+      const mismatchedClient = {
+        provider: "google" as const,
+        dimensions: 3,
+        async embed(texts: string[]): Promise<Float32Array[]> {
+          return texts.map(() => new Float32Array([0.1, 0.2, 0.3]));
+        },
+      };
+      const embedder = new QueryEmbedder(mismatchedClient);
+
+      // Must not throw "Dimension mismatch" — should gracefully degrade to FTS.
+      const result = await localSearch(store, {
+        query: "payments",
+        queryEmbedder: embedder,
+      });
+
+      // FTS-only fallback still returns matching entities.
+      expect(result.entities.length).toBeGreaterThan(0);
+      expect(result.entities.map((e) => e.name)).toContain("src/payments");
+    });
   });
 });
 
@@ -532,5 +556,105 @@ describe("localSearch — hub entity budget control", () => {
     });
 
     expect(result.entities.length).toBeLessThanOrEqual(5);
+  });
+});
+
+// ================================================================
+// totalRelations accounting — must count ALL candidate relations,
+// independent of the hop-1 traversal budget.
+// ================================================================
+
+describe("localSearch — totalRelations accounting", () => {
+  let db: Database.Database;
+  let store: StoreType;
+
+  // Two MODULE seeds that both match the query "widget", each connected to
+  // several distinct PERSON neighbors. With a tiny maxRelations the hop-1
+  // budget is exhausted while processing the first seed, so the buggy
+  // implementation (which incremented totalRelations inside the budget loop,
+  // after the `if (budget <= 0) break`) would never count the second seed's
+  // relations. The correct count is the full candidate set across both seeds.
+  beforeEach(() => {
+    db = new Database(":memory:");
+    db.pragma("foreign_keys = ON");
+    initSchema(db);
+    runMigrations(db);
+    store = new Store(db);
+
+    const modules = ["alpha", "beta"];
+    for (const m of modules) {
+      const mod: Entity = {
+        id: `module:widget-${m}`,
+        type: EntityType.MODULE,
+        name: `src/widget-${m}`,
+        aliases: [],
+        description: `Widget ${m} module`,
+        firstSeen: "2024-01-01",
+        lastSeen: "2024-06-01",
+        frequency: 5,
+        metadata: {},
+      };
+      store.upsertEntity(mod);
+
+      // 5 authored relations per module → 10 candidate relations total.
+      for (let i = 0; i < 5; i++) {
+        const person: Entity = {
+          id: `person:${m}-dev-${i}`,
+          // Names/descriptions deliberately avoid the "widget" token so only the
+          // two modules surface as FTS seeds — keeps the candidate count exact.
+          type: EntityType.PERSON,
+          name: `Contributor ${m.toUpperCase()} ${i}`,
+          aliases: [],
+          description: `Engineer number ${i} on team ${m}`,
+          firstSeen: "2024-01-01",
+          lastSeen: "2024-06-01",
+          frequency: 1,
+          metadata: {},
+        };
+        store.upsertEntity(person);
+
+        const rel: Relation = {
+          id: `rel:${m}-dev-${i}`,
+          type: RelationType.AUTHORED,
+          sourceId: `person:${m}-dev-${i}`,
+          targetId: `module:widget-${m}`,
+          weight: 3 + i,
+          description: `Dev ${i} authored widget ${m}`,
+          evidence: [],
+          firstSeen: "2024-01-01",
+          lastSeen: "2024-06-01",
+        };
+        store.upsertRelation(rel);
+      }
+    }
+  });
+
+  afterEach(() => db.close());
+
+  it("reports totalRelations across all seeds even when the hop budget is exhausted early", async () => {
+    const result = await localSearch(store, {
+      query: "widget",
+      maxRelations: 2, // exhausts the hop-1 budget on the first seed
+    });
+
+    // Budget caps the traversed/returned relations…
+    expect(result.relations.length).toBeLessThanOrEqual(2);
+
+    // …but totalRelations must reflect the full candidate set: both seeds,
+    // 5 relations each = 10. The buggy version under-reported (≈5) because the
+    // second seed was skipped once the budget hit zero.
+    const candidateCount =
+      store.getRelationsForEntity("module:widget-alpha").length +
+      store.getRelationsForEntity("module:widget-beta").length;
+    expect(candidateCount).toBe(10);
+    expect(result.totalRelations).toBe(candidateCount);
+  });
+
+  it("totalRelations is independent of maxRelations", async () => {
+    const tight = await localSearch(store, { query: "widget", maxRelations: 1 });
+    const loose = await localSearch(store, { query: "widget", maxRelations: 50 });
+
+    expect(tight.totalRelations).toBe(loose.totalRelations);
+    expect(tight.totalRelations).toBe(10);
   });
 });

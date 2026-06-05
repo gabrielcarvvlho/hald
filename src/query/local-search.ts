@@ -1,6 +1,8 @@
 import type { Store } from "../store/queries.js";
 import type { Entity, EntityType, Relation, TextUnit, Community } from "../shared/types.js";
 import { QueryEmbedder, rankBuffersBySimilarity } from "./similarity.js";
+import { resolveStoredDimensions } from "../llm/embeddings.js";
+import { logger } from "../shared/logger.js";
 
 // ================================================================
 // Types
@@ -112,9 +114,24 @@ export async function localSearch(store: Store, options: LocalSearchOptions): Pr
   if (queryEmbedding) {
     const allEmbeddings = store.getAllEntityEmbeddings();
     if (allEmbeddings.length > 0) {
-      const ranked = rankBuffersBySimilarity(queryEmbedding, allEmbeddings);
-      for (const item of ranked.slice(0, maxEntities * 3)) {
-        semanticScores.set(item.id, item.similarity);
+      // Guard against provider mismatch: an index built with one provider's
+      // embeddings (e.g. OpenAI 1536-dim) queried under another (e.g. Google
+      // 768-dim) would throw "Dimension mismatch" on every semantic query.
+      // Detect it up front and fall back to FTS-only ranking instead.
+      const storedDims = resolveStoredDimensions(
+        store.getMeta("embedding_dimensions"),
+        allEmbeddings[0]?.embedding,
+      );
+      if (storedDims !== null && storedDims !== queryEmbedding.length) {
+        logger.warn(
+          "Embedding dimension mismatch — falling back to FTS-only ranking",
+          { queryDimensions: queryEmbedding.length, storedDimensions: storedDims },
+        );
+      } else {
+        const ranked = rankBuffersBySimilarity(queryEmbedding, allEmbeddings);
+        for (const item of ranked.slice(0, maxEntities * 3)) {
+          semanticScores.set(item.id, item.similarity);
+        }
       }
     }
   }
@@ -264,7 +281,14 @@ function expandHops(
   const knownIds = new Set(seeds.map((s) => s.id));
   const allRelations: Relation[] = [];
   const relSeen = new Set<string>();
+
+  // Total candidate relations across all seeds — computed independently of the
+  // budget-limited loop below so the reported count never under-reports once
+  // the hop-1 budget is exhausted (later seeds' relations still count here).
   let totalRelations = 0;
+  for (const seed of seeds) {
+    totalRelations += (seedRelationsMap.get(seed.id) ?? []).length;
+  }
 
   // Collect raw neighbors with their connecting relation weight
   const rawNeighbors: Array<{
@@ -280,7 +304,6 @@ function expandHops(
   for (const seed of seeds) {
     if (hop1Budget <= 0) break;
     const rels = seedRelationsMap.get(seed.id) ?? [];
-    totalRelations += rels.length;
 
     const topRels = rels
       .filter((r) => r.weight >= MIN_RELATION_WEIGHT)

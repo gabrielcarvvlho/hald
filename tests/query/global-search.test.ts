@@ -67,6 +67,54 @@ describe("globalSearch", () => {
 
     expect(result.totalCommunities).toBe(2); // sample store has 2 communities
   });
+
+  it("falls back to FTS-only when query embedding dimensions mismatch the index", async () => {
+    const { QueryEmbedder } = await import("../../src/query/similarity.js");
+    // Index stores 4-dim community vectors (embedding_dimensions="4").
+    // Simulate a different provider emitting 3-dim query vectors.
+    const mismatchedClient = {
+      provider: "google" as const,
+      dimensions: 3,
+      async embed(texts: string[]): Promise<Float32Array[]> {
+        return texts.map(() => new Float32Array([0.1, 0.2, 0.3]));
+      },
+    };
+    const embedder = new QueryEmbedder(mismatchedClient);
+
+    // Must not throw "Dimension mismatch" — should gracefully degrade to FTS.
+    const result = await globalSearch(store, {
+      query: "payments gRPC migration",
+      queryEmbedder: embedder,
+    });
+
+    // FTS-only fallback still surfaces matching communities.
+    expect(result.communities.length).toBeGreaterThan(0);
+    const titles = result.communities.map((c) => c.title);
+    expect(titles.some((t) => t.toLowerCase().includes("payment"))).toBe(true);
+  });
+
+  it("falls back to FTS-only on dimension mismatch with a specific communityLevel", async () => {
+    const { QueryEmbedder } = await import("../../src/query/similarity.js");
+    const mismatchedClient = {
+      provider: "google" as const,
+      dimensions: 3,
+      async embed(texts: string[]): Promise<Float32Array[]> {
+        return texts.map(() => new Float32Array([0.1, 0.2, 0.3]));
+      },
+    };
+    const embedder = new QueryEmbedder(mismatchedClient);
+
+    const result = await globalSearch(store, {
+      query: "payments",
+      communityLevel: 0,
+      queryEmbedder: embedder,
+    });
+
+    // No throw; level filter still honored.
+    for (const c of result.communities) {
+      expect(c.level).toBe(0);
+    }
+  });
 });
 
 describe("classifyQuery", () => {

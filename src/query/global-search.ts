@@ -1,6 +1,8 @@
 import type { Store } from "../store/queries.js";
 import type { Entity, Community } from "../shared/types.js";
 import { QueryEmbedder, rankBuffersBySimilarity } from "./similarity.js";
+import { resolveStoredDimensions } from "../llm/embeddings.js";
+import { logger } from "../shared/logger.js";
 
 // ================================================================
 // Types
@@ -58,9 +60,24 @@ export async function globalSearch(
   if (queryEmbedding) {
     const communityEmbeddings = store.getAllCommunityEmbeddings();
     if (communityEmbeddings.length > 0) {
-      const ranked = rankBuffersBySimilarity(queryEmbedding, communityEmbeddings);
-      for (const item of ranked) {
-        semanticScores.set(item.id, item.similarity);
+      // Guard against provider mismatch: an index built with one provider's
+      // embeddings (e.g. OpenAI 1536-dim) queried under another (e.g. Google
+      // 768-dim) would throw "Dimension mismatch" on every semantic query.
+      // Detect it up front and fall back to FTS-only ranking instead.
+      const storedDims = resolveStoredDimensions(
+        store.getMeta("embedding_dimensions"),
+        communityEmbeddings[0]?.embedding,
+      );
+      if (storedDims !== null && storedDims !== queryEmbedding.length) {
+        logger.warn(
+          "Embedding dimension mismatch — falling back to FTS-only ranking",
+          { queryDimensions: queryEmbedding.length, storedDimensions: storedDims },
+        );
+      } else {
+        const ranked = rankBuffersBySimilarity(queryEmbedding, communityEmbeddings);
+        for (const item of ranked) {
+          semanticScores.set(item.id, item.similarity);
+        }
       }
     }
   }
@@ -80,9 +97,7 @@ export async function globalSearch(
       const ftsRankMap = new Map<string, number>();
       ftsResults.forEach((c, i) => ftsRankMap.set(c.id, i));
 
-      const levelIds = new Set(levelCommunities.map((c) => c.id));
       const scored = levelCommunities
-        .filter((c) => levelIds.has(c.id))
         .map((c) => {
           const semantic = semanticScores.get(c.id) ?? 0;
           const ftsIdx = ftsRankMap.get(c.id);

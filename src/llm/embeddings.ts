@@ -40,6 +40,44 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   return dot / denom;
 }
 
+/**
+ * Defensive cosine similarity. Returns null instead of throwing when the two
+ * vectors have mismatched dimensions (e.g. an index built under one provider
+ * queried under another). Callers treat null as "no semantic score".
+ */
+export function cosineSimilaritySafe(a: Float32Array, b: Float32Array): number | null {
+  if (a.length !== b.length) return null;
+  return cosineSimilarity(a, b);
+}
+
+/** Float32 dimension of a serialized embedding buffer (4 bytes per element). */
+export function bufferDimensions(buf: Buffer): number {
+  return Math.floor(buf.byteLength / Float32Array.BYTES_PER_ELEMENT);
+}
+
+/**
+ * Resolve the dimensionality of the embeddings stored in an index. Prefers the
+ * persisted `embedding_dimensions` meta value, falling back to the byte length
+ * of a sample stored vector. Returns null when neither is available (no
+ * embeddings indexed). Used by the query layer to detect provider mismatches
+ * (e.g. an index built with OpenAI's 1536-dim vectors queried under Google's
+ * 768-dim model) and gracefully fall back to FTS-only ranking.
+ */
+export function resolveStoredDimensions(
+  metaValue: string | null,
+  sampleBuffer?: Buffer,
+): number | null {
+  if (metaValue) {
+    const parsed = Number.parseInt(metaValue, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  if (sampleBuffer) {
+    const dims = bufferDimensions(sampleBuffer);
+    if (dims > 0) return dims;
+  }
+  return null;
+}
+
 // ── Buffer serialization ───────────────────────────────────────────────
 
 export function embeddingToBuffer(embedding: Float32Array): Buffer {

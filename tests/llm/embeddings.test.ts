@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   cosineSimilarity,
+  cosineSimilaritySafe,
+  bufferDimensions,
+  resolveStoredDimensions,
   embeddingToBuffer,
   bufferToEmbedding,
   createEmbeddingClient,
@@ -45,6 +48,51 @@ describe("cosineSimilarity", () => {
     const a = new Float32Array([1, 2]);
     const b = new Float32Array([1, 2, 3]);
     expect(() => cosineSimilarity(a, b)).toThrow("Dimension mismatch");
+  });
+});
+
+describe("cosineSimilaritySafe", () => {
+  it("matches cosineSimilarity when dimensions agree", () => {
+    const a = new Float32Array([1, 2, 3]);
+    const b = new Float32Array([1, 2, 3]);
+    expect(cosineSimilaritySafe(a, b)).toBeCloseTo(cosineSimilarity(a, b), 5);
+  });
+
+  it("returns null on dimension mismatch instead of throwing", () => {
+    const a = new Float32Array([1, 2]); // 2-dim
+    const b = new Float32Array([1, 2, 3]); // 3-dim
+    expect(() => cosineSimilaritySafe(a, b)).not.toThrow();
+    expect(cosineSimilaritySafe(a, b)).toBeNull();
+  });
+});
+
+describe("bufferDimensions", () => {
+  it("returns the Float32 element count of a serialized embedding", () => {
+    expect(bufferDimensions(embeddingToBuffer(new Float32Array([1, 2, 3])))).toBe(3);
+    expect(bufferDimensions(embeddingToBuffer(new Float32Array(1536)))).toBe(1536);
+    expect(bufferDimensions(embeddingToBuffer(new Float32Array([])))).toBe(0);
+  });
+});
+
+describe("resolveStoredDimensions", () => {
+  it("prefers the persisted meta value when present", () => {
+    expect(resolveStoredDimensions("1536")).toBe(1536);
+    // Meta wins even if a (stale) sample buffer disagrees
+    expect(resolveStoredDimensions("768", embeddingToBuffer(new Float32Array(1536)))).toBe(768);
+  });
+
+  it("falls back to the sample buffer byte length when meta is absent", () => {
+    expect(resolveStoredDimensions(null, embeddingToBuffer(new Float32Array(768)))).toBe(768);
+  });
+
+  it("returns null when neither meta nor a sample buffer is available", () => {
+    expect(resolveStoredDimensions(null)).toBeNull();
+  });
+
+  it("ignores non-positive or non-numeric meta and falls back", () => {
+    expect(resolveStoredDimensions("0", embeddingToBuffer(new Float32Array(4)))).toBe(4);
+    expect(resolveStoredDimensions("abc", embeddingToBuffer(new Float32Array(4)))).toBe(4);
+    expect(resolveStoredDimensions("abc")).toBeNull();
   });
 });
 
