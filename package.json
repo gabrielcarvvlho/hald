@@ -85,7 +85,7 @@
     "graphology-metrics": "^2.3.0",
     "listr2": "^10.2.1",
     "openai": "^4.80.0",
-    "ora": "^8.0.0",
+    "ora": "^9.4.0",
     "p-limit": "^6.0.0",
     "sigma": "^3.0.2",
     "simple-git": "^3.27.0"
