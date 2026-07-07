@@ -57,7 +57,7 @@
     <ul class="shortcuts-list">
       <li><span class="shortcuts-gesture">Click</span><span class="shortcuts-desc">Inspect a node</span></li>
       <li><span class="shortcuts-gesture">Cmd/Ctrl-click</span><span class="shortcuts-desc">Trace a path to a second node</span></li>
-      <li><span class="shortcuts-gesture">Click label</span><span class="shortcuts-desc">Explain a cluster</span></li>
+      <li><span class="shortcuts-gesture">Click label</span><span class="shortcuts-desc">Inspect a community</span></li>
       <li><span class="shortcuts-gesture"><kbd>/</kbd></span><span class="shortcuts-desc">Focus search</span></li>
       <li><span class="shortcuts-gesture"><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd></span><span class="shortcuts-desc">Pan the camera</span></li>
       <li><span class="shortcuts-gesture"><kbd>Esc</kbd></span><span class="shortcuts-desc">Close / clear selection</span></li>
@@ -116,16 +116,16 @@
       <div class="firstrun-hint-title">Tips</div>
       <ul class="firstrun-hint-list">
         <li>Click a node to inspect it</li>
+        <li>Click a community label for the cluster view</li>
         <li>Cmd/Ctrl-click a second node to trace a path</li>
-        <li>Press <kbd>?</kbd> for all gestures</li>
       </ul>
     </div>
   </div>
 
   <!-- Sidebar -->
-  <aside id="sidebar">
-    <button id="sidebar-close">&times;</button>
-    <div id="sidebar-content"></div>
+  <aside id="sidebar" aria-label="Graph inspector">
+    <button id="sidebar-close" type="button" aria-label="Back to overview" title="Back to overview">&#8592;</button>
+    <div id="sidebar-content" tabindex="-1" aria-live="polite"></div>
   </aside>
 
   <!-- Cluster overlay (Explain this cluster) -->

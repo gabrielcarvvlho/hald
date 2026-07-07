@@ -391,14 +391,37 @@ export interface CommunityTopEntity {
   frequency: number;
 }
 
+export interface CommunityRelationTypeSummary {
+  type: string;
+  count: number;
+  totalWeight: number;
+}
+
+export interface CommunityStrongRelation {
+  id: string;
+  type: string;
+  sourceId: string;
+  sourceName: string;
+  sourceType: string;
+  targetId: string;
+  targetName: string;
+  targetType: string;
+  weight: number;
+  description: string;
+}
+
 export interface CommunityDetailResponse {
   id: string;
   title: string;
   summary: string;
   topEntities: CommunityTopEntity[];
+  topRelationTypes: CommunityRelationTypeSummary[];
+  strongestRelations: CommunityStrongRelation[];
 }
 
 const TOP_ENTITIES_PER_COMMUNITY = 5;
+const TOP_RELATION_TYPES_PER_COMMUNITY = 5;
+const TOP_RELATIONS_PER_COMMUNITY = 6;
 
 export function getCommunityDetail(
   store: Store,
@@ -421,11 +444,60 @@ export function getCommunityDetail(
     return a.name.localeCompare(b.name);
   });
 
+  const memberIds = new Set(community.entityIds);
+  const relationStats = new Map<string, CommunityRelationTypeSummary>();
+  const strongestRelations: CommunityStrongRelation[] = [];
+
+  for (const relation of store.getAllRelations()) {
+    if (!memberIds.has(relation.sourceId) || !memberIds.has(relation.targetId)) {
+      continue;
+    }
+
+    const stat = relationStats.get(relation.type) ?? {
+      type: relation.type,
+      count: 0,
+      totalWeight: 0,
+    };
+    stat.count += 1;
+    stat.totalWeight += relation.weight;
+    relationStats.set(relation.type, stat);
+
+    const source = entityMap.get(relation.sourceId);
+    const target = entityMap.get(relation.targetId);
+    strongestRelations.push({
+      id: relation.id,
+      type: relation.type,
+      sourceId: relation.sourceId,
+      sourceName: source?.name ?? relation.sourceId,
+      sourceType: source?.type ?? "UNKNOWN",
+      targetId: relation.targetId,
+      targetName: target?.name ?? relation.targetId,
+      targetType: target?.type ?? "UNKNOWN",
+      weight: relation.weight,
+      description: relation.description,
+    });
+  }
+
+  const topRelationTypes = Array.from(relationStats.values())
+    .sort((a, b) => {
+      if (b.totalWeight !== a.totalWeight) return b.totalWeight - a.totalWeight;
+      if (b.count !== a.count) return b.count - a.count;
+      return a.type.localeCompare(b.type);
+    })
+    .slice(0, TOP_RELATION_TYPES_PER_COMMUNITY);
+
+  strongestRelations.sort((a, b) => {
+    if (b.weight !== a.weight) return b.weight - a.weight;
+    return a.id.localeCompare(b.id);
+  });
+
   return {
     id: community.id,
     title: community.title,
     summary: community.summary,
     topEntities: entities.slice(0, TOP_ENTITIES_PER_COMMUNITY),
+    topRelationTypes,
+    strongestRelations: strongestRelations.slice(0, TOP_RELATIONS_PER_COMMUNITY),
   };
 }
 

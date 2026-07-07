@@ -304,7 +304,21 @@ html, body {
   color: var(--text-primary);
 }
 
+#sidebar-close[hidden] {
+  display: none;
+}
+
 /* Sidebar content */
+
+.inspector-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-quaternary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+  padding-right: 32px;
+}
 
 .entity-name {
   font-size: 15px;
@@ -330,6 +344,120 @@ html, body {
   margin-bottom: 16px;
 }
 
+.inspector-loading,
+.inspector-muted,
+.inspector-error {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.inspector-error {
+  color: var(--error);
+}
+
+.inspector-empty-note {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hover-bg);
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inspector-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.inspector-metric {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--hover-bg);
+  border-radius: 6px;
+}
+
+.inspector-metric span {
+  display: block;
+  color: var(--text-quaternary);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.inspector-metric b {
+  display: block;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 14px;
+}
+
+.inspector-action {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.inspector-action:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.inspector-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.inspector-type-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.inspector-type-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-type-pill b {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .section-title {
   font-size: 10px;
   font-weight: 600;
@@ -347,9 +475,15 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  width: calc(100% + 16px);
+  padding: 7px 8px;
   margin: 0 -8px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: background 0.12s;
   font-size: 12.5px;
@@ -363,12 +497,30 @@ html, body {
   color: var(--text-quaternary);
   font-size: 11px;
   flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.relation-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .relation-name {
   font-weight: 500;
   color: var(--text-primary);
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-description {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -393,6 +545,28 @@ html, body {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  width: calc(100% + 16px);
+  padding: 6px 8px;
+  margin: 0 -8px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.community-item.inspector-clickable {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.community-item.inspector-clickable:hover {
+  background: var(--hover-bg);
+}
+
+.community-item:not(.inspector-clickable) {
   margin-bottom: 8px;
 }
 
@@ -406,20 +580,29 @@ html, body {
 
 .community-info {
   flex: 1;
+  min-width: 0;
 }
 
 .community-title {
+  display: block;
   font-size: 12.5px;
   font-weight: 500;
   color: var(--text-primary);
   letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .community-summary {
+  display: -webkit-box;
   font-size: 11.5px;
   color: var(--text-tertiary);
   line-height: 1.45;
   margin-top: 2px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 /* Commits in sidebar */
@@ -663,8 +846,15 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: calc(100% + 16px);
   padding: 8px 10px;
+  margin: 0 -8px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: background 0.12s;
   font-size: 13px;
@@ -697,6 +887,61 @@ html, body {
   color: var(--text-quaternary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+.community-relation {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hover-bg);
+}
+
+.community-relation:last-child {
+  border-bottom: 0;
+}
+
+.community-relation-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.community-relation-entity {
+  min-width: 0;
+  max-width: 130px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-relation-entity:hover {
+  color: var(--link);
+}
+
+.community-relation-arrow,
+.community-relation-meta {
+  color: var(--text-quaternary);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.community-relation-meta {
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.community-relation-description {
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 /* ================================================================
@@ -1306,6 +1551,9 @@ kbd {
 .filter-chip:focus-visible,
 #search-input:focus-visible,
 .relation-item:focus-visible,
+.inspector-action:focus-visible,
+.community-item:focus-visible,
+.community-relation-entity:focus-visible,
 .cluster-entity:focus-visible,
 .path-banner-step:focus-visible,
 .community-label:focus-visible,

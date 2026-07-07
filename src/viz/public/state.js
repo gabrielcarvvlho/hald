@@ -10,9 +10,12 @@ export const state = {
   graph: null,
   hoveredNode: null,
   selectedNode: null,
+  selectedCommunity: null,
   searchQuery: "",
   hiddenTypes: new Set(),
   communityColors: {},
+  graphData: null,
+  statsData: null,
   neighbors: new Map(), // nodeId → Set<nodeId>
   overlayOpen: false,
   // Set by buildGraph() from the /api/graph response. Non-null only when
