@@ -26,6 +26,13 @@ describe("parseHash", () => {
     expect(parseHash("#node=abc")).toEqual({ node: "abc", hide: [] });
   });
 
+  it("parses a community id", () => {
+    expect(parseHash("#community=comm%3A1")).toEqual({
+      community: "comm:1",
+      hide: [],
+    });
+  });
+
   it("parses a hide list", () => {
     expect(parseHash("#hide=PERSON,MODULE")).toEqual({
       hide: ["PERSON", "MODULE"],
@@ -98,6 +105,18 @@ describe("serializeState", () => {
     expect(serializeState({ node: "abc", hide: [] })).toBe("node=abc");
   });
 
+  it("serializes community only", () => {
+    expect(serializeState({ community: "comm:1", hide: [] })).toBe(
+      "community=comm%3A1",
+    );
+  });
+
+  it("prefers node when node and community are both present", () => {
+    expect(
+      serializeState({ node: "abc", community: "comm:1", hide: [] }),
+    ).toBe("node=abc");
+  });
+
   it("serializes hide only", () => {
     expect(serializeState({ hide: ["PERSON", "MODULE"] })).toBe(
       "hide=PERSON,MODULE",
@@ -127,6 +146,7 @@ describe("roundtrip parseHash(serializeState(s)) === s", () => {
   const cases = [
     { hide: [] },
     { node: "abc", hide: [] },
+    { community: "comm:1", hide: [] },
     { hide: ["A", "B"] },
     { node: "module:auth/v2", hide: ["PERSON", "TECHNOLOGY"] },
     { node: "id with spaces", hide: ["TYPE WITH SPACES"] },

@@ -38,6 +38,8 @@ export function parseHash(hash) {
       const val = decodeURIComponent(part.slice(eq + 1));
       if (key === "node" && val) {
         out.node = val;
+      } else if (key === "community" && val) {
+        out.community = val;
       } else if (key === "hide" && val) {
         out.hide = val.split(",").filter(Boolean);
       }
@@ -59,6 +61,8 @@ export function serializeState(state) {
   const parts = [];
   if (state.node) {
     parts.push("node=" + encodeURIComponent(state.node));
+  } else if (state.community) {
+    parts.push("community=" + encodeURIComponent(state.community));
   }
   if (Array.isArray(state.hide) && state.hide.length > 0) {
     parts.push("hide=" + state.hide.map(encodeURIComponent).join(","));

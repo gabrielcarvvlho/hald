@@ -6,6 +6,7 @@
 // ================================================================
 
 import { state } from "./state.js";
+import { selectCommunity } from "./sidebar.js";
 
 export function setupCommunityLabels(graphData) {
   const container = document.getElementById("graph-container");
@@ -29,6 +30,9 @@ export function setupCommunityLabels(graphData) {
     label.className = "community-label";
     label.style.color = community.color;
     label.dataset.communityId = community.id;
+    label.setAttribute("role", "button");
+    label.setAttribute("tabindex", "0");
+    label.setAttribute("aria-label", "Inspect community " + community.title);
     label.textContent = community.title;
 
     const tip = document.createElement("div");
@@ -37,6 +41,17 @@ export function setupCommunityLabels(graphData) {
       community.summary ||
       "No summary available — re-run hald scan with summarization.";
     label.appendChild(tip);
+    label.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectCommunity(community.id);
+    });
+    label.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectCommunity(community.id);
+    });
 
     layer.appendChild(label);
     // Store member IDs so the per-render positioner can project LIVE

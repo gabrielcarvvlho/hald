@@ -194,6 +194,25 @@ function nodeReducer(node, data) {
     }
   }
 
+  // Community drill-down. This is intentionally softer than path mode:
+  // it keeps the selected cluster readable while still leaving the full
+  // graph as context. Search and hover can apply on top.
+  const selectedCommunity = state.selectedCommunity;
+  const inSelectedCommunity =
+    selectedCommunity && data.communityId === selectedCommunity;
+  if (selectedCommunity && !pathActive) {
+    if (inSelectedCommunity) {
+      res.size = (res.size ?? data.size) * 1.12;
+      res.zIndex = Math.max(res.zIndex || 0, 2);
+      if (data.size >= 4 || data.forceLabel) res.forceLabel = true;
+    } else {
+      res.color = COLORS.dimNode;
+      res.label = "";
+      res.forceLabel = false;
+      res.zIndex = 0;
+    }
+  }
+
   // Search dimming. Path nodes are exempt from search-dim so the
   // thread stays visible while you scan within it.
   if (state.searchQuery) {

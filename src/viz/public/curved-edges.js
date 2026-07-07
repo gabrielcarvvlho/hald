@@ -71,6 +71,7 @@ function computeSignature(canvas) {
     cam.ratio,
     cam.angle,
     activeNode || "",
+    state.selectedCommunity || "",
     p.active ? 1 : 0,
     p.fromId || "",
     p.toId || "",
@@ -151,6 +152,7 @@ export function drawCurvedEdges() {
   const renderer = state.renderer;
   const activeNode = state.hoveredNode || state.selectedNode;
   const pathActive = state.path.active;
+  const selectedCommunity = state.selectedCommunity;
 
   ctx.lineCap = "round";
 
@@ -203,6 +205,15 @@ export function drawCurvedEdges() {
       if (src === activeNode || tgt === activeNode) {
         color = COLORS.hoverEdge;
         size = Math.max(size, 1.5);
+      } else {
+        color = COLORS.dimEdge;
+      }
+    } else if (selectedCommunity) {
+      const sourceInCommunity = srcAttrs.communityId === selectedCommunity;
+      const targetInCommunity = tgtAttrs.communityId === selectedCommunity;
+      if (sourceInCommunity && targetInCommunity) {
+        color = COLORS.hoverEdge;
+        size = Math.max(size, 1.35);
       } else {
         color = COLORS.dimEdge;
       }

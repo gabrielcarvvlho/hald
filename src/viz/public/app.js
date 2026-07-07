@@ -13,7 +13,7 @@
 
 import { parseHash } from "./url-state.js";
 import { state } from "./state.js";
-import { renderStats, selectNode } from "./sidebar.js";
+import { renderOverviewInspector, renderStats, selectCommunity, selectNode } from "./sidebar.js";
 import { buildGraph } from "./graph-builder.js";
 import { createRenderer } from "./renderer.js";
 import { setupTypeChips, setupSearch, setupFilters } from "./search-filters.js";
@@ -96,6 +96,7 @@ async function init() {
     // Build graph + render
     buildGraph(graphData);
     createRenderer();
+    renderOverviewInspector(graphData, statsData);
     setupTypeChips(graphData);
     setupEvents();
     setupSearch();
@@ -122,6 +123,11 @@ async function init() {
     // Restore selected node if URL had one and it exists in the graph.
     if (initialState.node && state.graph.hasNode(initialState.node)) {
       selectNode(initialState.node);
+    } else if (
+      initialState.community &&
+      graphData.communities.some((c) => c.id === initialState.community)
+    ) {
+      selectCommunity(initialState.community);
     }
   } catch (err) {
     loadingEl.textContent = "Failed to load graph data: " + err.message;

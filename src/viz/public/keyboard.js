@@ -41,7 +41,7 @@ export function setupKeyboardShortcuts() {
         closeClusterOverlay();
       } else if (state.path.active) {
         clearPath();
-      } else if (state.selectedNode) {
+      } else if (state.selectedNode || state.selectedCommunity) {
         closeSidebar();
       }
       return;

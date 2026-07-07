@@ -887,6 +887,52 @@ function buildCommunityDetail(id: string): CommunityDetailResponse | null {
     return a.name.localeCompare(b.name);
   });
 
+  const memberIds = new Set(members.map((e) => e.id));
+  const entityById = new Map(ALL_ENTITIES.map((e) => [e.id, e]));
+  const relationStats = new Map<string, { type: string; count: number; totalWeight: number }>();
+  const strongestRelations: CommunityDetailResponse["strongestRelations"] = [];
+
+  RELATIONS.forEach((r, idx) => {
+    if (!memberIds.has(r.source) || !memberIds.has(r.target)) return;
+
+    const stat = relationStats.get(r.type) ?? {
+      type: r.type,
+      count: 0,
+      totalWeight: 0,
+    };
+    stat.count += 1;
+    stat.totalWeight += r.weight;
+    relationStats.set(r.type, stat);
+
+    const source = entityById.get(r.source);
+    const target = entityById.get(r.target);
+    strongestRelations.push({
+      id: `r-${idx}`,
+      type: r.type,
+      sourceId: r.source,
+      sourceName: source?.name ?? r.source,
+      sourceType: source?.type ?? "UNKNOWN",
+      targetId: r.target,
+      targetName: target?.name ?? r.target,
+      targetType: target?.type ?? "UNKNOWN",
+      weight: r.weight,
+      description: r.description,
+    });
+  });
+
+  const topRelationTypes = Array.from(relationStats.values())
+    .sort((a, b) => {
+      if (b.totalWeight !== a.totalWeight) return b.totalWeight - a.totalWeight;
+      if (b.count !== a.count) return b.count - a.count;
+      return a.type.localeCompare(b.type);
+    })
+    .slice(0, 5);
+
+  strongestRelations.sort((a, b) => {
+    if (b.weight !== a.weight) return b.weight - a.weight;
+    return a.id.localeCompare(b.id);
+  });
+
   return {
     id: community.id,
     title: community.title,
@@ -897,6 +943,8 @@ function buildCommunityDetail(id: string): CommunityDetailResponse | null {
       type: e.type,
       frequency: e.frequency,
     })),
+    topRelationTypes,
+    strongestRelations: strongestRelations.slice(0, 6),
   };
 }
 

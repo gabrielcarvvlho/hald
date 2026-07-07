@@ -18,6 +18,7 @@ function writeUrl() {
   urlUpdateTimer = null;
   const payload = serializeState({
     node: state.selectedNode,
+    community: state.selectedCommunity,
     hide: Array.from(state.hiddenTypes),
   });
   const url = payload

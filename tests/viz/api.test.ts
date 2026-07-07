@@ -513,6 +513,33 @@ describe("getCommunityDetail", () => {
     }
   });
 
+  it("returns relationship type summaries for internal community relations", () => {
+    const result = getCommunityDetail(store, "comm:1");
+
+    expect(result).not.toBeNull();
+    expect(result!.topRelationTypes).toEqual([
+      { type: RelationType.AUTHORED, count: 1, totalWeight: 15 },
+      { type: RelationType.USES, count: 1, totalWeight: 8 },
+    ]);
+  });
+
+  it("returns strongest internal relations with endpoint names", () => {
+    const result = getCommunityDetail(store, "comm:1");
+
+    expect(result).not.toBeNull();
+    expect(result!.strongestRelations).toHaveLength(2);
+    expect(result!.strongestRelations[0]).toMatchObject({
+      id: "rel:1",
+      type: RelationType.AUTHORED,
+      sourceId: "person:alice",
+      sourceName: "Alice",
+      targetId: "module:auth",
+      targetName: "auth-service",
+      weight: 15,
+    });
+    expect(result!.strongestRelations[1].type).toBe(RelationType.USES);
+  });
+
   it("ties broken by name ascending for deterministic ordering", () => {
     // Add a community with two entities at the same frequency.
     const charlie: Entity = {
