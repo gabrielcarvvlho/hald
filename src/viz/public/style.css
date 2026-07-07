@@ -30,6 +30,12 @@
      a cmd-clicked path through the graph. Matches pathEdge in app.js. */
   --path-color: #d97706;            /* amber-600 */
   --path-color-soft: rgba(217, 119, 6, 0.10);
+  --filter-active-bg: #0f172a;
+  --filter-active-text: #ffffff;
+  --filter-active-muted: rgba(255, 255, 255, 0.72);
+  --type-badge-bg: #f8fafc;
+  --type-badge-text: #334155;
+  --type-badge-border: rgba(15, 23, 42, 0.18);
   --shadow-sidebar: 0 4px 24px rgba(0, 0, 0, 0.08);
   --shadow-tooltip: 0 4px 18px rgba(15, 23, 42, 0.18);
 }
@@ -57,6 +63,12 @@
   --halo: #0b1220;
   --path-color: #fbbf24;            /* amber-300 — pops on dark slate */
   --path-color-soft: rgba(251, 191, 36, 0.14);
+  --filter-active-bg: #f8fafc;
+  --filter-active-text: #0f172a;
+  --filter-active-muted: rgba(15, 23, 42, 0.65);
+  --type-badge-bg: #0f172a;
+  --type-badge-text: #cbd5e1;
+  --type-badge-border: rgba(148, 163, 184, 0.35);
   --shadow-sidebar: -4px 0 28px rgba(0, 0, 0, 0.4);
   --shadow-tooltip: 0 4px 22px rgba(0, 0, 0, 0.35);
 }
@@ -192,30 +204,105 @@ html, body {
   flex-wrap: nowrap;
 }
 
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
 .filter-chip {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
-  border-radius: 12px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 8px 3px 5px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
-  border: 1.5px solid var(--chip-color);
-  background: var(--chip-color);
-  color: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
   user-select: none;
-  line-height: 1.4;
+  line-height: 1;
+}
+
+.filter-chip.active {
+  background: var(--filter-active-bg);
+  border-color: var(--filter-active-bg);
+  color: var(--filter-active-text);
 }
 
 .filter-chip:not(.active) {
-  background: transparent;
-  color: var(--chip-color);
-  opacity: 0.55;
+  color: var(--text-tertiary);
+  opacity: 0.66;
 }
 
 .filter-chip:hover {
   opacity: 1;
+  transform: translateY(-1px);
+}
+
+.filter-chip-mark,
+.entity-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+  font-size: 9.5px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chip.active .filter-chip-mark {
+  color: var(--filter-active-text);
+  background: var(--filter-active-muted);
+  border-color: transparent;
+}
+
+.filter-chip:not(.active) .filter-chip-mark {
+  color: var(--text-quaternary);
+  background: transparent;
+  border-style: dashed;
+}
+
+.filter-chip:not(.active) .filter-chip-label {
+  color: var(--text-quaternary);
+}
+
+.filter-chip-count {
+  color: currentColor;
+  opacity: 0.62;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-status {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.filter-status[data-state="partial"] {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.filter-status[data-state="none"] {
+  color: var(--error);
+  font-weight: 650;
 }
 
 /* ================================================================
@@ -321,6 +408,21 @@ html, body {
   font-size: 11px;
   color: var(--text-tertiary);
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.entity-type-badge {
+  color: var(--type-badge-text);
+  background: var(--type-badge-bg);
+  border-color: var(--type-badge-border);
+}
+
+.entity-type-label {
+  font-weight: 650;
+  color: var(--text-secondary);
 }
 
 .entity-description {
@@ -680,7 +782,10 @@ html, body {
   color: var(--text-tertiary);
   letter-spacing: 0.05em;
   flex-shrink: 0;
-  width: 70px;
+  width: 92px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .cluster-entity-name {
@@ -913,7 +1018,7 @@ html, body {
   bottom: 16px;
   left: 16px;
   z-index: 12;
-  width: 232px;
+  width: 252px;
   max-width: calc(100vw - 32px);
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -974,7 +1079,7 @@ html, body {
   padding: 0 12px 12px;
   /* Animate the collapse without measuring height: max-height + opacity.
      overflow:hidden on #legend clips the slack. */
-  max-height: 200px;
+  max-height: 240px;
   opacity: 1;
   overflow: hidden;
   transition: max-height 0.2s ease, opacity 0.18s ease, padding 0.2s ease;
@@ -1040,13 +1145,58 @@ html, body {
   border-bottom: 2px solid var(--text-secondary);
 }
 
-/* Chips = entity type: a tiny pill echoing the toolbar chips. */
-.legend-swatch-chip::before {
+/* Type = neutral two-letter badge, never community color. */
+.legend-swatch-type::before {
+  content: "MO";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 15px;
+  border-radius: 5px;
+  border: 1px solid var(--type-badge-border);
+  background: var(--type-badge-bg);
+  color: var(--type-badge-text);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+/* Filter = active chip vs faded hidden chip. */
+.legend-swatch-filter {
+  position: relative;
+  height: 16px;
+}
+
+.legend-swatch-filter::before,
+.legend-swatch-filter::after {
   content: "";
-  width: 16px;
-  height: 9px;
+  position: absolute;
+  top: 4px;
+  width: 10px;
+  height: 8px;
   border-radius: 999px;
-  border: 1.5px solid var(--link);
+}
+
+.legend-swatch-filter::before {
+  left: 0;
+  background: var(--filter-active-bg);
+}
+
+.legend-swatch-filter::after {
+  left: 12px;
+  border: 1px dashed var(--text-quaternary);
+  opacity: 0.66;
+}
+
+/* Focus = clear contrast between active and muted context. */
+.legend-swatch-focus::before {
+  content: "";
+  width: 19px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--text-secondary);
+  box-shadow: 12px 0 0 -2px var(--border-strong);
 }
 
 /* ================================================================
@@ -1346,6 +1496,11 @@ kbd {
 
   .filter-chips {
     flex-wrap: wrap;
+  }
+
+  .filter-group {
+    flex-wrap: wrap;
+    flex: 1 1 100%;
   }
 
   /* The toolbar is now variable-height, so anchor the graph below the

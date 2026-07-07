@@ -26,7 +26,7 @@ describe("loadConfig", () => {
 
   it("resolves storagePath relative to repoPath", () => {
     const config = loadConfig({ repoPath: "/tmp/test-repo" });
-    expect(config.storagePath).toBe("/tmp/test-repo/.hald");
+    expect(config.storagePath).toBe(resolve("/tmp/test-repo", ".hald"));
   });
 
   it("applies explicit overrides over defaults", () => {

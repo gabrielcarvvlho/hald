@@ -69,8 +69,11 @@
     <div class="search-wrapper">
       <input type="text" id="search-input" placeholder="Search entities…  (press /)" autocomplete="off" />
     </div>
-    <div id="filter-chips" class="filter-chips">
-      <!-- Chips populated by setupTypeChips() based on actual entity types in the graph. -->
+    <div class="filter-group" role="group" aria-label="Entity type filters">
+      <div id="filter-chips" class="filter-chips">
+        <!-- Chips populated by setupTypeChips() based on actual entity types in the graph. -->
+      </div>
+      <span id="filter-status" class="filter-status" aria-live="polite">All types visible</span>
     </div>
   </div>
 
@@ -100,11 +103,19 @@
         </div>
         <div class="legend-row">
           <span class="legend-swatch legend-swatch-edge"></span>
-          <span class="legend-label"><b>Edge</b> — relationship strength</span>
+          <span class="legend-label"><b>Edge</b> — strength by weight</span>
         </div>
         <div class="legend-row">
-          <span class="legend-swatch legend-swatch-chip"></span>
-          <span class="legend-label"><b>Chips</b> — entity type filter</span>
+          <span class="legend-swatch legend-swatch-type"></span>
+          <span class="legend-label"><b>Type</b> — neutral badge letters</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch legend-swatch-filter"></span>
+          <span class="legend-label"><b>Filter</b> — faded chip means hidden type</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch legend-swatch-focus"></span>
+          <span class="legend-label"><b>Focus</b> — muted means outside selection</span>
         </div>
       </div>
     </aside>

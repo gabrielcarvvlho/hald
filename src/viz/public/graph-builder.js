@@ -9,6 +9,7 @@ import {
   edgeSizeFor,
   edgeColorFor,
 } from "./colors.js";
+import { entityTypeLabel, entityTypeMark } from "./entity-types.js";
 import { HALO_PREFIX, HALO_SIZE_MULT, isHalo } from "./halo.js";
 import { initMotion } from "./motion.js";
 
@@ -46,6 +47,8 @@ export function buildGraph(data) {
       label: node.name,
       // Custom data for filtering/display
       nodeType: node.type,
+      typeLabel: entityTypeLabel(node.type),
+      typeMark: entityTypeMark(node.type),
       communityId: node.communityId,
       borderColor: COLORS.nodeBorder,
     });

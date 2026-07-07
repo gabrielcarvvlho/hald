@@ -10,19 +10,6 @@
 // reassigning an imported binding.
 // ================================================================
 
-// Type chip colors stay the same in both themes — saturated enough
-// to read against either bg. Defined once.
-export const TYPE_COLORS = {
-  PERSON: "#3b82f6",
-  MODULE: "#10b981",
-  TECHNOLOGY: "#f59e0b",
-  DECISION: "#8b5cf6",
-  PATTERN: "#ec4899",
-  CONCEPT: "#14b8a6",
-  RISK: "#ef4444",
-  PROCESS: "#f97316",
-};
-
 export const COLORS_LIGHT = {
   nodeFallback: "#94a3b8",                  // slate-400
   nodeBorder: "#ffffff",
@@ -51,10 +38,12 @@ export const COLORS_LIGHT = {
   hoverLabelText: "#0f172a",                // slate-900
   hoverLabelBorder: "rgba(15,23,42,0.10)",
   hoverShadow: "rgba(15,23,42,0.18)",
+  typeBadgeBg: "#f8fafc",
+  typeBadgeText: "#334155",
+  typeBadgeBorder: "rgba(15,23,42,0.18)",
   dimNode: "#e2e8f0",                       // slate-200 — barely visible
   dimEdge: "rgba(226,232,240,0.18)",
   hoverEdge: "#94a3b8",
-  typeColors: TYPE_COLORS,
 };
 
 export const COLORS_DARK = {
@@ -77,10 +66,12 @@ export const COLORS_DARK = {
   hoverLabelText: "#f8fafc",                // slate-50
   hoverLabelBorder: "rgba(148,163,184,0.25)",
   hoverShadow: "rgba(0,0,0,0.55)",
+  typeBadgeBg: "#0f172a",
+  typeBadgeText: "#cbd5e1",
+  typeBadgeBorder: "rgba(148,163,184,0.35)",
   dimNode: "#1f2937",                       // gray-800 — barely visible against dark bg
   dimEdge: "rgba(31,41,55,0.35)",
   hoverEdge: "#94a3b8",
-  typeColors: TYPE_COLORS,
 };
 
 // Mutable reference. setupTheme() / applyTheme() swap this between

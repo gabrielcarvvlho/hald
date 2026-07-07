@@ -4,6 +4,7 @@
 
 import { state, prefersReducedMotion } from "./state.js";
 import { getColors } from "./colors.js";
+import { entityTypeLabel, entityTypeMark } from "./entity-types.js";
 import { scheduleUrlUpdate } from "./url-sync.js";
 import { escapeHtml, escapeAttr, formatDate } from "./dom-utils.js";
 
@@ -98,7 +99,18 @@ function renderSidebar(detail) {
 
   // Entity header
   html += '<div class="entity-name">' + escapeHtml(e.name) + "</div>";
-  html += '<div class="entity-meta">' + e.type + " · freq " + e.frequency + "</div>";
+  html +=
+    '<div class="entity-meta">' +
+    '<span class="entity-type-badge">' +
+    escapeHtml(entityTypeMark(e.type)) +
+    "</span>" +
+    '<span class="entity-type-label">' +
+    escapeHtml(entityTypeLabel(e.type)) +
+    "</span>" +
+    "<span>freq " +
+    e.frequency +
+    "</span>" +
+    "</div>";
   html += '<div class="entity-description">' + escapeHtml(e.description) + "</div>";
 
   // Relations
