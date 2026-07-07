@@ -9,6 +9,7 @@
 // ================================================================
 
 import { state } from "./state.js";
+import { entityTypeLabel, entityTypeMark } from "./entity-types.js";
 import { escapeHtml, escapeAttr } from "./dom-utils.js";
 import { selectNode } from "./sidebar.js";
 
@@ -93,7 +94,12 @@ function renderClusterOverlay(detail) {
         escapeAttr(e.id) +
         '">' +
         '<span class="cluster-entity-type">' +
-        e.type +
+        '<span class="entity-type-badge">' +
+        escapeHtml(entityTypeMark(e.type)) +
+        "</span>" +
+        '<span>' +
+        escapeHtml(entityTypeLabel(e.type)) +
+        "</span>" +
         "</span>" +
         '<span class="cluster-entity-name">' +
         escapeHtml(e.name) +

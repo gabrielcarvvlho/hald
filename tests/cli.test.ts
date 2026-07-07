@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { simpleGit } from "simple-git";
@@ -23,14 +24,15 @@ const PKG_VERSION = JSON.parse(
 ).version;
 
 const CLI_PATH = join(__dirname, "..", "src", "cli.ts");
+const require = createRequire(import.meta.url);
+const TSX_CLI = require.resolve("tsx/cli");
 
 function runCLI(
   args: string[],
   env?: Record<string, string>,
 ): { stdout: string; exitCode: number } {
-  const cmd = `npx tsx ${CLI_PATH} ${args.map((a) => `'${a}'`).join(" ")}`;
   try {
-    const stdout = execSync(cmd, {
+    const stdout = execFileSync(process.execPath, [TSX_CLI, CLI_PATH, ...args], {
       encoding: "utf-8",
       timeout: 15_000,
       env: {

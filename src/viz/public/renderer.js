@@ -4,6 +4,7 @@
 
 import { state, prefersReducedMotion } from "./state.js";
 import { getColors, hexToRgba } from "./colors.js";
+import { entityTypeMark } from "./entity-types.js";
 import { HALO_ALPHA_ACTIVE, HALO_ACTIVE_GROW } from "./halo.js";
 import { pulseSizeMult } from "./motion.js";
 
@@ -29,6 +30,7 @@ export function createRenderer() {
     nodeProgramClasses: {},
     nodeReducer: nodeReducer,
     edgeReducer: edgeReducer,
+    defaultDrawNodeLabel: drawNodeLabel,
     // Override sigma's default hover renderer. The built-in one paints a
     // hardcoded white pill behind the label, so in dark mode (with light
     // label text) the highlighted node became unreadable: white text on
@@ -57,6 +59,33 @@ export function createRenderer() {
   }
 }
 
+function drawNodeLabel(ctx, data, settings) {
+  if (typeof data.label !== "string" || !data.label) return;
+  const COLORS = getColors();
+  const size = settings.labelSize;
+  const font = settings.labelFont;
+  const weight = settings.labelWeight ?? "";
+  const mark = data.typeMark || entityTypeMark(data.nodeType);
+  const badgeWidth = badgeWidthFor(mark, size);
+  const badgeHeight = Math.max(13, size + 2);
+  const labelX = data.x + data.size + 4;
+  const centerY = data.y;
+
+  ctx.font = `${weight} ${size}px ${font}`.trim();
+  drawTypeBadge(
+    ctx,
+    labelX,
+    centerY - badgeHeight / 2,
+    badgeWidth,
+    badgeHeight,
+    mark,
+    COLORS,
+    font,
+  );
+  ctx.fillStyle = COLORS.labelText;
+  ctx.fillText(data.label, labelX + badgeWidth + 5, data.y + size / 3);
+}
+
 // ================================================================
 // Custom node-hover renderer
 // ================================================================
@@ -73,6 +102,10 @@ function drawNodeHover(ctx, data, settings) {
   const weight = settings.labelWeight ?? "";
   const padX = 5;
   const padY = 2;
+  const mark = data.typeMark || entityTypeMark(data.nodeType);
+  const badgeWidth = badgeWidthFor(mark, size);
+  const badgeHeight = Math.max(14, size + 3);
+  const badgeGap = 5;
 
   ctx.font = `${weight} ${size}px ${font}`.trim();
   ctx.shadowOffsetX = 0;
@@ -83,7 +116,7 @@ function drawNodeHover(ctx, data, settings) {
 
   if (typeof data.label === "string" && data.label) {
     const textWidth = ctx.measureText(data.label).width;
-    const pillWidth = Math.round(textWidth + padX);
+    const pillWidth = Math.round(badgeWidth + badgeGap + textWidth + padX * 3);
     const pillHeight = Math.round(size + 2 * padY);
     const radius = Math.max(data.size, size / 2) + padY;
     const angle = Math.asin(pillHeight / 2 / radius);
@@ -107,9 +140,25 @@ function drawNodeHover(ctx, data, settings) {
     ctx.strokeStyle = COLORS.hoverLabelBorder;
     ctx.stroke();
 
+    const badgeX = data.x + data.size + padX + 1;
+    drawTypeBadge(
+      ctx,
+      badgeX,
+      data.y - badgeHeight / 2,
+      badgeWidth,
+      badgeHeight,
+      mark,
+      COLORS,
+      font,
+    );
+
     // Label text — theme-aware, drawn last so it sits on top.
     ctx.fillStyle = COLORS.hoverLabelText;
-    ctx.fillText(data.label, data.x + data.size + 3, data.y + size / 3);
+    ctx.fillText(
+      data.label,
+      badgeX + badgeWidth + badgeGap,
+      data.y + size / 3,
+    );
   } else {
     // No label: keep sigma's halo behavior (a slightly bigger disc).
     ctx.beginPath();
@@ -120,6 +169,44 @@ function drawNodeHover(ctx, data, settings) {
     ctx.shadowOffsetY = 0;
     ctx.shadowBlur = 0;
   }
+}
+
+function badgeWidthFor(mark, labelSize) {
+  return Math.max(18, mark.length * Math.max(5, labelSize * 0.48) + 8);
+}
+
+function drawTypeBadge(ctx, x, y, width, height, mark, COLORS, font) {
+  ctx.save();
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = COLORS.typeBadgeBg;
+  ctx.strokeStyle = COLORS.typeBadgeBorder;
+  ctx.lineWidth = 1;
+  roundedRect(ctx, x, y, width, height, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = COLORS.typeBadgeText;
+  ctx.font = `700 ${Math.max(8, Math.min(10, height - 4))}px ${font}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(mark, x + width / 2, y + height / 2 + 0.5);
+  ctx.restore();
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // ================================================================

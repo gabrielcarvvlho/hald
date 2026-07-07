@@ -3,7 +3,7 @@
 // ================================================================
 
 import { state, prefersReducedMotion } from "./state.js";
-import { getColors } from "./colors.js";
+import { entityTypeLabel, entityTypeMark } from "./entity-types.js";
 import { isHalo } from "./halo.js";
 import { selectNode } from "./sidebar.js";
 import { clearPath } from "./path-banner.js";
@@ -118,24 +118,46 @@ export function setupSearch() {
 // ================================================================
 
 export function setupTypeChips(graphData) {
-  const COLORS = getColors();
   const container = document.getElementById("filter-chips");
   if (!container) return;
   container.innerHTML = "";
 
   const types = Array.from(new Set(graphData.nodes.map((n) => n.type))).sort();
+  const counts = new Map();
+  for (const node of graphData.nodes) {
+    counts.set(node.type, (counts.get(node.type) || 0) + 1);
+  }
+
   for (const type of types) {
     const chip = document.createElement("button");
     // Honor initial state restored from URL hash.
     const hidden = state.hiddenTypes.has(type);
+    const label = entityTypeLabel(type);
     chip.className = "filter-chip" + (hidden ? "" : " active");
     chip.dataset.type = type;
-    const color = COLORS.typeColors[type] || COLORS.nodeFallback;
-    chip.style.setProperty("--chip-color", color);
-    // PERSON → Person, TECHNOLOGY → Technology
-    chip.textContent = type.charAt(0) + type.slice(1).toLowerCase();
+    chip.type = "button";
+    chip.setAttribute("aria-pressed", hidden ? "false" : "true");
+    chip.setAttribute(
+      "aria-label",
+      `${label} entities ${hidden ? "hidden" : "visible"}`,
+    );
+
+    const mark = document.createElement("span");
+    mark.className = "filter-chip-mark";
+    mark.textContent = entityTypeMark(type);
+
+    const text = document.createElement("span");
+    text.className = "filter-chip-label";
+    text.textContent = label;
+
+    const count = document.createElement("span");
+    count.className = "filter-chip-count";
+    count.textContent = String(counts.get(type) || 0);
+
+    chip.append(mark, text, count);
     container.appendChild(chip);
   }
+  updateFilterStatus();
 }
 
 // ================================================================
@@ -149,10 +171,21 @@ export function setupFilters() {
       if (state.hiddenTypes.has(type)) {
         state.hiddenTypes.delete(type);
         chip.classList.add("active");
+        chip.setAttribute("aria-pressed", "true");
+        chip.setAttribute(
+          "aria-label",
+          `${entityTypeLabel(type)} entities visible`,
+        );
       } else {
         state.hiddenTypes.add(type);
         chip.classList.remove("active");
+        chip.setAttribute("aria-pressed", "false");
+        chip.setAttribute(
+          "aria-label",
+          `${entityTypeLabel(type)} entities hidden`,
+        );
       }
+      updateFilterStatus();
       // If the active path runs through a now-hidden type, the
       // visualization would render a broken thread (some hops gone,
       // banner still claims they're there). Clear the path on filter
@@ -175,4 +208,22 @@ function pathTouchesHiddenType() {
     if (state.hiddenTypes.has(t)) return true;
   }
   return false;
+}
+
+export function filterStateLabel(visible, total) {
+  if (total <= 0) return "No entity types";
+  if (visible === total) return `All ${total} types visible`;
+  if (visible === 0) return "No types visible";
+  return `${visible} of ${total} types visible`;
+}
+
+function updateFilterStatus() {
+  const status = document.getElementById("filter-status");
+  if (!status) return;
+  const chips = Array.from(document.querySelectorAll(".filter-chip"));
+  const total = chips.length;
+  const visible = chips.filter((chip) => chip.classList.contains("active")).length;
+  status.textContent = filterStateLabel(visible, total);
+  status.dataset.state =
+    visible === total ? "all" : visible === 0 ? "none" : "partial";
 }
